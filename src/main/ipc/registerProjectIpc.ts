@@ -3,6 +3,7 @@ import { app, dialog, ipcMain } from 'electron';
 import { readProjectFile, writeProjectFileAtomic } from '../project/projectStorage';
 import {
   deleteRecoveryFile,
+  listRecoveryFiles,
   writeRecoveryFile,
 } from '../project/recoveryStorage';
 import { ensureProjectExtension } from '../../shared/project/path';
@@ -64,5 +65,10 @@ export function registerProjectIpc(): void {
     IPC_CHANNELS.projectRecoveryDelete,
     (_event, projectId: string) =>
       deleteRecoveryFile(app.getPath('userData'), projectId),
+  );
+
+  ipcMain.removeHandler(IPC_CHANNELS.projectRecoveryList);
+  ipcMain.handle(IPC_CHANNELS.projectRecoveryList, () =>
+    listRecoveryFiles(app.getPath('userData')),
   );
 }

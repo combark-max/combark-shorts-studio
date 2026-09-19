@@ -23,6 +23,7 @@ describe('desktopApi', () => {
       'writeProject',
       'writeRecovery',
       'deleteRecovery',
+      'listRecoveries',
     ]);
 
     await expect(desktopApi.getAppVersion()).resolves.toBe('1.0.0');

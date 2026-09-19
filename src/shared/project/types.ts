@@ -12,3 +12,10 @@ export interface ProjectDocumentV1 {
   updatedAt: string;
   settings: ProjectSettings;
 }
+
+export interface RecoveryCandidate {
+  projectId: string;
+  name: string;
+  modifiedAt: string;
+  project: ProjectDocumentV1;
+}

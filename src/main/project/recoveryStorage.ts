@@ -1,11 +1,24 @@
-import { mkdir, rm } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import type { ProjectDocumentV1 } from '../../shared/project/types';
+import type {
+  ProjectDocumentV1,
+  RecoveryCandidate,
+} from '../../shared/project/types';
 import { validateProjectDocument } from '../../shared/project/validateProject';
 import { writeProjectFileAtomic } from './projectStorage';
 
 const SAFE_PROJECT_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
+const RECOVERY_FILE_PATTERN = /^([A-Za-z0-9][A-Za-z0-9_-]{0,127})\.recovery\.json$/;
+
+function hasErrorCode(error: unknown, code: string): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === code
+  );
+}
 
 function getRecoveryFilePath(
   userDataPath: string,
@@ -19,6 +32,61 @@ function getRecoveryFilePath(
   }
 
   return join(userDataPath, 'recovery', `${projectId}.recovery.json`);
+}
+
+export async function listRecoveryFiles(
+  userDataPath: string,
+): Promise<RecoveryCandidate[]> {
+  const recoveryDirectory = join(userDataPath, 'recovery');
+  let fileNames: string[];
+
+  try {
+    fileNames = await readdir(recoveryDirectory);
+  } catch (error) {
+    if (hasErrorCode(error, 'ENOENT')) {
+      return [];
+    }
+
+    throw error;
+  }
+
+  const candidates = await Promise.all(
+    fileNames.map(async (fileName): Promise<RecoveryCandidate | null> => {
+      const match = RECOVERY_FILE_PATTERN.exec(fileName);
+
+      if (!match) {
+        return null;
+      }
+
+      const fileProjectId = match[1];
+      const filePath = join(recoveryDirectory, fileName);
+
+      try {
+        const contents = await readFile(filePath, 'utf8');
+        const value: unknown = JSON.parse(contents);
+        const project = validateProjectDocument(value);
+
+        if (project.projectId !== fileProjectId) {
+          return null;
+        }
+
+        const fileStats = await stat(filePath);
+
+        return {
+          projectId: project.projectId,
+          name: project.name,
+          modifiedAt: fileStats.mtime.toISOString(),
+          project,
+        };
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  return candidates
+    .filter((candidate): candidate is RecoveryCandidate => candidate !== null)
+    .sort((left, right) => right.modifiedAt.localeCompare(left.modifiedAt));
 }
 
 export async function writeRecoveryFile(

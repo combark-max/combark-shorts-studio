@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { createInitialProjectState } from './projectState';
 import type { ProjectState } from './projectState';
+import type { RecoveryCandidate } from '../../shared/project/types';
 
 const RECOVERY_AUTOSAVE_INTERVAL_MS = 30_000;
 
@@ -9,6 +10,13 @@ export function useProjectController(initialState?: ProjectState) {
   const [state, setState] = useState<ProjectState>(
     () => initialState ?? createInitialProjectState(),
   );
+  const [recoveryCandidates, setRecoveryCandidates] = useState<
+    RecoveryCandidate[] | null
+  >(null);
+  const [recoveryListFailed, setRecoveryListFailed] = useState(false);
+  const [discardFailedProjectId, setDiscardFailedProjectId] = useState<
+    string | null
+  >(null);
   const stateRef = useRef(state);
   const recoveryWriteRef = useRef<Promise<void> | null>(null);
   const manualSaveInProgressRef = useRef(false);
@@ -42,6 +50,47 @@ export function useProjectController(initialState?: ProjectState) {
       // Recovery cleanup failure must not turn a successful project save into a failure.
     }
   };
+
+  const retryRecoveryList = async (): Promise<void> => {
+    setRecoveryCandidates(null);
+    setRecoveryListFailed(false);
+
+    try {
+      setRecoveryCandidates(await window.combarkDesktop.listRecoveries());
+    } catch {
+      setRecoveryListFailed(true);
+    }
+  };
+
+  const recoverProject = (candidate: RecoveryCandidate): void => {
+    replaceState({
+      project: candidate.project,
+      filePath: null,
+      dirty: true,
+      lastSavedAt: null,
+    });
+    setRecoveryCandidates([]);
+    setDiscardFailedProjectId(null);
+  };
+
+  const discardRecovery = async (projectId: string): Promise<void> => {
+    setDiscardFailedProjectId(null);
+
+    try {
+      await window.combarkDesktop.deleteRecovery(projectId);
+      setRecoveryCandidates((currentCandidates) =>
+        currentCandidates?.filter(
+          (candidate) => candidate.projectId !== projectId,
+        ) ?? null,
+      );
+    } catch {
+      setDiscardFailedProjectId(projectId);
+    }
+  };
+
+  useEffect(() => {
+    void retryRecoveryList();
+  }, []);
 
   useEffect(() => {
     const intervalId = setInterval(() => {
@@ -134,6 +183,12 @@ export function useProjectController(initialState?: ProjectState) {
 
   return {
     state,
+    recoveryCandidates,
+    recoveryListFailed,
+    discardFailedProjectId,
+    retryRecoveryList,
+    recoverProject,
+    discardRecovery,
     newProject,
     openProject,
     saveProject,

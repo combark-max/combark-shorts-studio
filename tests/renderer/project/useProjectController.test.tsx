@@ -1,8 +1,9 @@
-import { renderHook, act } from '@testing-library/react';
+import { renderHook, act, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createNewProject } from '../../../src/shared/project/createProject';
 import { useProjectController } from '../../../src/renderer/project/useProjectController';
 import type { ProjectState } from '../../../src/renderer/project/projectState';
+import type { RecoveryCandidate } from '../../../src/shared/project/types';
 
 const desktopApi = {
   getAppVersion: vi.fn(),
@@ -12,12 +13,14 @@ const desktopApi = {
   writeProject: vi.fn(),
   writeRecovery: vi.fn(),
   deleteRecovery: vi.fn(),
+  listRecoveries: vi.fn(),
 };
 
 beforeEach(() => {
   vi.clearAllMocks();
   desktopApi.writeRecovery.mockResolvedValue(undefined);
   desktopApi.deleteRecovery.mockResolvedValue(undefined);
+  desktopApi.listRecoveries.mockResolvedValue([]);
   Object.defineProperty(window, 'combarkDesktop', {
     configurable: true,
     value: desktopApi,
@@ -38,7 +41,133 @@ function createState(overrides: Partial<ProjectState> = {}): ProjectState {
   };
 }
 
+function createRecoveryCandidate(name: string): RecoveryCandidate {
+  const project = createNewProject(name);
+
+  return {
+    projectId: project.projectId,
+    name,
+    modifiedAt: '2026-09-19T01:02:03.000Z',
+    project,
+  };
+}
+
 describe('useProjectController', () => {
+  it('exposes an empty recovery list without changing the initial project', async () => {
+    const { result } = renderHook(() => useProjectController());
+    const initialProject = result.current.state.project;
+
+    await waitFor(() => {
+      expect(result.current.recoveryCandidates).toEqual([]);
+    });
+
+    expect(result.current.state.project).toEqual(initialProject);
+    expect(result.current.recoveryListFailed).toBe(false);
+  });
+
+  it('exposes single and multiple recovery candidates in received order', async () => {
+    const newerCandidate = createRecoveryCandidate('최신 복구');
+    const olderCandidate = createRecoveryCandidate('이전 복구');
+    desktopApi.listRecoveries.mockResolvedValue([
+      newerCandidate,
+      olderCandidate,
+    ]);
+    const { result } = renderHook(() => useProjectController());
+
+    await waitFor(() => {
+      expect(result.current.recoveryCandidates).toEqual([
+        newerCandidate,
+        olderCandidate,
+      ]);
+    });
+  });
+
+  it('recovers a candidate as an unsaved dirty project without deleting it', async () => {
+    const candidate = createRecoveryCandidate('복구할 프로젝트');
+    desktopApi.listRecoveries.mockResolvedValue([candidate]);
+    const { result } = renderHook(() => useProjectController());
+    await waitFor(() => {
+      expect(result.current.recoveryCandidates).toEqual([candidate]);
+    });
+
+    act(() => {
+      result.current.recoverProject(candidate);
+    });
+
+    expect(result.current.state).toEqual({
+      project: candidate.project,
+      filePath: null,
+      dirty: true,
+      lastSavedAt: null,
+    });
+    expect(result.current.recoveryCandidates).toEqual([]);
+    expect(desktopApi.deleteRecovery).not.toHaveBeenCalled();
+  });
+
+  it('discards only the selected candidate without changing project state', async () => {
+    const firstCandidate = createRecoveryCandidate('첫 복구');
+    const secondCandidate = createRecoveryCandidate('두 번째 복구');
+    desktopApi.listRecoveries.mockResolvedValue([
+      firstCandidate,
+      secondCandidate,
+    ]);
+    const { result } = renderHook(() => useProjectController());
+    const initialState = result.current.state;
+    await waitFor(() => {
+      expect(result.current.recoveryCandidates).toHaveLength(2);
+    });
+
+    await act(async () => {
+      await result.current.discardRecovery(firstCandidate.projectId);
+    });
+
+    expect(desktopApi.deleteRecovery).toHaveBeenCalledWith(
+      firstCandidate.projectId,
+    );
+    expect(result.current.recoveryCandidates).toEqual([secondCandidate]);
+    expect(result.current.state).toEqual(initialState);
+  });
+
+  it('keeps a candidate and exposes its id when discard fails', async () => {
+    const candidate = createRecoveryCandidate('삭제 실패 복구');
+    desktopApi.listRecoveries.mockResolvedValue([candidate]);
+    desktopApi.deleteRecovery.mockRejectedValue(new Error('delete failed'));
+    const { result } = renderHook(() => useProjectController());
+    const initialState = result.current.state;
+    await waitFor(() => {
+      expect(result.current.recoveryCandidates).toEqual([candidate]);
+    });
+
+    await act(async () => {
+      await result.current.discardRecovery(candidate.projectId);
+    });
+
+    expect(result.current.recoveryCandidates).toEqual([candidate]);
+    expect(result.current.discardFailedProjectId).toBe(candidate.projectId);
+    expect(result.current.state).toEqual(initialState);
+  });
+
+  it('distinguishes list failure and retries successfully', async () => {
+    const candidate = createRecoveryCandidate('재시도 복구');
+    desktopApi.listRecoveries
+      .mockRejectedValueOnce(new Error('list failed'))
+      .mockResolvedValueOnce([candidate]);
+    const { result } = renderHook(() => useProjectController());
+
+    await waitFor(() => {
+      expect(result.current.recoveryListFailed).toBe(true);
+    });
+    expect(result.current.recoveryCandidates).toBeNull();
+
+    await act(async () => {
+      await result.current.retryRecoveryList();
+    });
+
+    expect(result.current.recoveryListFailed).toBe(false);
+    expect(result.current.recoveryCandidates).toEqual([candidate]);
+    expect(desktopApi.listRecoveries).toHaveBeenCalledTimes(2);
+  });
+
   it('creates a clean new project', () => {
     const { result } = renderHook(() => useProjectController());
 

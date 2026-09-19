@@ -19,6 +19,12 @@ describe('desktopApi project methods', () => {
 
   it('invokes the approved project channels and keeps app version access', async () => {
     const project = createNewProject('IPC 테스트');
+    const recoveryCandidate = {
+      projectId: project.projectId,
+      name: project.name,
+      modifiedAt: '2026-09-19T01:02:03.000Z',
+      project,
+    };
     invoke
       .mockResolvedValueOnce('1.0.0')
       .mockResolvedValueOnce('C:\\projects\\opened.cssproj')
@@ -26,7 +32,8 @@ describe('desktopApi project methods', () => {
       .mockResolvedValueOnce(project)
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce(undefined);
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce([recoveryCandidate]);
 
     expect(Object.keys(desktopApi)).toEqual([
       'getAppVersion',
@@ -36,6 +43,7 @@ describe('desktopApi project methods', () => {
       'writeProject',
       'writeRecovery',
       'deleteRecovery',
+      'listRecoveries',
     ]);
     await expect(desktopApi.getAppVersion()).resolves.toBe('1.0.0');
     await expect(desktopApi.openProjectDialog()).resolves.toBe(
@@ -52,6 +60,9 @@ describe('desktopApi project methods', () => {
     await expect(
       desktopApi.deleteRecovery(project.projectId),
     ).resolves.toBeUndefined();
+    await expect(desktopApi.listRecoveries()).resolves.toEqual([
+      recoveryCandidate,
+    ]);
 
     expect(invoke).toHaveBeenNthCalledWith(1, IPC_CHANNELS.appGetVersion);
     expect(invoke).toHaveBeenNthCalledWith(2, IPC_CHANNELS.projectOpenDialog);
@@ -80,6 +91,10 @@ describe('desktopApi project methods', () => {
       7,
       IPC_CHANNELS.projectRecoveryDelete,
       project.projectId,
+    );
+    expect(invoke).toHaveBeenNthCalledWith(
+      8,
+      IPC_CHANNELS.projectRecoveryList,
     );
   });
 });

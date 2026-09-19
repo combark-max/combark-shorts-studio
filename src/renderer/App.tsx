@@ -4,6 +4,7 @@ import { AppHeader } from './components/AppHeader';
 import { MediaSidebar } from './components/MediaSidebar';
 import { PreviewPanel } from './components/PreviewPanel';
 import { PropertiesPanel } from './components/PropertiesPanel';
+import { RecoveryPrompt } from './components/RecoveryPrompt';
 import { TimelineShell } from './components/TimelineShell';
 import { useProjectController } from './project/useProjectController';
 
@@ -17,6 +18,12 @@ export function App() {
     openProject,
     saveProject,
     saveProjectAs,
+    recoveryCandidates,
+    recoveryListFailed,
+    discardFailedProjectId,
+    retryRecoveryList,
+    recoverProject,
+    discardRecovery,
   } = useProjectController();
 
   useEffect(() => {
@@ -25,6 +32,37 @@ export function App() {
       .then((version) => setAppVersion(version))
       .catch(() => setAppVersion('—'));
   }, []);
+
+  if (recoveryListFailed) {
+    return (
+      <main role="alert">
+        <p>복구 파일을 확인하지 못했습니다.</p>
+        <button
+          type="button"
+          onClick={() => {
+            void retryRecoveryList();
+          }}
+        >
+          다시 시도
+        </button>
+      </main>
+    );
+  }
+
+  if (recoveryCandidates === null) {
+    return <main aria-live="polite">복구 파일 확인 중...</main>;
+  }
+
+  if (recoveryCandidates.length > 0) {
+    return (
+      <RecoveryPrompt
+        candidates={recoveryCandidates}
+        discardFailedProjectId={discardFailedProjectId}
+        onRecover={recoverProject}
+        onDiscard={discardRecovery}
+      />
+    );
+  }
 
   return (
     <div className="app-shell">

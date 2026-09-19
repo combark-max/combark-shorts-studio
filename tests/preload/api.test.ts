@@ -15,7 +15,13 @@ describe('desktopApi', () => {
   it('exposes only getAppVersion through the approved IPC channel', async () => {
     invoke.mockResolvedValue('1.0.0');
 
-    expect(Object.keys(desktopApi)).toEqual(['getAppVersion']);
+    expect(Object.keys(desktopApi)).toEqual([
+      'getAppVersion',
+      'openProjectDialog',
+      'saveProjectDialog',
+      'readProject',
+      'writeProject',
+    ]);
 
     await expect(desktopApi.getAppVersion()).resolves.toBe('1.0.0');
     expect(invoke).toHaveBeenCalledWith(IPC_CHANNELS.appGetVersion);

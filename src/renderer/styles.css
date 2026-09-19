@@ -1,0 +1,145 @@
+:root {
+  color-scheme: dark;
+  font-family: "Segoe UI", sans-serif;
+  background: #111318;
+  color: #f2f4f8;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 1024px;
+  min-height: 100vh;
+  background: #111318;
+}
+
+button {
+  border: 1px solid #3a414d;
+  border-radius: 4px;
+  background: #20252e;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  padding: 8px 12px;
+}
+
+button:hover {
+  background: #2b333f;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) minmax(240px, auto) auto;
+  min-height: 100vh;
+}
+
+.app-header {
+  align-items: center;
+  border-bottom: 1px solid #303641;
+  display: flex;
+  gap: 24px;
+  justify-content: space-between;
+  padding: 16px 20px;
+}
+
+.app-header h1,
+.panel h2,
+.timeline-shell h2 {
+  font-size: 16px;
+  margin: 0;
+}
+
+.header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.workspace {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 240px minmax(360px, 1fr) 280px;
+  min-height: 0;
+  padding: 16px 20px;
+}
+
+.panel,
+.timeline-shell {
+  background: #191d24;
+  border: 1px solid #303641;
+  border-radius: 4px;
+  padding: 16px;
+}
+
+.sidebar-items {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+}
+
+.sidebar-items li {
+  background: #20252e;
+  border-radius: 3px;
+  padding: 10px 12px;
+}
+
+.preview-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.preview-frame {
+  align-items: center;
+  aspect-ratio: 9 / 16;
+  background: #050608;
+  border: 1px solid #3a414d;
+  display: flex;
+  justify-content: center;
+  max-height: calc(100vh - 330px);
+  max-width: 100%;
+  width: min(360px, 100%);
+}
+
+.preview-placeholder {
+  background: transparent;
+  border-color: #596273;
+}
+
+.properties-panel p {
+  color: #aab2c0;
+  line-height: 1.5;
+  margin: 16px 0 0;
+}
+
+.timeline-shell {
+  margin: 0 20px 16px;
+}
+
+.timeline-tracks {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.timeline-track {
+  align-items: center;
+  background: #20252e;
+  border: 1px solid #303641;
+  display: flex;
+  min-height: 36px;
+  padding: 0 12px;
+}
+
+.app-footer {
+  color: #8e98a8;
+  padding: 0 20px 12px;
+  text-align: right;
+}

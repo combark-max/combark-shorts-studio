@@ -7,10 +7,12 @@ declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
 
 export function createMainWindow(): BrowserWindow {
   const window = new BrowserWindow({
-    width: 1280,
-    height: 800,
-    minWidth: 960,
-    minHeight: 640,
+    width: 1440,
+    height: 900,
+    minWidth: 1100,
+    minHeight: 720,
+    backgroundColor: '#111318',
+    show: false,
     title: APP_NAME,
     webPreferences: {
       preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY,
@@ -18,6 +20,10 @@ export function createMainWindow(): BrowserWindow {
       nodeIntegration: false,
       sandbox: true,
     },
+  });
+
+  window.once('ready-to-show', () => {
+    window.show();
   });
 
   window.webContents.setWindowOpenHandler(() => ({

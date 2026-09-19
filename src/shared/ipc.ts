@@ -4,4 +4,6 @@ export const IPC_CHANNELS = {
   projectSaveDialog: 'project:save-dialog',
   projectRead: 'project:read',
   projectWrite: 'project:write',
+  projectRecoveryWrite: 'project:recovery-write',
+  projectRecoveryDelete: 'project:recovery-delete',
 } as const;

@@ -12,7 +12,7 @@ import { IPC_CHANNELS } from '../../src/shared/ipc';
 import { desktopApi } from '../../src/preload/api';
 
 describe('desktopApi', () => {
-  it('exposes only getAppVersion through the approved IPC channel', async () => {
+  it('exposes only the approved desktop API methods', async () => {
     invoke.mockResolvedValue('1.0.0');
 
     expect(Object.keys(desktopApi)).toEqual([
@@ -21,6 +21,8 @@ describe('desktopApi', () => {
       'saveProjectDialog',
       'readProject',
       'writeProject',
+      'writeRecovery',
+      'deleteRecovery',
     ]);
 
     await expect(desktopApi.getAppVersion()).resolves.toBe('1.0.0');

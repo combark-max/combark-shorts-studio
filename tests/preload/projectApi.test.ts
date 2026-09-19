@@ -24,6 +24,8 @@ describe('desktopApi project methods', () => {
       .mockResolvedValueOnce('C:\\projects\\opened.cssproj')
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(project)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce(undefined);
 
     expect(Object.keys(desktopApi)).toEqual([
@@ -32,6 +34,8 @@ describe('desktopApi project methods', () => {
       'saveProjectDialog',
       'readProject',
       'writeProject',
+      'writeRecovery',
+      'deleteRecovery',
     ]);
     await expect(desktopApi.getAppVersion()).resolves.toBe('1.0.0');
     await expect(desktopApi.openProjectDialog()).resolves.toBe(
@@ -43,6 +47,10 @@ describe('desktopApi project methods', () => {
     );
     await expect(
       desktopApi.writeProject('C:\\projects\\opened.cssproj', project),
+    ).resolves.toBeUndefined();
+    await expect(desktopApi.writeRecovery(project)).resolves.toBeUndefined();
+    await expect(
+      desktopApi.deleteRecovery(project.projectId),
     ).resolves.toBeUndefined();
 
     expect(invoke).toHaveBeenNthCalledWith(1, IPC_CHANNELS.appGetVersion);
@@ -62,6 +70,16 @@ describe('desktopApi project methods', () => {
       IPC_CHANNELS.projectWrite,
       'C:\\projects\\opened.cssproj',
       project,
+    );
+    expect(invoke).toHaveBeenNthCalledWith(
+      6,
+      IPC_CHANNELS.projectRecoveryWrite,
+      project,
+    );
+    expect(invoke).toHaveBeenNthCalledWith(
+      7,
+      IPC_CHANNELS.projectRecoveryDelete,
+      project.projectId,
     );
   });
 });

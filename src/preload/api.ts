@@ -16,6 +16,10 @@ export const desktopApi = {
     filePath: string,
     project: ProjectDocumentV1,
   ): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.projectWrite, filePath, project),
+  writeRecovery: (project: ProjectDocumentV1): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.projectRecoveryWrite, project),
+  deleteRecovery: (projectId: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.projectRecoveryDelete, projectId),
 };
 
 export type DesktopApi = typeof desktopApi;

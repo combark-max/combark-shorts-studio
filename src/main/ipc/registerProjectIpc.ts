@@ -1,6 +1,10 @@
-import { dialog, ipcMain } from 'electron';
+import { app, dialog, ipcMain } from 'electron';
 
 import { readProjectFile, writeProjectFileAtomic } from '../project/projectStorage';
+import {
+  deleteRecoveryFile,
+  writeRecoveryFile,
+} from '../project/recoveryStorage';
 import { ensureProjectExtension } from '../../shared/project/path';
 import type { ProjectDocumentV1 } from '../../shared/project/types';
 import { IPC_CHANNELS } from '../../shared/ipc';
@@ -46,5 +50,19 @@ export function registerProjectIpc(): void {
     IPC_CHANNELS.projectWrite,
     (_event, filePath: string, project: ProjectDocumentV1) =>
       writeProjectFileAtomic(filePath, project),
+  );
+
+  ipcMain.removeHandler(IPC_CHANNELS.projectRecoveryWrite);
+  ipcMain.handle(
+    IPC_CHANNELS.projectRecoveryWrite,
+    (_event, project: ProjectDocumentV1) =>
+      writeRecoveryFile(app.getPath('userData'), project),
+  );
+
+  ipcMain.removeHandler(IPC_CHANNELS.projectRecoveryDelete);
+  ipcMain.handle(
+    IPC_CHANNELS.projectRecoveryDelete,
+    (_event, projectId: string) =>
+      deleteRecoveryFile(app.getPath('userData'), projectId),
   );
 }

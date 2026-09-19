@@ -25,6 +25,12 @@ describe('desktopApi project methods', () => {
       modifiedAt: '2026-09-19T01:02:03.000Z',
       project,
     };
+    const recentProject = {
+      filePath: 'C:\\projects\\opened.cssproj',
+      projectId: project.projectId,
+      name: project.name,
+      lastUsedAt: '2026-09-19T03:00:00.000Z',
+    };
     invoke
       .mockResolvedValueOnce('1.0.0')
       .mockResolvedValueOnce('C:\\projects\\opened.cssproj')
@@ -33,7 +39,13 @@ describe('desktopApi project methods', () => {
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce([recoveryCandidate]);
+      .mockResolvedValueOnce([recoveryCandidate])
+      .mockResolvedValueOnce([recentProject])
+      .mockResolvedValueOnce({
+        status: 'opened',
+        project,
+        filePath: recentProject.filePath,
+      });
 
     expect(Object.keys(desktopApi)).toEqual([
       'getAppVersion',
@@ -44,7 +56,10 @@ describe('desktopApi project methods', () => {
       'writeRecovery',
       'deleteRecovery',
       'listRecoveries',
+      'listRecentProjects',
+      'openRecentProject',
     ]);
+    expect(Object.keys(desktopApi)).not.toContain('recordRecentProject');
     await expect(desktopApi.getAppVersion()).resolves.toBe('1.0.0');
     await expect(desktopApi.openProjectDialog()).resolves.toBe(
       'C:\\projects\\opened.cssproj',
@@ -63,6 +78,16 @@ describe('desktopApi project methods', () => {
     await expect(desktopApi.listRecoveries()).resolves.toEqual([
       recoveryCandidate,
     ]);
+    await expect(desktopApi.listRecentProjects()).resolves.toEqual([
+      recentProject,
+    ]);
+    await expect(
+      desktopApi.openRecentProject(recentProject.filePath),
+    ).resolves.toEqual({
+      status: 'opened',
+      project,
+      filePath: recentProject.filePath,
+    });
 
     expect(invoke).toHaveBeenNthCalledWith(1, IPC_CHANNELS.appGetVersion);
     expect(invoke).toHaveBeenNthCalledWith(2, IPC_CHANNELS.projectOpenDialog);
@@ -95,6 +120,15 @@ describe('desktopApi project methods', () => {
     expect(invoke).toHaveBeenNthCalledWith(
       8,
       IPC_CHANNELS.projectRecoveryList,
+    );
+    expect(invoke).toHaveBeenNthCalledWith(
+      9,
+      IPC_CHANNELS.projectRecentList,
+    );
+    expect(invoke).toHaveBeenNthCalledWith(
+      10,
+      IPC_CHANNELS.projectRecentOpen,
+      recentProject.filePath,
     );
   });
 });

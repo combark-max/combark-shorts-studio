@@ -3,7 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createNewProject } from '../../../src/shared/project/createProject';
 import { useProjectController } from '../../../src/renderer/project/useProjectController';
 import type { ProjectState } from '../../../src/renderer/project/projectState';
-import type { RecoveryCandidate } from '../../../src/shared/project/types';
+import type {
+  RecentProject,
+  RecoveryCandidate,
+} from '../../../src/shared/project/types';
 
 const desktopApi = {
   getAppVersion: vi.fn(),
@@ -14,6 +17,8 @@ const desktopApi = {
   writeRecovery: vi.fn(),
   deleteRecovery: vi.fn(),
   listRecoveries: vi.fn(),
+  listRecentProjects: vi.fn(),
+  openRecentProject: vi.fn(),
 };
 
 beforeEach(() => {
@@ -21,6 +26,7 @@ beforeEach(() => {
   desktopApi.writeRecovery.mockResolvedValue(undefined);
   desktopApi.deleteRecovery.mockResolvedValue(undefined);
   desktopApi.listRecoveries.mockResolvedValue([]);
+  desktopApi.listRecentProjects.mockResolvedValue([]);
   Object.defineProperty(window, 'combarkDesktop', {
     configurable: true,
     value: desktopApi,
@@ -52,7 +58,196 @@ function createRecoveryCandidate(name: string): RecoveryCandidate {
   };
 }
 
+function createRecentProject(
+  name: string,
+  filePath = `C:\\projects\\${name}.cssproj`,
+): RecentProject {
+  const project = createNewProject(name);
+
+  return {
+    filePath,
+    projectId: project.projectId,
+    name,
+    lastUsedAt: '2026-09-19T03:00:00.000Z',
+  };
+}
+
 describe('useProjectController', () => {
+  it('loads an empty recent-project list without changing project state', async () => {
+    const { result } = renderHook(() => useProjectController());
+    const initialState = result.current.state;
+
+    await waitFor(() => {
+      expect(result.current.recentProjectsLoading).toBe(false);
+    });
+
+    expect(result.current.recentProjects).toEqual([]);
+    expect(result.current.recentProjectsListFailed).toBe(false);
+    expect(result.current.state).toEqual(initialState);
+  });
+
+  it('loads recent projects and retries a failed list without blocking state', async () => {
+    const recentProject = createRecentProject('재시도 최근 프로젝트');
+    desktopApi.listRecentProjects
+      .mockRejectedValueOnce(new Error('list failed'))
+      .mockResolvedValueOnce([recentProject]);
+    const { result } = renderHook(() => useProjectController());
+    const initialState = result.current.state;
+
+    await waitFor(() => {
+      expect(result.current.recentProjectsListFailed).toBe(true);
+    });
+    expect(result.current.recentProjectsLoading).toBe(false);
+    expect(result.current.state).toEqual(initialState);
+
+    await act(async () => {
+      await result.current.retryRecentProjects();
+    });
+
+    expect(result.current.recentProjects).toEqual([recentProject]);
+    expect(result.current.recentProjectsListFailed).toBe(false);
+  });
+
+  it('opens a recent project with the same clean state as normal Open', async () => {
+    const recentProject = createRecentProject('최근 열기');
+    const project = createNewProject('최근 열기');
+    desktopApi.listRecentProjects.mockResolvedValue([recentProject]);
+    desktopApi.openRecentProject.mockResolvedValue({
+      status: 'opened',
+      project,
+      filePath: recentProject.filePath,
+    });
+    const { result } = renderHook(() => useProjectController());
+    await waitFor(() => {
+      expect(result.current.recentProjects).toEqual([recentProject]);
+    });
+
+    await act(async () => {
+      await result.current.openRecentProject(recentProject.filePath);
+    });
+
+    expect(result.current.state).toEqual({
+      project,
+      filePath: recentProject.filePath,
+      dirty: false,
+      lastSavedAt: null,
+    });
+    expect(result.current.recentProjectOpenError).toBeNull();
+  });
+
+  it('keeps active state and applies the returned list when a recent file is missing', async () => {
+    const missingProject = createRecentProject('사라진 최근 프로젝트');
+    const remainingProject = createRecentProject('남은 최근 프로젝트');
+    desktopApi.listRecentProjects.mockResolvedValue([missingProject]);
+    desktopApi.openRecentProject.mockResolvedValue({
+      status: 'missing',
+      recentProjects: [remainingProject],
+    });
+    const { result } = renderHook(() => useProjectController());
+    const initialState = result.current.state;
+    await waitFor(() => {
+      expect(result.current.recentProjects).toEqual([missingProject]);
+    });
+
+    await act(async () => {
+      await result.current.openRecentProject(missingProject.filePath);
+    });
+
+    expect(result.current.state).toEqual(initialState);
+    expect(result.current.recentProjects).toEqual([remainingProject]);
+    expect(result.current.recentProjectOpenError).toBe('missing');
+  });
+
+  it('keeps active state and recent items when opening a recent project fails', async () => {
+    const recentProject = createRecentProject('열기 실패 최근 프로젝트');
+    desktopApi.listRecentProjects.mockResolvedValue([recentProject]);
+    desktopApi.openRecentProject.mockRejectedValue(new Error('read failed'));
+    const { result } = renderHook(() => useProjectController());
+    const initialState = result.current.state;
+    await waitFor(() => {
+      expect(result.current.recentProjects).toEqual([recentProject]);
+    });
+
+    await act(async () => {
+      await result.current.openRecentProject(recentProject.filePath);
+    });
+
+    expect(result.current.state).toEqual(initialState);
+    expect(result.current.recentProjects).toEqual([recentProject]);
+    expect(result.current.recentProjectOpenError).toBe('open');
+  });
+
+  it('refreshes recent projects after a normal Open succeeds', async () => {
+    const project = createNewProject('일반 열기');
+    const recentProject: RecentProject = {
+      filePath: 'C:\\projects\\opened.cssproj',
+      projectId: project.projectId,
+      name: project.name,
+      lastUsedAt: '2026-09-19T03:00:00.000Z',
+    };
+    desktopApi.listRecentProjects
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([recentProject]);
+    desktopApi.openProjectDialog.mockResolvedValue(recentProject.filePath);
+    desktopApi.readProject.mockResolvedValue(project);
+    const { result } = renderHook(() => useProjectController());
+    await waitFor(() => {
+      expect(result.current.recentProjectsLoading).toBe(false);
+    });
+
+    await act(async () => {
+      await result.current.openProject();
+    });
+
+    expect(result.current.recentProjects).toEqual([recentProject]);
+    expect(desktopApi.listRecentProjects).toHaveBeenCalledTimes(2);
+  });
+
+  it('refreshes recent projects after Save As succeeds', async () => {
+    const recentProject = createRecentProject(
+      '새 프로젝트',
+      'C:\\projects\\saved.cssproj',
+    );
+    desktopApi.listRecentProjects
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([recentProject]);
+    desktopApi.saveProjectDialog.mockResolvedValue(recentProject.filePath);
+    desktopApi.writeProject.mockResolvedValue(undefined);
+    const { result } = renderHook(() => useProjectController());
+    await waitFor(() => {
+      expect(result.current.recentProjectsLoading).toBe(false);
+    });
+
+    await act(async () => {
+      await result.current.saveProject();
+    });
+
+    expect(result.current.state.dirty).toBe(false);
+    expect(result.current.state.filePath).toBe(recentProject.filePath);
+    expect(result.current.recentProjects).toEqual([recentProject]);
+  });
+
+  it('keeps a successful Save clean when refreshing recent projects fails', async () => {
+    desktopApi.listRecentProjects
+      .mockResolvedValueOnce([])
+      .mockRejectedValueOnce(new Error('recent refresh failed'));
+    desktopApi.writeProject.mockResolvedValue(undefined);
+    const initialState = createState();
+    const { result } = renderHook(() => useProjectController(initialState));
+    await waitFor(() => {
+      expect(result.current.recentProjectsLoading).toBe(false);
+    });
+
+    await act(async () => {
+      await result.current.saveProject();
+    });
+
+    expect(result.current.state.dirty).toBe(false);
+    expect(result.current.state.filePath).toBe(initialState.filePath);
+    expect(result.current.state.lastSavedAt).toEqual(expect.any(String));
+    expect(result.current.recentProjectsListFailed).toBe(true);
+  });
+
   it('exposes an empty recovery list without changing the initial project', async () => {
     const { result } = renderHook(() => useProjectController());
     const initialProject = result.current.state.project;
@@ -240,6 +435,9 @@ describe('useProjectController', () => {
     desktopApi.readProject.mockResolvedValue(project);
     desktopApi.writeProject.mockResolvedValue(undefined);
     const { result } = renderHook(() => useProjectController());
+    await waitFor(() => {
+      expect(result.current.recentProjectsLoading).toBe(false);
+    });
 
     await act(async () => {
       await result.current.openProject();
@@ -256,6 +454,7 @@ describe('useProjectController', () => {
     expect(result.current.state.dirty).toBe(false);
     expect(result.current.state.lastSavedAt).toEqual(expect.any(String));
     expect(desktopApi.deleteRecovery).toHaveBeenCalledWith(project.projectId);
+    expect(desktopApi.listRecentProjects).toHaveBeenCalledTimes(3);
   });
 
   it('saves as to the selected path', async () => {
@@ -288,6 +487,7 @@ describe('useProjectController', () => {
     expect(desktopApi.writeProject).not.toHaveBeenCalled();
     expect(desktopApi.deleteRecovery).not.toHaveBeenCalled();
     expect(result.current.state).toEqual(initialState);
+    expect(desktopApi.listRecentProjects).toHaveBeenCalledTimes(1);
   });
 
   it('does not delete recovery when a manual save fails', async () => {
@@ -300,6 +500,41 @@ describe('useProjectController', () => {
 
     expect(desktopApi.deleteRecovery).not.toHaveBeenCalled();
     expect(result.current.state).toEqual(initialState);
+    expect(desktopApi.listRecentProjects).toHaveBeenCalledTimes(1);
+  });
+
+  it('refreshes recent projects after a recovered project is saved as', async () => {
+    const candidate = createRecoveryCandidate('복구 후 저장');
+    const savedPath = 'C:\\projects\\recovered-save-as.cssproj';
+    const recentProject: RecentProject = {
+      filePath: savedPath,
+      projectId: candidate.projectId,
+      name: candidate.name,
+      lastUsedAt: '2026-09-19T04:00:00.000Z',
+    };
+    desktopApi.listRecoveries.mockResolvedValue([candidate]);
+    desktopApi.listRecentProjects
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([recentProject]);
+    desktopApi.saveProjectDialog.mockResolvedValue(savedPath);
+    desktopApi.writeProject.mockResolvedValue(undefined);
+    const { result } = renderHook(() => useProjectController());
+    await waitFor(() => {
+      expect(result.current.recoveryCandidates).toEqual([candidate]);
+      expect(result.current.recentProjectsLoading).toBe(false);
+    });
+
+    act(() => {
+      result.current.recoverProject(candidate);
+    });
+    await act(async () => {
+      await result.current.saveProject();
+    });
+
+    expect(result.current.state.filePath).toBe(savedPath);
+    expect(result.current.state.dirty).toBe(false);
+    expect(result.current.recentProjects).toEqual([recentProject]);
+    expect(desktopApi.deleteRecovery).toHaveBeenCalledWith(candidate.projectId);
   });
 
   it('keeps a successful manual save clean when recovery deletion fails', async () => {

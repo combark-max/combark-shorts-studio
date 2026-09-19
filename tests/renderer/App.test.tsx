@@ -13,6 +13,8 @@ const desktopApi = {
   writeRecovery: vi.fn(),
   deleteRecovery: vi.fn(),
   listRecoveries: vi.fn(),
+  listRecentProjects: vi.fn(),
+  openRecentProject: vi.fn(),
 };
 
 beforeEach(() => {
@@ -20,6 +22,7 @@ beforeEach(() => {
   desktopApi.getAppVersion.mockResolvedValue('0.1.0');
   desktopApi.listRecoveries.mockResolvedValue([]);
   desktopApi.deleteRecovery.mockResolvedValue(undefined);
+  desktopApi.listRecentProjects.mockResolvedValue([]);
   Object.defineProperty(window, 'combarkDesktop', {
     configurable: true,
     value: desktopApi,
@@ -63,6 +66,9 @@ describe('App', () => {
     expect(screen.getByText('자막')).toBeInTheDocument();
     expect(screen.getByText('배경음악')).toBeInTheDocument();
     expect(screen.getByText('내레이션')).toBeInTheDocument();
+    expect(
+      screen.getByRole('region', { name: '최근 프로젝트' }),
+    ).toBeInTheDocument();
 
     expect(await screen.findByText('v0.1.0')).toBeInTheDocument();
   });
@@ -83,6 +89,7 @@ describe('App', () => {
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
     expect(screen.getByText('시작 복구 프로젝트')).toBeInTheDocument();
     expect(screen.queryByText('Combark Shorts Studio')).not.toBeInTheDocument();
+    expect(screen.queryByText('최근 프로젝트')).not.toBeInTheDocument();
   });
 
   it('shows a lookup error and retries before entering the editor', async () => {
@@ -123,5 +130,44 @@ describe('App', () => {
     expect(screen.getByText('복구된 프로젝트')).toBeInTheDocument();
     expect(screen.getByText('저장 필요')).toBeInTheDocument();
     expect(desktopApi.deleteRecovery).not.toHaveBeenCalled();
+  });
+
+  it('shows recent-project errors without blocking the editor', async () => {
+    desktopApi.listRecentProjects.mockRejectedValue(new Error('list failed'));
+    render(<App />);
+
+    expect(await screen.findByText('Combark Shorts Studio')).toBeInTheDocument();
+    expect(
+      await screen.findByText('최근 프로젝트를 불러오지 못했습니다.'),
+    ).toBeInTheDocument();
+  });
+
+  it('shows recent projects only after recovery is resolved', async () => {
+    const user = userEvent.setup();
+    const recoveryProject = createNewProject('복구 우선 프로젝트');
+    desktopApi.listRecoveries.mockResolvedValue([
+      {
+        projectId: recoveryProject.projectId,
+        name: recoveryProject.name,
+        modifiedAt: '2026-09-19T02:00:00.000Z',
+        project: recoveryProject,
+      },
+    ]);
+    desktopApi.listRecentProjects.mockResolvedValue([
+      {
+        filePath: 'C:\\projects\\recent.cssproj',
+        projectId: 'recent-project-id',
+        name: '최근 프로젝트 항목',
+        lastUsedAt: '2026-09-19T03:00:00.000Z',
+      },
+    ]);
+    render(<App />);
+
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    expect(screen.queryByText('최근 프로젝트 항목')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '복구' }));
+
+    expect(await screen.findByText('최근 프로젝트 항목')).toBeInTheDocument();
   });
 });

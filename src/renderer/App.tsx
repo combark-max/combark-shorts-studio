@@ -5,6 +5,7 @@ import { MediaSidebar } from './components/MediaSidebar';
 import { PreviewPanel } from './components/PreviewPanel';
 import { PropertiesPanel } from './components/PropertiesPanel';
 import { RecoveryPrompt } from './components/RecoveryPrompt';
+import { RecentProjects } from './components/RecentProjects';
 import { TimelineShell } from './components/TimelineShell';
 import { useProjectController } from './project/useProjectController';
 
@@ -24,6 +25,12 @@ export function App() {
     retryRecoveryList,
     recoverProject,
     discardRecovery,
+    recentProjects,
+    recentProjectsLoading,
+    recentProjectsListFailed,
+    recentProjectOpenError,
+    retryRecentProjects,
+    openRecentProject,
   } = useProjectController();
 
   useEffect(() => {
@@ -73,6 +80,14 @@ export function App() {
         onSaveProjectAs={saveProjectAs}
         onAutoShorts={noop}
         onExport={noop}
+      />
+      <RecentProjects
+        projects={recentProjects}
+        loading={recentProjectsLoading}
+        listFailed={recentProjectsListFailed}
+        openError={recentProjectOpenError}
+        onRetry={retryRecentProjects}
+        onOpen={openRecentProject}
       />
       <main className="workspace">
         <MediaSidebar />

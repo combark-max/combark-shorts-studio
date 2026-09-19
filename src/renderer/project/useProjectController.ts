@@ -2,7 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 
 import { createInitialProjectState } from './projectState';
 import type { ProjectState } from './projectState';
-import type { RecoveryCandidate } from '../../shared/project/types';
+import type {
+  RecentProject,
+  RecoveryCandidate,
+} from '../../shared/project/types';
 
 const RECOVERY_AUTOSAVE_INTERVAL_MS = 30_000;
 
@@ -16,6 +19,13 @@ export function useProjectController(initialState?: ProjectState) {
   const [recoveryListFailed, setRecoveryListFailed] = useState(false);
   const [discardFailedProjectId, setDiscardFailedProjectId] = useState<
     string | null
+  >(null);
+  const [recentProjects, setRecentProjects] = useState<RecentProject[]>([]);
+  const [recentProjectsLoading, setRecentProjectsLoading] = useState(true);
+  const [recentProjectsListFailed, setRecentProjectsListFailed] =
+    useState(false);
+  const [recentProjectOpenError, setRecentProjectOpenError] = useState<
+    'missing' | 'open' | null
   >(null);
   const stateRef = useRef(state);
   const recoveryWriteRef = useRef<Promise<void> | null>(null);
@@ -88,8 +98,57 @@ export function useProjectController(initialState?: ProjectState) {
     }
   };
 
+  const loadRecentProjects = async (showLoading: boolean): Promise<void> => {
+    if (showLoading) {
+      setRecentProjectsLoading(true);
+    }
+    setRecentProjectsListFailed(false);
+
+    try {
+      setRecentProjects(await window.combarkDesktop.listRecentProjects());
+    } catch {
+      setRecentProjectsListFailed(true);
+    } finally {
+      if (showLoading) {
+        setRecentProjectsLoading(false);
+      }
+    }
+  };
+
+  const retryRecentProjects = async (): Promise<void> => {
+    await loadRecentProjects(true);
+  };
+
+  const openRecentProject = async (filePath: string): Promise<void> => {
+    setRecentProjectOpenError(null);
+
+    try {
+      const result = await window.combarkDesktop.openRecentProject(filePath);
+
+      if (result.status === 'missing') {
+        setRecentProjects(result.recentProjects);
+        setRecentProjectOpenError('missing');
+        return;
+      }
+
+      replaceState({
+        project: result.project,
+        filePath: result.filePath,
+        dirty: false,
+        lastSavedAt: null,
+      });
+      await loadRecentProjects(false);
+    } catch {
+      setRecentProjectOpenError('open');
+    }
+  };
+
   useEffect(() => {
     void retryRecoveryList();
+  }, []);
+
+  useEffect(() => {
+    void retryRecentProjects();
   }, []);
 
   useEffect(() => {
@@ -138,6 +197,7 @@ export function useProjectController(initialState?: ProjectState) {
       dirty: false,
       lastSavedAt: null,
     });
+    await loadRecentProjects(false);
   };
 
   const saveProjectAs = async () => {
@@ -154,6 +214,7 @@ export function useProjectController(initialState?: ProjectState) {
       await window.combarkDesktop.writeProject(filePath, project);
       await deleteRecoveryAfterSave(project.projectId);
       finishManualSave(filePath);
+      await loadRecentProjects(false);
     } finally {
       manualSaveInProgressRef.current = false;
     }
@@ -176,6 +237,7 @@ export function useProjectController(initialState?: ProjectState) {
       );
       await deleteRecoveryAfterSave(currentState.project.projectId);
       finishManualSave(currentState.filePath);
+      await loadRecentProjects(false);
     } finally {
       manualSaveInProgressRef.current = false;
     }
@@ -189,6 +251,12 @@ export function useProjectController(initialState?: ProjectState) {
     retryRecoveryList,
     recoverProject,
     discardRecovery,
+    recentProjects,
+    recentProjectsLoading,
+    recentProjectsListFailed,
+    recentProjectOpenError,
+    retryRecentProjects,
+    openRecentProject,
     newProject,
     openProject,
     saveProject,

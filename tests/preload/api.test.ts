@@ -24,7 +24,11 @@ describe('desktopApi', () => {
       'writeRecovery',
       'deleteRecovery',
       'listRecoveries',
+      'listRecentProjects',
+      'openRecentProject',
     ]);
+
+    expect(Object.keys(desktopApi)).not.toContain('recordRecentProject');
 
     await expect(desktopApi.getAppVersion()).resolves.toBe('1.0.0');
     expect(invoke).toHaveBeenCalledWith(IPC_CHANNELS.appGetVersion);

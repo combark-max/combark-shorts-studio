@@ -1,7 +1,9 @@
 import { ipcRenderer } from 'electron';
 
 import type {
+  OpenRecentProjectResult,
   ProjectDocumentV1,
+  RecentProject,
   RecoveryCandidate,
 } from '../shared/project/types';
 import { IPC_CHANNELS } from '../shared/ipc';
@@ -25,6 +27,10 @@ export const desktopApi = {
     ipcRenderer.invoke(IPC_CHANNELS.projectRecoveryDelete, projectId),
   listRecoveries: (): Promise<RecoveryCandidate[]> =>
     ipcRenderer.invoke(IPC_CHANNELS.projectRecoveryList),
+  listRecentProjects: (): Promise<RecentProject[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.projectRecentList),
+  openRecentProject: (filePath: string): Promise<OpenRecentProjectResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.projectRecentOpen, filePath),
 };
 
 export type DesktopApi = typeof desktopApi;

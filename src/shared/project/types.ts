@@ -19,3 +19,26 @@ export interface RecoveryCandidate {
   modifiedAt: string;
   project: ProjectDocumentV1;
 }
+
+export interface RecentProject {
+  filePath: string;
+  projectId: string;
+  name: string;
+  lastUsedAt: string;
+}
+
+export interface RecentProjectsStoreV1 {
+  schemaVersion: 1;
+  projects: RecentProject[];
+}
+
+export type OpenRecentProjectResult =
+  | {
+      status: 'opened';
+      project: ProjectDocumentV1;
+      filePath: string;
+    }
+  | {
+      status: 'missing';
+      recentProjects: RecentProject[];
+    };

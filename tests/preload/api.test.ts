@@ -1,12 +1,23 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+const invoke = vi.hoisted(() => vi.fn());
+
+vi.mock('electron', () => ({
+  ipcRenderer: {
+    invoke,
+  },
+}));
+
+import { IPC_CHANNELS } from '../../src/shared/ipc';
 import { desktopApi } from '../../src/preload/api';
 
 describe('desktopApi', () => {
-  it('exposes only the approved initial surface', () => {
-    expect(desktopApi).toEqual({
-      platform: 'win32',
-    });
+  it('exposes only getAppVersion through the approved IPC channel', async () => {
+    invoke.mockResolvedValue('1.0.0');
 
-    expect(Object.keys(desktopApi)).toEqual(['platform']);
+    expect(Object.keys(desktopApi)).toEqual(['getAppVersion']);
+
+    await expect(desktopApi.getAppVersion()).resolves.toBe('1.0.0');
+    expect(invoke).toHaveBeenCalledWith(IPC_CHANNELS.appGetVersion);
   });
 });

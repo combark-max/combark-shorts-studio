@@ -27,6 +27,7 @@ export function useProjectController(initialState?: ProjectState) {
   const [recentProjectOpenError, setRecentProjectOpenError] = useState<
     'missing' | 'open' | null
   >(null);
+  const [projectOpenError, setProjectOpenError] = useState(false);
   const stateRef = useRef(state);
   const recoveryWriteRef = useRef<Promise<void> | null>(null);
   const manualSaveInProgressRef = useRef(false);
@@ -184,13 +185,29 @@ export function useProjectController(initialState?: ProjectState) {
   };
 
   const openProject = async () => {
-    const filePath = await window.combarkDesktop.openProjectDialog();
+    setProjectOpenError(false);
+    let filePath: string | null;
+
+    try {
+      filePath = await window.combarkDesktop.openProjectDialog();
+    } catch {
+      setProjectOpenError(true);
+      return;
+    }
 
     if (!filePath) {
       return;
     }
 
-    const project = await window.combarkDesktop.readProject(filePath);
+    let project: ProjectState['project'];
+
+    try {
+      project = await window.combarkDesktop.readProject(filePath);
+    } catch {
+      setProjectOpenError(true);
+      return;
+    }
+
     replaceState({
       project,
       filePath,
@@ -257,6 +274,7 @@ export function useProjectController(initialState?: ProjectState) {
     recentProjectOpenError,
     retryRecentProjects,
     openRecentProject,
+    projectOpenError,
     newProject,
     openProject,
     saveProject,

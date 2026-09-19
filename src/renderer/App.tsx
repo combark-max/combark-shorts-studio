@@ -31,6 +31,7 @@ export function App() {
     recentProjectOpenError,
     retryRecentProjects,
     openRecentProject,
+    projectOpenError,
   } = useProjectController();
 
   useEffect(() => {
@@ -96,6 +97,11 @@ export function App() {
       </main>
       <TimelineShell />
       <footer className="app-footer">
+        {projectOpenError ? (
+          <span role="alert">
+            프로젝트를 열지 못했습니다. 유효한 .cssproj 파일인지 확인해 주세요.
+          </span>
+        ) : null}
         <span>{state.project.name}</span>
         <span>{state.dirty ? '저장 필요' : '저장됨'}</span>
         <span>v{appVersion}</span>

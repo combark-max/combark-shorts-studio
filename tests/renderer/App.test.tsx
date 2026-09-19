@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../src/renderer/App';
@@ -169,5 +169,26 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '복구' }));
 
     expect(await screen.findByText('최근 프로젝트 항목')).toBeInTheDocument();
+  });
+
+  it('shows a general Open error without replacing the current project', async () => {
+    const user = userEvent.setup();
+    desktopApi.openProjectDialog.mockResolvedValue(
+      'C:\\projects\\invalid.cssproj',
+    );
+    desktopApi.readProject.mockRejectedValueOnce(
+      new Error('유효하지 않은 프로젝트 파일입니다.'),
+    );
+    render(<App />);
+    await screen.findByText('Combark Shorts Studio');
+
+    await user.click(screen.getByRole('button', { name: '열기' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '프로젝트를 열지 못했습니다. 유효한 .cssproj 파일인지 확인해 주세요.',
+    );
+    const footer = screen.getByRole('contentinfo');
+    expect(within(footer).getByText('새 프로젝트')).toBeInTheDocument();
+    expect(within(footer).getByText('저장됨')).toBeInTheDocument();
   });
 });

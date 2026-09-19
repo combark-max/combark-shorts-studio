@@ -386,7 +386,69 @@ describe('useProjectController', () => {
     });
 
     expect(result.current.state).toEqual(initialState);
+    expect(result.current.projectOpenError).toBe(false);
     expect(desktopApi.readProject).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['malformed JSON', new SyntaxError('Unexpected token')],
+    ['invalid schema', new Error('유효하지 않은 프로젝트 파일입니다.')],
+  ])(
+    'keeps the existing dirty project and reports a general Open error for %s',
+    async (_label, readError) => {
+      const initialState = createState({
+        lastSavedAt: '2026-09-19T04:00:00.000Z',
+      });
+      desktopApi.openProjectDialog.mockResolvedValue(
+        'C:\\projects\\invalid.cssproj',
+      );
+      desktopApi.readProject.mockRejectedValueOnce(readError);
+      const { result } = renderHook(() =>
+        useProjectController(initialState),
+      );
+
+      await act(async () => {
+        await result.current.openProject();
+      });
+
+      expect(result.current.state).toEqual(initialState);
+      expect(result.current.projectOpenError).toBe(true);
+    },
+  );
+
+  it('clears a general Open error when a later Open succeeds', async () => {
+    const initialState = createState();
+    const openedProject = createNewProject('오류 후 열린 프로젝트');
+    const openedPath = 'C:\\projects\\opened-after-error.cssproj';
+    desktopApi.openProjectDialog.mockResolvedValue(openedPath);
+    desktopApi.readProject
+      .mockRejectedValueOnce(new Error('read failed'))
+      .mockResolvedValueOnce(openedProject);
+    const { result } = renderHook(() =>
+      useProjectController(initialState),
+    );
+    await waitFor(() => {
+      expect(result.current.recentProjectsLoading).toBe(false);
+    });
+
+    await act(async () => {
+      await result.current.openProject();
+    });
+    expect(result.current.projectOpenError).toBe(true);
+    expect(result.current.state).toEqual(initialState);
+
+    await act(async () => {
+      await result.current.openProject();
+    });
+
+    expect(result.current.projectOpenError).toBe(false);
+    expect(result.current.state).toEqual({
+      project: openedProject,
+      filePath: openedPath,
+      dirty: false,
+      lastSavedAt: null,
+    });
+    expect(desktopApi.listRecentProjects).toHaveBeenCalledTimes(2);
   });
 
   it('loads a selected project as clean state', async () => {
@@ -405,6 +467,7 @@ describe('useProjectController', () => {
       dirty: false,
       lastSavedAt: null,
     });
+    expect(result.current.projectOpenError).toBe(false);
   });
 
   it('saves as when there is no current file path', async () => {

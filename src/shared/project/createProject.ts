@@ -1,5 +1,3 @@
-import { randomUUID } from 'crypto';
-
 import { DEFAULT_PROJECT_SETTINGS } from '../appInfo';
 import type { ProjectDocumentV1 } from './types';
 
@@ -10,7 +8,7 @@ export function createNewProject(
 
   return {
     schemaVersion: 1,
-    projectId: randomUUID(),
+    projectId: globalThis.crypto.randomUUID(),
     name,
     createdAt: now,
     updatedAt: now,

@@ -57,10 +57,10 @@ describe('App', () => {
 
     await user.click(screen.getByRole('button', { name: '파일 추가' }));
 
-    expect(screen.getByText('photo.jpg')).toBeInTheDocument();
-    expect(screen.getByText('이미지')).toBeInTheDocument();
-    expect(screen.getByText('clip.mp4')).toBeInTheDocument();
-    expect(screen.getByText('영상')).toBeInTheDocument();
+    expect(screen.getAllByText('photo.jpg')).toHaveLength(2);
+    expect(screen.getAllByText('이미지')).toHaveLength(2);
+    expect(screen.getAllByText('clip.mp4')).toHaveLength(2);
+    expect(screen.getAllByText('영상')).toHaveLength(2);
     expect(screen.getByText('저장 필요')).toBeInTheDocument();
   });
 
@@ -76,6 +76,7 @@ describe('App', () => {
           fileName: 'restored.webp',
         },
       ],
+      scenes: [{ mediaId: 'restored-photo-id', durationMs: 3000 }],
     };
     desktopApi.openProjectDialog.mockResolvedValue(
       'C:\\projects\\media.cssproj',
@@ -86,7 +87,7 @@ describe('App', () => {
 
     await user.click(screen.getByRole('button', { name: '열기' }));
 
-    expect(await screen.findByText('restored.webp')).toBeInTheDocument();
+    expect(await screen.findAllByText('restored.webp')).toHaveLength(2);
     expect(screen.getByText('저장됨')).toBeInTheDocument();
   });
 
@@ -118,10 +119,8 @@ describe('App', () => {
     expect(screen.getByText('미리보기')).toBeInTheDocument();
     expect(screen.getByText('속성')).toBeInTheDocument();
 
-    expect(screen.getByText('비디오 / 사진')).toBeInTheDocument();
-    expect(screen.getByText('자막')).toBeInTheDocument();
-    expect(screen.getByText('배경음악')).toBeInTheDocument();
-    expect(screen.getByText('내레이션')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '장면 목록' })).toBeInTheDocument();
+    expect(screen.getByText('장면이 없습니다.')).toBeInTheDocument();
     expect(
       screen.getByRole('region', { name: '최근 프로젝트' }),
     ).toBeInTheDocument();

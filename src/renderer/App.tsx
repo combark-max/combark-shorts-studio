@@ -17,6 +17,9 @@ export function App() {
     state,
     newProject,
     importMedia,
+    moveScene,
+    deleteScene,
+    updateSceneDuration,
     openProject,
     saveProject,
     saveProjectAs,
@@ -99,7 +102,13 @@ export function App() {
         <PreviewPanel />
         <PropertiesPanel />
       </main>
-      <TimelineShell />
+      <TimelineShell
+        media={state.project.media}
+        scenes={state.project.scenes}
+        onMoveScene={moveScene}
+        onDeleteScene={deleteScene}
+        onUpdateSceneDuration={updateSceneDuration}
+      />
       <footer className="app-footer">
         {projectOpenError ? (
           <span role="alert">

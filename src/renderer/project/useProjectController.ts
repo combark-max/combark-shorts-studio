@@ -218,6 +218,97 @@ export function useProjectController(initialState?: ProjectState) {
         ...currentState.project,
         updatedAt: new Date().toISOString(),
         media: [...currentState.project.media, ...media],
+        scenes: [
+          ...currentState.project.scenes,
+          ...media.map((asset) => ({
+            mediaId: asset.id,
+            durationMs: asset.kind === 'image' ? 3000 : null,
+          })),
+        ],
+      },
+      dirty: true,
+    });
+  };
+
+  const moveScene = (mediaId: string, direction: 'up' | 'down'): void => {
+    const currentState = stateRef.current;
+    const currentIndex = currentState.project.scenes.findIndex(
+      (scene) => scene.mediaId === mediaId,
+    );
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+
+    if (
+      currentIndex < 0 ||
+      targetIndex < 0 ||
+      targetIndex >= currentState.project.scenes.length
+    ) {
+      return;
+    }
+
+    const scenes = [...currentState.project.scenes];
+    [scenes[currentIndex], scenes[targetIndex]] = [
+      scenes[targetIndex],
+      scenes[currentIndex],
+    ];
+    replaceState({
+      ...currentState,
+      project: {
+        ...currentState.project,
+        updatedAt: new Date().toISOString(),
+        scenes,
+      },
+      dirty: true,
+    });
+  };
+
+  const deleteScene = (mediaId: string): void => {
+    const currentState = stateRef.current;
+    const scenes = currentState.project.scenes.filter(
+      (scene) => scene.mediaId !== mediaId,
+    );
+
+    if (scenes.length === currentState.project.scenes.length) {
+      return;
+    }
+
+    replaceState({
+      ...currentState,
+      project: {
+        ...currentState.project,
+        updatedAt: new Date().toISOString(),
+        scenes,
+      },
+      dirty: true,
+    });
+  };
+
+  const updateSceneDuration = (mediaId: string, durationMs: number): void => {
+    const currentState = stateRef.current;
+    const asset = currentState.project.media.find(({ id }) => id === mediaId);
+    const scene = currentState.project.scenes.find(
+      (candidate) => candidate.mediaId === mediaId,
+    );
+
+    if (
+      asset?.kind !== 'image' ||
+      !scene ||
+      !Number.isInteger(durationMs) ||
+      durationMs <= 0 ||
+      scene.durationMs === durationMs
+    ) {
+      return;
+    }
+
+    replaceState({
+      ...currentState,
+      project: {
+        ...currentState.project,
+        updatedAt: new Date().toISOString(),
+        scenes: currentState.project.scenes.map((candidate) =>
+          candidate.mediaId === mediaId
+            ? { ...candidate, durationMs }
+            : candidate,
+        ),
       },
       dirty: true,
     });
@@ -330,6 +421,9 @@ export function useProjectController(initialState?: ProjectState) {
     projectOpenError,
     newProject,
     importMedia,
+    moveScene,
+    deleteScene,
+    updateSceneDuration,
     openProject,
     saveProject,
     saveProjectAs,

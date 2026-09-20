@@ -1,6 +1,7 @@
 import type {
   MediaAsset,
   ProjectDocument,
+  Scene,
 } from './types';
 import { getMediaKind } from './media';
 
@@ -16,9 +17,11 @@ const PROJECT_V1_KEYS = [
 ] as const;
 
 const PROJECT_V2_KEYS = [...PROJECT_V1_KEYS, 'media'] as const;
+const PROJECT_V3_KEYS = [...PROJECT_V2_KEYS, 'scenes'] as const;
 
 const SETTINGS_KEYS = ['width', 'height', 'fps'] as const;
 const MEDIA_KEYS = ['id', 'kind', 'sourcePath', 'fileName'] as const;
+const SCENE_KEYS = ['mediaId', 'durationMs'] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -41,10 +44,16 @@ export function validateProjectDocument(
 
   const isV1 = value.schemaVersion === 1;
   const isV2 = value.schemaVersion === 2;
+  const isV3 = value.schemaVersion === 3;
+  const projectKeys = isV1
+    ? PROJECT_V1_KEYS
+    : isV2
+      ? PROJECT_V2_KEYS
+      : PROJECT_V3_KEYS;
 
   if (
-    (!isV1 && !isV2) ||
-    !hasExactKeys(value, isV1 ? PROJECT_V1_KEYS : PROJECT_V2_KEYS)
+    (!isV1 && !isV2 && !isV3) ||
+    !hasExactKeys(value, projectKeys)
   ) {
     throw new Error(INVALID_PROJECT_MESSAGE);
   }
@@ -71,17 +80,19 @@ export function validateProjectDocument(
 
   let media: MediaAsset[] = [];
 
-  if (isV2) {
+  if (isV2 || isV3) {
     if (!Array.isArray(value.media)) {
       throw new Error(INVALID_PROJECT_MESSAGE);
     }
 
+    const mediaIds = new Set<string>();
     media = value.media.map((asset): MediaAsset => {
       if (
         !isRecord(asset) ||
         !hasExactKeys(asset, MEDIA_KEYS) ||
         typeof asset.id !== 'string' ||
         asset.id.length === 0 ||
+        mediaIds.has(asset.id) ||
         (asset.kind !== 'image' && asset.kind !== 'video') ||
         typeof asset.sourcePath !== 'string' ||
         asset.sourcePath.length === 0 ||
@@ -93,6 +104,7 @@ export function validateProjectDocument(
         throw new Error(INVALID_PROJECT_MESSAGE);
       }
 
+      mediaIds.add(asset.id);
       return {
         id: asset.id,
         kind: asset.kind,
@@ -102,8 +114,58 @@ export function validateProjectDocument(
     });
   }
 
+  let scenes: Scene[];
+
+  if (isV3) {
+    if (!Array.isArray(value.scenes)) {
+      throw new Error(INVALID_PROJECT_MESSAGE);
+    }
+
+    const mediaById = new Map(media.map((asset) => [asset.id, asset]));
+    const sceneMediaIds = new Set<string>();
+
+    scenes = value.scenes.map((scene): Scene => {
+      if (
+        !isRecord(scene) ||
+        !hasExactKeys(scene, SCENE_KEYS) ||
+        typeof scene.mediaId !== 'string' ||
+        scene.mediaId.length === 0 ||
+        sceneMediaIds.has(scene.mediaId)
+      ) {
+        throw new Error(INVALID_PROJECT_MESSAGE);
+      }
+
+      const asset = mediaById.get(scene.mediaId);
+      if (!asset) {
+        throw new Error(INVALID_PROJECT_MESSAGE);
+      }
+
+      if (
+        (asset.kind === 'image' &&
+          (!Number.isInteger(scene.durationMs) ||
+            (scene.durationMs as number) <= 0)) ||
+        (asset.kind === 'video' && scene.durationMs !== null)
+      ) {
+        throw new Error(INVALID_PROJECT_MESSAGE);
+      }
+
+      sceneMediaIds.add(scene.mediaId);
+      return {
+        mediaId: scene.mediaId,
+        durationMs: scene.durationMs as number | null,
+      };
+    });
+  } else if (isV2) {
+    scenes = media.map((asset) => ({
+      mediaId: asset.id,
+      durationMs: asset.kind === 'image' ? 3000 : null,
+    }));
+  } else {
+    scenes = [];
+  }
+
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     projectId: value.projectId,
     name: value.name,
     createdAt: value.createdAt,
@@ -114,5 +176,6 @@ export function validateProjectDocument(
       fps: 30,
     },
     media,
+    scenes,
   };
 }

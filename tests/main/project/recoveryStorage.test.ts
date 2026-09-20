@@ -47,6 +47,7 @@ describe('recoveryStorage', () => {
           fileName: 'recovery-photo.webp',
         },
       ],
+      scenes: [{ mediaId: 'recovery-photo-id', durationMs: 3000 }],
     };
     const modifiedAt = new Date('2026-09-19T01:02:03.000Z');
     await writeRecoveryFile(userDataDirectory, project);
@@ -92,7 +93,7 @@ describe('recoveryStorage', () => {
 
   it('skips malformed and schema-invalid files while preserving valid candidates', async () => {
     const validProject = createNewProject('정상 복구');
-    const invalidProject = { ...createNewProject(), schemaVersion: 3 };
+    const invalidProject = { ...createNewProject(), schemaVersion: 4 };
     await writeRecoveryFile(userDataDirectory, validProject);
     const recoveryDirectory = join(userDataDirectory, 'recovery');
     await writeFile(

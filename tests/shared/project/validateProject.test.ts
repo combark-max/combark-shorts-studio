@@ -33,17 +33,31 @@ const validProjectV2 = {
   ],
 };
 
+const validProjectV3 = {
+  ...validProjectV2,
+  schemaVersion: 3,
+  scenes: [
+    { mediaId: 'image-id', durationMs: 3000 },
+    { mediaId: 'video-id', durationMs: null },
+  ],
+};
+
 describe('validateProjectDocument', () => {
-  it('migrates a valid v1 project document to v2 with empty media', () => {
+  it('migrates a valid v1 project document to v3 with empty media and scenes', () => {
     expect(validateProjectDocument(validProjectV1)).toEqual({
       ...validProjectV1,
-      schemaVersion: 2,
+      schemaVersion: 3,
       media: [],
+      scenes: [],
     });
   });
 
-  it('accepts a valid v2 project document with media', () => {
-    expect(validateProjectDocument(validProjectV2)).toEqual(validProjectV2);
+  it('migrates a valid v2 project document to v3 with one scene per media asset', () => {
+    expect(validateProjectDocument(validProjectV2)).toEqual(validProjectV3);
+  });
+
+  it('accepts a valid v3 project document with scenes', () => {
+    expect(validateProjectDocument(validProjectV3)).toEqual(validProjectV3);
   });
 
   it.each([null, [], 'project', 1, true])('rejects non-object input: %p', (value) => {
@@ -51,7 +65,7 @@ describe('validateProjectDocument', () => {
   });
 
   it.each([
-    ['schemaVersion', { schemaVersion: 3 }],
+    ['schemaVersion', { schemaVersion: 4 }],
     ['projectId missing', { projectId: undefined }],
     ['projectId empty', { projectId: '' }],
     ['name missing', { name: undefined }],
@@ -130,10 +144,76 @@ describe('validateProjectDocument', () => {
         media: [{ ...validProjectV2.media[1], kind: 'image' }],
       },
     ],
+    [
+      'duplicate media id',
+      {
+        ...validProjectV2,
+        media: [validProjectV2.media[0], { ...validProjectV2.media[0] }],
+      },
+    ],
   ])('rejects v2 media with %s', (_label, project) => {
     expect(() => validateProjectDocument(project)).toThrow(
       '유효하지 않은 프로젝트 파일입니다.',
     );
+  });
+
+  it.each([
+    ['missing scenes', { ...validProjectV3, scenes: undefined }],
+    ['non-array scenes', { ...validProjectV3, scenes: {} }],
+    [
+      'unknown mediaId',
+      {
+        ...validProjectV3,
+        scenes: [{ mediaId: 'missing-id', durationMs: 3000 }],
+      },
+    ],
+    [
+      'duplicate scene',
+      {
+        ...validProjectV3,
+        scenes: [
+          { mediaId: 'image-id', durationMs: 3000 },
+          { mediaId: 'image-id', durationMs: 4000 },
+        ],
+      },
+    ],
+    [
+      'image duration null',
+      {
+        ...validProjectV3,
+        scenes: [{ mediaId: 'image-id', durationMs: null }],
+      },
+    ],
+    [
+      'image duration zero',
+      {
+        ...validProjectV3,
+        scenes: [{ mediaId: 'image-id', durationMs: 0 }],
+      },
+    ],
+    [
+      'image duration fractional milliseconds',
+      {
+        ...validProjectV3,
+        scenes: [{ mediaId: 'image-id', durationMs: 3000.5 }],
+      },
+    ],
+    [
+      'video numeric duration',
+      {
+        ...validProjectV3,
+        scenes: [{ mediaId: 'video-id', durationMs: 5000 }],
+      },
+    ],
+    [
+      'unknown scene field',
+      {
+        ...validProjectV3,
+        scenes: [{ mediaId: 'image-id', durationMs: 3000, id: 'scene-id' }],
+      },
+    ],
+  ])('rejects v3 scenes with %s', (_label, project) => {
+    expect(() => validateProjectDocument(project)).toThrow();
   });
 
   it('rejects unknown settings fields', () => {

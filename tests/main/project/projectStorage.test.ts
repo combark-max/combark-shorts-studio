@@ -43,6 +43,7 @@ describe('projectStorage', () => {
           fileName: 'photo.png',
         },
       ],
+      scenes: [{ mediaId: 'photo-id', durationMs: 3000 }],
     };
     const filePath = join(temporaryDirectory, 'media-project.cssproj');
 
@@ -51,7 +52,7 @@ describe('projectStorage', () => {
     await expect(readProjectFile(filePath)).resolves.toEqual(project);
   });
 
-  it('opens a legacy v1 project as v2 with empty media', async () => {
+  it('opens a legacy v1 project as v3 with empty media and scenes', async () => {
     const currentProject = createNewProject('이전 프로젝트');
     const legacyProject = {
       schemaVersion: 1,
@@ -66,8 +67,46 @@ describe('projectStorage', () => {
 
     await expect(readProjectFile(filePath)).resolves.toEqual({
       ...legacyProject,
-      schemaVersion: 2,
+      schemaVersion: 3,
       media: [],
+      scenes: [],
+    });
+  });
+
+  it('opens a v2 project as v3 with scenes generated in media order', async () => {
+    const currentProject = createNewProject('legacy media');
+    const legacyProject = {
+      schemaVersion: 2,
+      projectId: currentProject.projectId,
+      name: currentProject.name,
+      createdAt: currentProject.createdAt,
+      updatedAt: currentProject.updatedAt,
+      settings: currentProject.settings,
+      media: [
+        {
+          id: 'image-id',
+          kind: 'image',
+          sourcePath: 'C:\\media\\photo.jpg',
+          fileName: 'photo.jpg',
+        },
+        {
+          id: 'video-id',
+          kind: 'video',
+          sourcePath: 'C:\\media\\clip.mp4',
+          fileName: 'clip.mp4',
+        },
+      ],
+    };
+    const filePath = join(temporaryDirectory, 'legacy-v2.cssproj');
+    await writeFile(filePath, JSON.stringify(legacyProject), 'utf8');
+
+    await expect(readProjectFile(filePath)).resolves.toEqual({
+      ...legacyProject,
+      schemaVersion: 3,
+      scenes: [
+        { mediaId: 'image-id', durationMs: 3000 },
+        { mediaId: 'video-id', durationMs: null },
+      ],
     });
   });
 
@@ -95,7 +134,7 @@ describe('projectStorage', () => {
     const project = createNewProject();
     await writeFile(
       filePath,
-      JSON.stringify({ ...project, schemaVersion: 3 }),
+      JSON.stringify({ ...project, schemaVersion: 4 }),
       'utf8',
     );
 

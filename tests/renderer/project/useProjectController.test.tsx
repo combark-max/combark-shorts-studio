@@ -49,6 +49,41 @@ function createState(overrides: Partial<ProjectState> = {}): ProjectState {
   };
 }
 
+function createSceneState(): ProjectState {
+  return createState({
+    dirty: false,
+    project: {
+      ...createNewProject('scene project'),
+      updatedAt: '2026-09-19T00:00:00.000Z',
+      media: [
+        {
+          id: 'first-image',
+          kind: 'image',
+          sourcePath: 'C:\\media\\first.jpg',
+          fileName: 'first.jpg',
+        },
+        {
+          id: 'middle-video',
+          kind: 'video',
+          sourcePath: 'C:\\media\\middle.mp4',
+          fileName: 'middle.mp4',
+        },
+        {
+          id: 'last-image',
+          kind: 'image',
+          sourcePath: 'C:\\media\\last.png',
+          fileName: 'last.png',
+        },
+      ],
+      scenes: [
+        { mediaId: 'first-image', durationMs: 3000 },
+        { mediaId: 'middle-video', durationMs: null },
+        { mediaId: 'last-image', durationMs: 3000 },
+      ],
+    },
+  });
+}
+
 function createRecoveryCandidate(name: string): RecoveryCandidate {
   const project = createNewProject(name);
 
@@ -90,7 +125,14 @@ describe('useProjectController', () => {
         fileName: 'clip.mp4',
       },
     ]);
-    const { result } = renderHook(() => useProjectController());
+    const initialState = createState({
+      dirty: false,
+      project: {
+        ...createNewProject('import project'),
+        updatedAt: '2026-09-19T00:00:00.000Z',
+      },
+    });
+    const { result } = renderHook(() => useProjectController(initialState));
 
     await act(async () => {
       await result.current.importMedia();
@@ -110,7 +152,88 @@ describe('useProjectController', () => {
         fileName: 'clip.mp4',
       },
     ]);
+    expect(result.current.state.project.scenes).toEqual([
+      { mediaId: 'photo-id', durationMs: 3000 },
+      { mediaId: 'video-id', durationMs: null },
+    ]);
     expect(result.current.state.dirty).toBe(true);
+    expect(result.current.state.project.updatedAt).not.toBe(
+      initialState.project.updatedAt,
+    );
+  });
+
+  it('moves scenes up and down and updates project edit state', () => {
+    const initialState = createSceneState();
+    const { result } = renderHook(() => useProjectController(initialState));
+
+    act(() => {
+      result.current.moveScene('middle-video', 'up');
+    });
+    expect(result.current.state.project.scenes.map(({ mediaId }) => mediaId)).toEqual([
+      'middle-video',
+      'first-image',
+      'last-image',
+    ]);
+
+    act(() => {
+      result.current.moveScene('first-image', 'down');
+    });
+    expect(result.current.state.project.scenes.map(({ mediaId }) => mediaId)).toEqual([
+      'middle-video',
+      'last-image',
+      'first-image',
+    ]);
+    expect(result.current.state.dirty).toBe(true);
+    expect(result.current.state.project.updatedAt).not.toBe(
+      initialState.project.updatedAt,
+    );
+  });
+
+  it('does not change state when moving a scene beyond either boundary', () => {
+    const initialState = createSceneState();
+    const { result } = renderHook(() => useProjectController(initialState));
+
+    act(() => {
+      result.current.moveScene('first-image', 'up');
+      result.current.moveScene('last-image', 'down');
+    });
+
+    expect(result.current.state).toBe(initialState);
+  });
+
+  it('deletes only the scene and keeps its media asset', () => {
+    const initialState = createSceneState();
+    const { result } = renderHook(() => useProjectController(initialState));
+
+    act(() => {
+      result.current.deleteScene('middle-video');
+    });
+
+    expect(result.current.state.project.scenes.map(({ mediaId }) => mediaId)).toEqual([
+      'first-image',
+      'last-image',
+    ]);
+    expect(result.current.state.project.media).toEqual(initialState.project.media);
+    expect(result.current.state.dirty).toBe(true);
+  });
+
+  it('changes image duration but does not allow changing video duration', () => {
+    const initialState = createSceneState();
+    const { result } = renderHook(() => useProjectController(initialState));
+
+    act(() => {
+      result.current.updateSceneDuration('first-image', 4500);
+    });
+    expect(result.current.state.project.scenes[0]).toEqual({
+      mediaId: 'first-image',
+      durationMs: 4500,
+    });
+
+    const afterImageChange = result.current.state;
+    act(() => {
+      result.current.updateSceneDuration('middle-video', 5000);
+    });
+    expect(result.current.state).toBe(afterImageChange);
   });
 
   it('leaves the project unchanged when media selection is cancelled', async () => {

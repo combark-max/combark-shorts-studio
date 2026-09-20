@@ -123,19 +123,51 @@ button:hover {
   margin: 0 20px 16px;
 }
 
-.timeline-tracks {
-  display: grid;
-  gap: 8px;
-  margin-top: 16px;
+.scene-empty {
+  color: #aab2c0;
+  margin: 16px 0 0;
 }
 
-.timeline-track {
+.scene-list {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin-top: 16px;
+  padding: 0;
+}
+
+.scene-item {
   align-items: center;
   background: #20252e;
   border: 1px solid #303641;
-  display: flex;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 32px minmax(120px, 1fr) 64px minmax(140px, auto) auto;
   min-height: 36px;
-  padding: 0 12px;
+  padding: 8px 12px;
+}
+
+.scene-number,
+.scene-kind,
+.scene-duration {
+  color: #aab2c0;
+}
+
+.scene-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scene-duration label,
+.scene-actions {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.scene-duration input {
+  width: 72px;
 }
 
 .app-footer {

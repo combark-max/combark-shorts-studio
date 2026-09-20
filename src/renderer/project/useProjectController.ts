@@ -294,6 +294,7 @@ export function useProjectController(initialState?: ProjectState) {
           ...media.map((asset) => ({
             mediaId: asset.id,
             durationMs: asset.kind === 'image' ? 3000 : null,
+            subtitle: '',
           })),
         ],
       },
@@ -347,6 +348,9 @@ export function useProjectController(initialState?: ProjectState) {
       project: {
         ...currentState.project,
         updatedAt: new Date().toISOString(),
+        media: currentState.project.media.filter(
+          (asset) => asset.id !== mediaId,
+        ),
         scenes,
       },
       dirty: true,
@@ -378,6 +382,31 @@ export function useProjectController(initialState?: ProjectState) {
         scenes: currentState.project.scenes.map((candidate) =>
           candidate.mediaId === mediaId
             ? { ...candidate, durationMs }
+            : candidate,
+        ),
+      },
+      dirty: true,
+    });
+  };
+
+  const updateSceneSubtitle = (mediaId: string, subtitle: string): void => {
+    const currentState = stateRef.current;
+    const scene = currentState.project.scenes.find(
+      (candidate) => candidate.mediaId === mediaId,
+    );
+
+    if (!scene || scene.subtitle === subtitle) {
+      return;
+    }
+
+    replaceState({
+      ...currentState,
+      project: {
+        ...currentState.project,
+        updatedAt: new Date().toISOString(),
+        scenes: currentState.project.scenes.map((candidate) =>
+          candidate.mediaId === mediaId
+            ? { ...candidate, subtitle }
             : candidate,
         ),
       },
@@ -520,6 +549,7 @@ export function useProjectController(initialState?: ProjectState) {
     moveScene,
     deleteScene,
     updateSceneDuration,
+    updateSceneSubtitle,
     openProject,
     saveProject,
     saveProjectAs,

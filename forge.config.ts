@@ -25,6 +25,8 @@ const config: ForgeConfig = {
   plugins: [
     new AutoUnpackNativesPlugin({}),
     new WebpackPlugin({
+      devContentSecurityPolicy:
+        "default-src 'self' 'unsafe-inline' data:; script-src 'self' 'unsafe-eval' 'unsafe-inline' data:; img-src 'self' data: combark-media:; media-src 'self' combark-media:",
       mainConfig: {
         ...mainConfig,
         entry: './src/main/index.ts',

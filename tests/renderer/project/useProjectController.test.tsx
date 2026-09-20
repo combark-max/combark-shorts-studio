@@ -78,9 +78,9 @@ function createSceneState(): ProjectState {
         },
       ],
       scenes: [
-        { mediaId: 'first-image', durationMs: 3000 },
-        { mediaId: 'middle-video', durationMs: null },
-        { mediaId: 'last-image', durationMs: 3000 },
+        { mediaId: 'first-image', durationMs: 3000, subtitle: '첫 장면' },
+        { mediaId: 'middle-video', durationMs: null, subtitle: '' },
+        { mediaId: 'last-image', durationMs: 3000, subtitle: '' },
       ],
     },
   });
@@ -155,8 +155,8 @@ describe('useProjectController', () => {
       },
     ]);
     expect(result.current.state.project.scenes).toEqual([
-      { mediaId: 'photo-id', durationMs: 3000 },
-      { mediaId: 'video-id', durationMs: null },
+      { mediaId: 'photo-id', durationMs: 3000, subtitle: '' },
+      { mediaId: 'video-id', durationMs: null, subtitle: '' },
     ]);
     expect(result.current.state.dirty).toBe(true);
     expect(result.current.state.project.updatedAt).not.toBe(
@@ -203,9 +203,10 @@ describe('useProjectController', () => {
     expect(result.current.state).toBe(initialState);
   });
 
-  it('deletes only the scene and keeps its media asset', () => {
+  it('removes one scene and its media asset while keeping the others', () => {
     const initialState = createSceneState();
     const { result } = renderHook(() => useProjectController(initialState));
+    vi.clearAllMocks();
 
     act(() => {
       result.current.deleteScene('middle-video');
@@ -215,8 +216,17 @@ describe('useProjectController', () => {
       'first-image',
       'last-image',
     ]);
-    expect(result.current.state.project.media).toEqual(initialState.project.media);
+    expect(result.current.state.project.media.map(({ id }) => id)).toEqual([
+      'first-image',
+      'last-image',
+    ]);
     expect(result.current.state.dirty).toBe(true);
+    expect(result.current.state.project.updatedAt).not.toBe(
+      initialState.project.updatedAt,
+    );
+    for (const apiMethod of Object.values(desktopApi)) {
+      expect(apiMethod).not.toHaveBeenCalled();
+    }
   });
 
   it('changes image duration but does not allow changing video duration', () => {
@@ -229,6 +239,7 @@ describe('useProjectController', () => {
     expect(result.current.state.project.scenes[0]).toEqual({
       mediaId: 'first-image',
       durationMs: 4500,
+      subtitle: '첫 장면',
     });
 
     const afterImageChange = result.current.state;
@@ -236,6 +247,32 @@ describe('useProjectController', () => {
       result.current.updateSceneDuration('middle-video', 5000);
     });
     expect(result.current.state).toBe(afterImageChange);
+  });
+
+  it('changes one scene subtitle and updates project edit state', () => {
+    const initialState = createSceneState();
+    const { result } = renderHook(() => useProjectController(initialState));
+
+    act(() => {
+      result.current.updateSceneSubtitle('middle-video', '새 자막');
+    });
+
+    expect(result.current.state.project.scenes[1]).toEqual({
+      mediaId: 'middle-video',
+      durationMs: null,
+      subtitle: '새 자막',
+    });
+    expect(result.current.state.dirty).toBe(true);
+    expect(result.current.state.project.updatedAt).not.toBe(
+      initialState.project.updatedAt,
+    );
+
+    const afterChange = result.current.state;
+    act(() => {
+      result.current.updateSceneSubtitle('middle-video', '새 자막');
+      result.current.updateSceneSubtitle('missing-media', '무시');
+    });
+    expect(result.current.state).toBe(afterChange);
   });
 
   it('leaves the project unchanged when media selection is cancelled', async () => {

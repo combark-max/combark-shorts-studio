@@ -30,7 +30,7 @@ export interface ProjectDocumentV2 {
   media: MediaAsset[];
 }
 
-export interface Scene {
+export interface SceneV3 {
   mediaId: string;
   durationMs: number | null;
 }
@@ -43,10 +43,25 @@ export interface ProjectDocumentV3 {
   updatedAt: string;
   settings: ProjectSettings;
   media: MediaAsset[];
+  scenes: SceneV3[];
+}
+
+export interface Scene extends SceneV3 {
+  subtitle: string;
+}
+
+export interface ProjectDocumentV4 {
+  schemaVersion: 4;
+  projectId: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  settings: ProjectSettings;
+  media: MediaAsset[];
   scenes: Scene[];
 }
 
-export type ProjectDocument = ProjectDocumentV3;
+export type ProjectDocument = ProjectDocumentV4;
 
 export interface RecoveryCandidate {
   projectId: string;

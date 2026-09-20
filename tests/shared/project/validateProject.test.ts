@@ -42,22 +42,48 @@ const validProjectV3 = {
   ],
 };
 
+const validProjectV4 = {
+  ...validProjectV2,
+  schemaVersion: 4,
+  scenes: [
+    { mediaId: 'image-id', durationMs: 3000, subtitle: '이미지 자막' },
+    { mediaId: 'video-id', durationMs: null, subtitle: '' },
+  ],
+};
+
 describe('validateProjectDocument', () => {
-  it('migrates a valid v1 project document to v3 with empty media and scenes', () => {
+  it('migrates a valid v1 project document to v4 with empty media and scenes', () => {
     expect(validateProjectDocument(validProjectV1)).toEqual({
       ...validProjectV1,
-      schemaVersion: 3,
+      schemaVersion: 4,
       media: [],
       scenes: [],
     });
   });
 
-  it('migrates a valid v2 project document to v3 with one scene per media asset', () => {
-    expect(validateProjectDocument(validProjectV2)).toEqual(validProjectV3);
+  it('migrates a valid v2 project document to v4 with one scene per media asset', () => {
+    expect(validateProjectDocument(validProjectV2)).toEqual({
+      ...validProjectV4,
+      scenes: [
+        { mediaId: 'image-id', durationMs: 3000, subtitle: '' },
+        { mediaId: 'video-id', durationMs: null, subtitle: '' },
+      ],
+    });
   });
 
-  it('accepts a valid v3 project document with scenes', () => {
-    expect(validateProjectDocument(validProjectV3)).toEqual(validProjectV3);
+  it('migrates a valid v3 project document to v4 with empty subtitles', () => {
+    expect(validateProjectDocument(validProjectV3)).toEqual({
+      ...validProjectV3,
+      schemaVersion: 4,
+      scenes: [
+        { mediaId: 'image-id', durationMs: 3000, subtitle: '' },
+        { mediaId: 'video-id', durationMs: null, subtitle: '' },
+      ],
+    });
+  });
+
+  it('accepts a valid v4 project document with scene subtitles', () => {
+    expect(validateProjectDocument(validProjectV4)).toEqual(validProjectV4);
   });
 
   it.each([null, [], 'project', 1, true])('rejects non-object input: %p', (value) => {
@@ -65,7 +91,7 @@ describe('validateProjectDocument', () => {
   });
 
   it.each([
-    ['schemaVersion', { schemaVersion: 4 }],
+    ['schemaVersion', { schemaVersion: 5 }],
     ['projectId missing', { projectId: undefined }],
     ['projectId empty', { projectId: '' }],
     ['name missing', { name: undefined }],
@@ -214,6 +240,27 @@ describe('validateProjectDocument', () => {
     ],
   ])('rejects v3 scenes with %s', (_label, project) => {
     expect(() => validateProjectDocument(project)).toThrow();
+  });
+
+  it.each([
+    ['missing subtitle', { mediaId: 'image-id', durationMs: 3000 }],
+    [
+      'non-string subtitle',
+      { mediaId: 'image-id', durationMs: 3000, subtitle: 123 },
+    ],
+    [
+      'unknown scene field',
+      {
+        mediaId: 'image-id',
+        durationMs: 3000,
+        subtitle: '',
+        style: 'bold',
+      },
+    ],
+  ])('rejects v4 scenes with %s', (_label, scene) => {
+    expect(() =>
+      validateProjectDocument({ ...validProjectV4, scenes: [scene] }),
+    ).toThrow();
   });
 
   it('rejects unknown settings fields', () => {

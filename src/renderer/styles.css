@@ -129,12 +129,50 @@ button:hover {
   justify-content: center;
   max-height: calc(100vh - 330px);
   max-width: 100%;
+  overflow: hidden;
+  position: relative;
   width: min(360px, 100%);
 }
 
-.preview-placeholder {
-  background: transparent;
-  border-color: #596273;
+.preview-media {
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+
+.preview-empty,
+.preview-error {
+  color: #aab2c0;
+  margin: 0;
+  padding: 16px;
+  text-align: center;
+}
+
+.preview-error {
+  color: #ffd5d8;
+}
+
+.preview-subtitle {
+  background: rgba(0, 0, 0, 0.72);
+  bottom: 24px;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 600;
+  left: 12px;
+  line-height: 1.4;
+  margin: 0;
+  padding: 8px 12px;
+  position: absolute;
+  right: 12px;
+  text-align: center;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.preview-controls {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
 }
 
 .properties-panel p {
@@ -166,9 +204,24 @@ button:hover {
   border: 1px solid #303641;
   display: grid;
   gap: 12px;
-  grid-template-columns: 32px minmax(120px, 1fr) 64px minmax(140px, auto) auto;
+  grid-template-columns: minmax(216px, 1fr) minmax(140px, auto) minmax(180px, 1fr) auto;
   min-height: 36px;
   padding: 8px 12px;
+}
+
+.scene-item-selected {
+  border-color: #5d9bd5;
+  box-shadow: 0 0 0 1px #5d9bd5;
+}
+
+.scene-select {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 32px minmax(120px, 1fr) 64px;
+  min-width: 0;
+  padding: 6px 8px;
+  text-align: left;
 }
 
 .scene-number,
@@ -184,10 +237,21 @@ button:hover {
 }
 
 .scene-duration label,
+.scene-subtitle,
 .scene-actions {
   align-items: center;
   display: flex;
   gap: 8px;
+}
+
+.scene-subtitle span {
+  color: #aab2c0;
+  white-space: nowrap;
+}
+
+.scene-subtitle input {
+  min-width: 0;
+  width: 100%;
 }
 
 .scene-duration input {

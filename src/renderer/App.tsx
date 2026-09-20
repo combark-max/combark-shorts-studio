@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { AppHeader } from './components/AppHeader';
 import { MediaSidebar } from './components/MediaSidebar';
@@ -13,6 +13,7 @@ const noop = (): void => undefined;
 
 export function App() {
   const [appVersion, setAppVersion] = useState('—');
+  const [selectedMediaId, setSelectedMediaId] = useState<string | null>(null);
   const {
     state,
     newProject,
@@ -20,6 +21,7 @@ export function App() {
     moveScene,
     deleteScene,
     updateSceneDuration,
+    updateSceneSubtitle,
     openProject,
     saveProject,
     saveProjectAs,
@@ -40,6 +42,7 @@ export function App() {
     projectOpenError,
     projectSaveStatus,
   } = useProjectController();
+  const previousProjectRef = useRef(state.project);
 
   useEffect(() => {
     window.combarkDesktop
@@ -47,6 +50,20 @@ export function App() {
       .then((version) => setAppVersion(version))
       .catch(() => setAppVersion('—'));
   }, []);
+
+  useEffect(() => {
+    const documentReplaced =
+      previousProjectRef.current !== state.project && !state.dirty;
+    previousProjectRef.current = state.project;
+
+    setSelectedMediaId((currentMediaId) =>
+      !documentReplaced &&
+      currentMediaId &&
+      state.project.scenes.some(({ mediaId }) => mediaId === currentMediaId)
+        ? currentMediaId
+        : (state.project.scenes[0]?.mediaId ?? null),
+    );
+  }, [state.dirty, state.project]);
 
   if (recoveryListFailed) {
     return (
@@ -129,15 +146,23 @@ export function App() {
           media={state.project.media}
           onAddMedia={importMedia}
         />
-        <PreviewPanel />
+        <PreviewPanel
+          media={state.project.media}
+          scenes={state.project.scenes}
+          selectedMediaId={selectedMediaId}
+          onSelectScene={setSelectedMediaId}
+        />
         <PropertiesPanel />
       </main>
       <TimelineShell
         media={state.project.media}
         scenes={state.project.scenes}
+        selectedMediaId={selectedMediaId}
+        onSelectScene={setSelectedMediaId}
         onMoveScene={moveScene}
         onDeleteScene={deleteScene}
         onUpdateSceneDuration={updateSceneDuration}
+        onUpdateSceneSubtitle={updateSceneSubtitle}
       />
       <footer className="app-footer">
         {projectOpenError ? (

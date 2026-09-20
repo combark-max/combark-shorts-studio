@@ -21,8 +21,8 @@ const media: MediaAsset[] = [
 ];
 
 const scenes: Scene[] = [
-  { mediaId: 'photo-id', durationMs: 3000 },
-  { mediaId: 'video-id', durationMs: null },
+  { mediaId: 'photo-id', durationMs: 3000, subtitle: '사진 자막' },
+  { mediaId: 'video-id', durationMs: null, subtitle: '' },
 ];
 
 afterEach(() => {
@@ -35,9 +35,12 @@ describe('TimelineShell', () => {
       <TimelineShell
         media={media}
         scenes={scenes}
+        selectedMediaId="photo-id"
+        onSelectScene={vi.fn()}
         onMoveScene={vi.fn()}
         onDeleteScene={vi.fn()}
         onUpdateSceneDuration={vi.fn()}
+        onUpdateSceneSubtitle={vi.fn()}
       />,
     );
 
@@ -52,6 +55,9 @@ describe('TimelineShell', () => {
       'step',
       '0.001',
     );
+    expect(
+      within(items[0]).getByRole('textbox', { name: '1번 장면 자막' }),
+    ).toHaveValue('사진 자막');
     expect(within(items[0]).getByRole('button', { name: '위' })).toBeDisabled();
     expect(within(items[0]).getByRole('button', { name: '아래' })).toBeEnabled();
 
@@ -63,30 +69,71 @@ describe('TimelineShell', () => {
     expect(within(items[1]).getByRole('button', { name: '아래' })).toBeDisabled();
   });
 
-  it('forwards move, delete, and image duration changes', async () => {
+  it('forwards move, file removal, duration, and subtitle changes', async () => {
     const user = userEvent.setup();
     const onMoveScene = vi.fn();
     const onDeleteScene = vi.fn();
     const onUpdateSceneDuration = vi.fn();
+    const onUpdateSceneSubtitle = vi.fn();
     render(
       <TimelineShell
         media={media}
         scenes={scenes}
+        selectedMediaId="photo-id"
+        onSelectScene={vi.fn()}
         onMoveScene={onMoveScene}
         onDeleteScene={onDeleteScene}
         onUpdateSceneDuration={onUpdateSceneDuration}
+        onUpdateSceneSubtitle={onUpdateSceneSubtitle}
       />,
     );
 
     const items = screen.getAllByRole('listitem');
     await user.click(within(items[1]).getByRole('button', { name: '위' }));
-    await user.click(within(items[0]).getByRole('button', { name: '삭제' }));
+    await user.click(
+      within(items[0]).getByRole('button', { name: '파일 제거' }),
+    );
     fireEvent.change(within(items[0]).getByRole('spinbutton'), {
       target: { value: '4.5' },
     });
+    fireEvent.change(
+      within(items[0]).getByRole('textbox', { name: '1번 장면 자막' }),
+      { target: { value: '변경 자막' } },
+    );
 
     expect(onMoveScene).toHaveBeenCalledWith('video-id', 'up');
     expect(onDeleteScene).toHaveBeenCalledWith('photo-id');
     expect(onUpdateSceneDuration).toHaveBeenCalledWith('photo-id', 4500);
+    expect(onUpdateSceneSubtitle).toHaveBeenLastCalledWith(
+      'photo-id',
+      '변경 자막',
+    );
+  });
+
+  it('marks the selected scene and forwards scene selection clicks', async () => {
+    const user = userEvent.setup();
+    const onSelectScene = vi.fn();
+    render(
+      <TimelineShell
+        media={media}
+        scenes={scenes}
+        selectedMediaId="photo-id"
+        onSelectScene={onSelectScene}
+        onMoveScene={vi.fn()}
+        onDeleteScene={vi.fn()}
+        onUpdateSceneDuration={vi.fn()}
+        onUpdateSceneSubtitle={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByRole('button', { name: '1번 장면 선택' }),
+    ).toHaveAttribute('aria-pressed', 'true');
+
+    await user.click(
+      screen.getByRole('button', { name: '2번 장면 선택' }),
+    );
+
+    expect(onSelectScene).toHaveBeenCalledWith('video-id');
   });
 });

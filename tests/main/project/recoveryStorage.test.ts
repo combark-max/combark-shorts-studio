@@ -47,7 +47,13 @@ describe('recoveryStorage', () => {
           fileName: 'recovery-photo.webp',
         },
       ],
-      scenes: [{ mediaId: 'recovery-photo-id', durationMs: 3000 }],
+      scenes: [
+        {
+          mediaId: 'recovery-photo-id',
+          durationMs: 3000,
+          subtitle: '복구 자막',
+        },
+      ],
     };
     const modifiedAt = new Date('2026-09-19T01:02:03.000Z');
     await writeRecoveryFile(userDataDirectory, project);

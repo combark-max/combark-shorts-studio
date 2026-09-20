@@ -43,7 +43,13 @@ describe('projectStorage', () => {
           fileName: 'photo.png',
         },
       ],
-      scenes: [{ mediaId: 'photo-id', durationMs: 3000 }],
+      scenes: [
+        {
+          mediaId: 'photo-id',
+          durationMs: 3000,
+          subtitle: '저장된 자막',
+        },
+      ],
     };
     const filePath = join(temporaryDirectory, 'media-project.cssproj');
 
@@ -52,7 +58,7 @@ describe('projectStorage', () => {
     await expect(readProjectFile(filePath)).resolves.toEqual(project);
   });
 
-  it('opens a legacy v1 project as v3 with empty media and scenes', async () => {
+  it('opens a legacy v1 project as v4 with empty media and scenes', async () => {
     const currentProject = createNewProject('이전 프로젝트');
     const legacyProject = {
       schemaVersion: 1,
@@ -67,13 +73,13 @@ describe('projectStorage', () => {
 
     await expect(readProjectFile(filePath)).resolves.toEqual({
       ...legacyProject,
-      schemaVersion: 3,
+      schemaVersion: 4,
       media: [],
       scenes: [],
     });
   });
 
-  it('opens a v2 project as v3 with scenes generated in media order', async () => {
+  it('opens a v2 project as v4 with scenes generated in media order', async () => {
     const currentProject = createNewProject('legacy media');
     const legacyProject = {
       schemaVersion: 2,
@@ -102,10 +108,10 @@ describe('projectStorage', () => {
 
     await expect(readProjectFile(filePath)).resolves.toEqual({
       ...legacyProject,
-      schemaVersion: 3,
+      schemaVersion: 4,
       scenes: [
-        { mediaId: 'image-id', durationMs: 3000 },
-        { mediaId: 'video-id', durationMs: null },
+        { mediaId: 'image-id', durationMs: 3000, subtitle: '' },
+        { mediaId: 'video-id', durationMs: null, subtitle: '' },
       ],
     });
   });
@@ -134,7 +140,7 @@ describe('projectStorage', () => {
     const project = createNewProject();
     await writeFile(
       filePath,
-      JSON.stringify({ ...project, schemaVersion: 4 }),
+      JSON.stringify({ ...project, schemaVersion: 5 }),
       'utf8',
     );
 

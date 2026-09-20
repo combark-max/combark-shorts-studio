@@ -33,6 +33,14 @@ describe('desktopApi project methods', () => {
     };
     invoke
       .mockResolvedValueOnce('1.0.0')
+      .mockResolvedValueOnce([
+        {
+          id: 'photo-id',
+          kind: 'image',
+          sourcePath: 'C:\\media\\photo.jpg',
+          fileName: 'photo.jpg',
+        },
+      ])
       .mockResolvedValueOnce('C:\\projects\\opened.cssproj')
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(project)
@@ -49,6 +57,7 @@ describe('desktopApi project methods', () => {
 
     expect(Object.keys(desktopApi)).toEqual([
       'getAppVersion',
+      'openMediaDialog',
       'openProjectDialog',
       'saveProjectDialog',
       'readProject',
@@ -61,6 +70,14 @@ describe('desktopApi project methods', () => {
     ]);
     expect(Object.keys(desktopApi)).not.toContain('recordRecentProject');
     await expect(desktopApi.getAppVersion()).resolves.toBe('1.0.0');
+    await expect(desktopApi.openMediaDialog()).resolves.toEqual([
+      {
+        id: 'photo-id',
+        kind: 'image',
+        sourcePath: 'C:\\media\\photo.jpg',
+        fileName: 'photo.jpg',
+      },
+    ]);
     await expect(desktopApi.openProjectDialog()).resolves.toBe(
       'C:\\projects\\opened.cssproj',
     );
@@ -90,43 +107,44 @@ describe('desktopApi project methods', () => {
     });
 
     expect(invoke).toHaveBeenNthCalledWith(1, IPC_CHANNELS.appGetVersion);
-    expect(invoke).toHaveBeenNthCalledWith(2, IPC_CHANNELS.projectOpenDialog);
+    expect(invoke).toHaveBeenNthCalledWith(2, IPC_CHANNELS.mediaOpenDialog);
+    expect(invoke).toHaveBeenNthCalledWith(3, IPC_CHANNELS.projectOpenDialog);
     expect(invoke).toHaveBeenNthCalledWith(
-      3,
+      4,
       IPC_CHANNELS.projectSaveDialog,
       '첫 프로젝트',
     );
     expect(invoke).toHaveBeenNthCalledWith(
-      4,
+      5,
       IPC_CHANNELS.projectRead,
       'C:\\projects\\opened.cssproj',
     );
     expect(invoke).toHaveBeenNthCalledWith(
-      5,
+      6,
       IPC_CHANNELS.projectWrite,
       'C:\\projects\\opened.cssproj',
       project,
     );
     expect(invoke).toHaveBeenNthCalledWith(
-      6,
+      7,
       IPC_CHANNELS.projectRecoveryWrite,
       project,
     );
     expect(invoke).toHaveBeenNthCalledWith(
-      7,
+      8,
       IPC_CHANNELS.projectRecoveryDelete,
       project.projectId,
     );
     expect(invoke).toHaveBeenNthCalledWith(
-      8,
+      9,
       IPC_CHANNELS.projectRecoveryList,
     );
     expect(invoke).toHaveBeenNthCalledWith(
-      9,
+      10,
       IPC_CHANNELS.projectRecentList,
     );
     expect(invoke).toHaveBeenNthCalledWith(
-      10,
+      11,
       IPC_CHANNELS.projectRecentOpen,
       recentProject.filePath,
     );

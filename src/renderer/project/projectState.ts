@@ -1,8 +1,8 @@
 import { createNewProject } from '../../shared/project/createProject';
-import type { ProjectDocumentV1 } from '../../shared/project/types';
+import type { ProjectDocument } from '../../shared/project/types';
 
 export interface ProjectState {
-  project: ProjectDocumentV1;
+  project: ProjectDocument;
   filePath: string | null;
   dirty: boolean;
   lastSavedAt: string | null;

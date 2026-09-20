@@ -5,7 +5,7 @@ import { join, win32 } from 'node:path';
 
 import type {
   OpenRecentProjectResult,
-  ProjectDocumentV1,
+  ProjectDocument,
   RecentProject,
   RecentProjectsStoreV1,
 } from '../../shared/project/types';
@@ -192,7 +192,7 @@ export async function listRecentProjects(
 export function recordRecentProject(
   userDataPath: string,
   filePath: string,
-  project: ProjectDocumentV1,
+  project: ProjectDocument,
 ): Promise<RecentProject[]> {
   return enqueueMutation(async () => {
     validateFilePath(filePath);
@@ -253,7 +253,7 @@ export async function openRecentProjectFile(
     throw new Error('최근 프로젝트에 등록되지 않은 경로입니다.');
   }
 
-  let project: ProjectDocumentV1;
+  let project: ProjectDocument;
 
   try {
     project = await readProjectFile(recentProject.filePath);

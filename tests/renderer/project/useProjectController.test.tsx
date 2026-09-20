@@ -10,6 +10,7 @@ import type {
 
 const desktopApi = {
   getAppVersion: vi.fn(),
+  openMediaDialog: vi.fn(),
   openProjectDialog: vi.fn(),
   saveProjectDialog: vi.fn(),
   readProject: vi.fn(),
@@ -24,6 +25,7 @@ const desktopApi = {
 beforeEach(() => {
   vi.clearAllMocks();
   desktopApi.writeRecovery.mockResolvedValue(undefined);
+  desktopApi.openMediaDialog.mockResolvedValue([]);
   desktopApi.deleteRecovery.mockResolvedValue(undefined);
   desktopApi.listRecoveries.mockResolvedValue([]);
   desktopApi.listRecentProjects.mockResolvedValue([]);
@@ -73,6 +75,56 @@ function createRecentProject(
 }
 
 describe('useProjectController', () => {
+  it('adds selected media to the project and marks it dirty', async () => {
+    desktopApi.openMediaDialog.mockResolvedValue([
+      {
+        id: 'photo-id',
+        kind: 'image',
+        sourcePath: 'C:\\media\\photo.jpg',
+        fileName: 'photo.jpg',
+      },
+      {
+        id: 'video-id',
+        kind: 'video',
+        sourcePath: 'C:\\media\\clip.mp4',
+        fileName: 'clip.mp4',
+      },
+    ]);
+    const { result } = renderHook(() => useProjectController());
+
+    await act(async () => {
+      await result.current.importMedia();
+    });
+
+    expect(result.current.state.project.media).toEqual([
+      {
+        id: 'photo-id',
+        kind: 'image',
+        sourcePath: 'C:\\media\\photo.jpg',
+        fileName: 'photo.jpg',
+      },
+      {
+        id: 'video-id',
+        kind: 'video',
+        sourcePath: 'C:\\media\\clip.mp4',
+        fileName: 'clip.mp4',
+      },
+    ]);
+    expect(result.current.state.dirty).toBe(true);
+  });
+
+  it('leaves the project unchanged when media selection is cancelled', async () => {
+    desktopApi.openMediaDialog.mockResolvedValue([]);
+    const { result } = renderHook(() => useProjectController());
+    const initialState = result.current.state;
+
+    await act(async () => {
+      await result.current.importMedia();
+    });
+
+    expect(result.current.state).toEqual(initialState);
+  });
+
   it('loads an empty recent-project list without changing project state', async () => {
     const { result } = renderHook(() => useProjectController());
     const initialState = result.current.state;
@@ -520,6 +572,37 @@ describe('useProjectController', () => {
     expect(desktopApi.listRecentProjects).toHaveBeenCalledTimes(3);
   });
 
+  it('keeps media imported during Save marked as unsaved', async () => {
+    let finishWrite: (() => void) | undefined;
+    desktopApi.writeProject.mockReturnValue(
+      new Promise<void>((resolve) => {
+        finishWrite = resolve;
+      }),
+    );
+    desktopApi.openMediaDialog.mockResolvedValue([
+      {
+        id: 'during-save-id',
+        kind: 'image',
+        sourcePath: 'C:\\media\\during-save.png',
+        fileName: 'during-save.png',
+      },
+    ]);
+    const initialState = createState({ dirty: false });
+    const { result } = renderHook(() => useProjectController(initialState));
+
+    const savePromise = result.current.saveProject();
+    await act(async () => {
+      await result.current.importMedia();
+    });
+    await act(async () => {
+      finishWrite?.();
+      await savePromise;
+    });
+
+    expect(result.current.state.project.media).toHaveLength(1);
+    expect(result.current.state.dirty).toBe(true);
+  });
+
   it('saves as to the selected path', async () => {
     desktopApi.saveProjectDialog.mockResolvedValue('C:\\projects\\renamed.cssproj');
     desktopApi.writeProject.mockResolvedValue(undefined);
@@ -536,6 +619,95 @@ describe('useProjectController', () => {
     expect(desktopApi.deleteRecovery).toHaveBeenCalledWith(
       result.current.state.project.projectId,
     );
+  });
+
+  it('keeps media imported during Save As marked as unsaved', async () => {
+    let finishWrite: (() => void) | undefined;
+    const savedPath = 'C:\\projects\\during-save-as.cssproj';
+    desktopApi.saveProjectDialog.mockResolvedValue(savedPath);
+    desktopApi.writeProject.mockReturnValue(
+      new Promise<void>((resolve) => {
+        finishWrite = resolve;
+      }),
+    );
+    desktopApi.openMediaDialog.mockResolvedValue([
+      {
+        id: 'during-save-as-id',
+        kind: 'video',
+        sourcePath: 'C:\\media\\during-save-as.mp4',
+        fileName: 'during-save-as.mp4',
+      },
+    ]);
+    const { result } = renderHook(() => useProjectController());
+
+    const savePromise = result.current.saveProjectAs();
+    await act(async () => {
+      await Promise.resolve();
+      await result.current.importMedia();
+    });
+    await act(async () => {
+      finishWrite?.();
+      await savePromise;
+    });
+
+    expect(result.current.state.filePath).toBe(savedPath);
+    expect(result.current.state.project.media).toHaveLength(1);
+    expect(result.current.state.dirty).toBe(true);
+  });
+
+  it('ignores an older Save As that finishes after a newer Save As', async () => {
+    let finishFirstWrite: (() => void) | undefined;
+    let finishSecondWrite: (() => void) | undefined;
+    const firstPath = 'C:\\projects\\first.cssproj';
+    const secondPath = 'C:\\projects\\second.cssproj';
+    desktopApi.saveProjectDialog
+      .mockResolvedValueOnce(firstPath)
+      .mockResolvedValueOnce(secondPath);
+    desktopApi.writeProject
+      .mockReturnValueOnce(
+        new Promise<void>((resolve) => {
+          finishFirstWrite = resolve;
+        }),
+      )
+      .mockReturnValueOnce(
+        new Promise<void>((resolve) => {
+          finishSecondWrite = resolve;
+        }),
+      );
+    desktopApi.openMediaDialog.mockResolvedValue([
+      {
+        id: 'between-saves-id',
+        kind: 'image',
+        sourcePath: 'C:\\media\\between-saves.jpg',
+        fileName: 'between-saves.jpg',
+      },
+    ]);
+    const { result } = renderHook(() => useProjectController());
+
+    const firstSave = result.current.saveProjectAs();
+    await waitFor(() => {
+      expect(desktopApi.writeProject).toHaveBeenCalledTimes(1);
+    });
+    await act(async () => {
+      await result.current.importMedia();
+    });
+    const secondSave = result.current.saveProjectAs();
+    await waitFor(() => {
+      expect(desktopApi.writeProject).toHaveBeenCalledTimes(2);
+    });
+
+    await act(async () => {
+      finishSecondWrite?.();
+      await secondSave;
+    });
+    await act(async () => {
+      finishFirstWrite?.();
+      await firstSave;
+    });
+
+    expect(result.current.state.filePath).toBe(secondPath);
+    expect(result.current.state.project.media).toHaveLength(1);
+    expect(result.current.state.dirty).toBe(false);
   });
 
   it('does not delete recovery when Save As is cancelled', async () => {

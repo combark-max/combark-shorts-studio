@@ -1,3 +1,6 @@
+import { randomUUID } from 'node:crypto';
+import { basename } from 'node:path';
+
 import { app, dialog, ipcMain } from 'electron';
 
 import { readProjectFile, writeProjectFileAtomic } from '../project/projectStorage';
@@ -12,7 +15,11 @@ import {
   recordRecentProject,
 } from '../project/recentProjectStorage';
 import { ensureProjectExtension } from '../../shared/project/path';
-import type { ProjectDocumentV1 } from '../../shared/project/types';
+import { getMediaKind } from '../../shared/project/media';
+import type {
+  MediaAsset,
+  ProjectDocument,
+} from '../../shared/project/types';
 import { IPC_CHANNELS } from '../../shared/ipc';
 
 const projectFileFilter = {
@@ -20,7 +27,41 @@ const projectFileFilter = {
   extensions: ['cssproj'],
 };
 
+const mediaFileFilter = {
+  name: '사진 및 영상',
+  extensions: ['jpg', 'jpeg', 'png', 'webp', 'mp4'],
+};
+
+function createMediaAsset(filePath: string): MediaAsset | null {
+  const kind = getMediaKind(filePath);
+
+  if (!kind) {
+    return null;
+  }
+
+  return {
+    id: randomUUID(),
+    kind,
+    sourcePath: filePath,
+    fileName: basename(filePath),
+  };
+}
+
 export function registerProjectIpc(): void {
+  ipcMain.removeHandler(IPC_CHANNELS.mediaOpenDialog);
+  ipcMain.handle(IPC_CHANNELS.mediaOpenDialog, async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openFile', 'multiSelections'],
+      filters: [mediaFileFilter],
+    });
+
+    return result.canceled
+      ? []
+      : result.filePaths
+          .map(createMediaAsset)
+          .filter((asset): asset is MediaAsset => asset !== null);
+  });
+
   ipcMain.removeHandler(IPC_CHANNELS.projectOpenDialog);
   ipcMain.handle(IPC_CHANNELS.projectOpenDialog, async () => {
     const result = await dialog.showOpenDialog({
@@ -65,7 +106,7 @@ export function registerProjectIpc(): void {
   ipcMain.removeHandler(IPC_CHANNELS.projectWrite);
   ipcMain.handle(
     IPC_CHANNELS.projectWrite,
-    async (_event, filePath: string, project: ProjectDocumentV1) => {
+    async (_event, filePath: string, project: ProjectDocument) => {
       await writeProjectFileAtomic(filePath, project);
 
       try {
@@ -79,7 +120,7 @@ export function registerProjectIpc(): void {
   ipcMain.removeHandler(IPC_CHANNELS.projectRecoveryWrite);
   ipcMain.handle(
     IPC_CHANNELS.projectRecoveryWrite,
-    (_event, project: ProjectDocumentV1) =>
+    (_event, project: ProjectDocument) =>
       writeRecoveryFile(app.getPath('userData'), project),
   );
 

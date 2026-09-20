@@ -4,11 +4,11 @@ import type { FileHandle } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 
 import { validateProjectDocument } from '../../shared/project/validateProject';
-import type { ProjectDocumentV1 } from '../../shared/project/types';
+import type { ProjectDocument } from '../../shared/project/types';
 
 export async function readProjectFile(
   filePath: string,
-): Promise<ProjectDocumentV1> {
+): Promise<ProjectDocument> {
   const contents = await readFile(filePath, 'utf8');
   const value: unknown = JSON.parse(contents);
 
@@ -17,7 +17,7 @@ export async function readProjectFile(
 
 export async function writeProjectFileAtomic(
   filePath: string,
-  project: ProjectDocumentV1,
+  project: ProjectDocument,
 ): Promise<void> {
   const validatedProject = validateProjectDocument(project);
   const contents = `${JSON.stringify(validatedProject, null, 2)}\n`;

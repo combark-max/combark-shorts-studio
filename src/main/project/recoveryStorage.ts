@@ -2,7 +2,7 @@ import { mkdir, readFile, readdir, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import type {
-  ProjectDocumentV1,
+  ProjectDocument,
   RecoveryCandidate,
 } from '../../shared/project/types';
 import { validateProjectDocument } from '../../shared/project/validateProject';
@@ -91,7 +91,7 @@ export async function listRecoveryFiles(
 
 export async function writeRecoveryFile(
   userDataPath: string,
-  project: ProjectDocumentV1,
+  project: ProjectDocument,
 ): Promise<void> {
   const validatedProject = validateProjectDocument(project);
   const recoveryFilePath = getRecoveryFilePath(

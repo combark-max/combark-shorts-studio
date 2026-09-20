@@ -13,11 +13,30 @@ export interface ProjectDocumentV1 {
   settings: ProjectSettings;
 }
 
+export interface MediaAsset {
+  id: string;
+  kind: 'image' | 'video';
+  sourcePath: string;
+  fileName: string;
+}
+
+export interface ProjectDocumentV2 {
+  schemaVersion: 2;
+  projectId: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  settings: ProjectSettings;
+  media: MediaAsset[];
+}
+
+export type ProjectDocument = ProjectDocumentV2;
+
 export interface RecoveryCandidate {
   projectId: string;
   name: string;
   modifiedAt: string;
-  project: ProjectDocumentV1;
+  project: ProjectDocument;
 }
 
 export interface RecentProject {
@@ -35,7 +54,7 @@ export interface RecentProjectsStoreV1 {
 export type OpenRecentProjectResult =
   | {
       status: 'opened';
-      project: ProjectDocumentV1;
+      project: ProjectDocument;
       filePath: string;
     }
   | {

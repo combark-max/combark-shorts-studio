@@ -37,7 +37,17 @@ describe('recoveryStorage', () => {
   });
 
   it('returns a validated recovery candidate with its modified time', async () => {
-    const project = createNewProject('복구 후보');
+    const project = {
+      ...createNewProject('복구 후보'),
+      media: [
+        {
+          id: 'recovery-photo-id',
+          kind: 'image' as const,
+          sourcePath: 'C:\\media\\recovery-photo.webp',
+          fileName: 'recovery-photo.webp',
+        },
+      ],
+    };
     const modifiedAt = new Date('2026-09-19T01:02:03.000Z');
     await writeRecoveryFile(userDataDirectory, project);
     await utimes(
@@ -82,7 +92,7 @@ describe('recoveryStorage', () => {
 
   it('skips malformed and schema-invalid files while preserving valid candidates', async () => {
     const validProject = createNewProject('정상 복구');
-    const invalidProject = { ...createNewProject(), schemaVersion: 2 };
+    const invalidProject = { ...createNewProject(), schemaVersion: 3 };
     await writeRecoveryFile(userDataDirectory, validProject);
     const recoveryDirectory = join(userDataDirectory, 'recovery');
     await writeFile(

@@ -30,7 +30,9 @@ export function useProjectController(initialState?: ProjectState) {
   const [projectOpenError, setProjectOpenError] = useState(false);
   const stateRef = useRef(state);
   const recoveryWriteRef = useRef<Promise<void> | null>(null);
-  const manualSaveInProgressRef = useRef(false);
+  const manualSaveInProgressCountRef = useRef(0);
+  const documentGenerationRef = useRef(0);
+  const saveSequenceRef = useRef(0);
   stateRef.current = state;
 
   const replaceState = (nextState: ProjectState): void => {
@@ -38,11 +40,29 @@ export function useProjectController(initialState?: ProjectState) {
     setState(nextState);
   };
 
-  const finishManualSave = (filePath: string): void => {
+  const replaceDocumentState = (nextState: ProjectState): void => {
+    documentGenerationRef.current += 1;
+    replaceState(nextState);
+  };
+
+  const finishManualSave = (
+    filePath: string,
+    savedProject: ProjectState['project'],
+    documentGeneration: number,
+    saveSequence: number,
+  ): void => {
+    if (
+      documentGenerationRef.current !== documentGeneration ||
+      saveSequenceRef.current !== saveSequence ||
+      stateRef.current.project.projectId !== savedProject.projectId
+    ) {
+      return;
+    }
+
     const nextState = {
       ...stateRef.current,
       filePath,
-      dirty: false,
+      dirty: stateRef.current.project !== savedProject,
       lastSavedAt: new Date().toISOString(),
     };
     replaceState(nextState);
@@ -74,7 +94,7 @@ export function useProjectController(initialState?: ProjectState) {
   };
 
   const recoverProject = (candidate: RecoveryCandidate): void => {
-    replaceState({
+    replaceDocumentState({
       project: candidate.project,
       filePath: null,
       dirty: true,
@@ -132,7 +152,7 @@ export function useProjectController(initialState?: ProjectState) {
         return;
       }
 
-      replaceState({
+      replaceDocumentState({
         project: result.project,
         filePath: result.filePath,
         dirty: false,
@@ -158,7 +178,7 @@ export function useProjectController(initialState?: ProjectState) {
 
       if (
         !currentState.dirty ||
-        manualSaveInProgressRef.current ||
+        manualSaveInProgressCountRef.current > 0 ||
         recoveryWriteRef.current
       ) {
         return;
@@ -181,7 +201,26 @@ export function useProjectController(initialState?: ProjectState) {
   }, []);
 
   const newProject = () => {
-    replaceState(createInitialProjectState());
+    replaceDocumentState(createInitialProjectState());
+  };
+
+  const importMedia = async (): Promise<void> => {
+    const media = await window.combarkDesktop.openMediaDialog();
+
+    if (media.length === 0) {
+      return;
+    }
+
+    const currentState = stateRef.current;
+    replaceState({
+      ...currentState,
+      project: {
+        ...currentState.project,
+        updatedAt: new Date().toISOString(),
+        media: [...currentState.project.media, ...media],
+      },
+      dirty: true,
+    });
   };
 
   const openProject = async () => {
@@ -208,7 +247,7 @@ export function useProjectController(initialState?: ProjectState) {
       return;
     }
 
-    replaceState({
+    replaceDocumentState({
       project,
       filePath,
       dirty: false,
@@ -218,22 +257,29 @@ export function useProjectController(initialState?: ProjectState) {
   };
 
   const saveProjectAs = async () => {
+    const documentGeneration = documentGenerationRef.current;
+    const saveSequence = ++saveSequenceRef.current;
     const project = stateRef.current.project;
     const filePath = await window.combarkDesktop.saveProjectDialog(project.name);
 
-    if (!filePath) {
+    if (!filePath || documentGenerationRef.current !== documentGeneration) {
       return;
     }
 
-    manualSaveInProgressRef.current = true;
+    manualSaveInProgressCountRef.current += 1;
 
     try {
       await window.combarkDesktop.writeProject(filePath, project);
       await deleteRecoveryAfterSave(project.projectId);
-      finishManualSave(filePath);
+      finishManualSave(
+        filePath,
+        project,
+        documentGeneration,
+        saveSequence,
+      );
       await loadRecentProjects(false);
     } finally {
-      manualSaveInProgressRef.current = false;
+      manualSaveInProgressCountRef.current -= 1;
     }
   };
 
@@ -245,7 +291,9 @@ export function useProjectController(initialState?: ProjectState) {
       return;
     }
 
-    manualSaveInProgressRef.current = true;
+    const documentGeneration = documentGenerationRef.current;
+    const saveSequence = ++saveSequenceRef.current;
+    manualSaveInProgressCountRef.current += 1;
 
     try {
       await window.combarkDesktop.writeProject(
@@ -253,10 +301,15 @@ export function useProjectController(initialState?: ProjectState) {
         currentState.project,
       );
       await deleteRecoveryAfterSave(currentState.project.projectId);
-      finishManualSave(currentState.filePath);
+      finishManualSave(
+        currentState.filePath,
+        currentState.project,
+        documentGeneration,
+        saveSequence,
+      );
       await loadRecentProjects(false);
     } finally {
-      manualSaveInProgressRef.current = false;
+      manualSaveInProgressCountRef.current -= 1;
     }
   };
 
@@ -276,6 +329,7 @@ export function useProjectController(initialState?: ProjectState) {
     openRecentProject,
     projectOpenError,
     newProject,
+    importMedia,
     openProject,
     saveProject,
     saveProjectAs,

@@ -6,6 +6,7 @@ import { createNewProject } from '../../src/shared/project/createProject';
 
 const desktopApi = {
   getAppVersion: vi.fn(),
+  openMediaDialog: vi.fn(),
   openProjectDialog: vi.fn(),
   saveProjectDialog: vi.fn(),
   readProject: vi.fn(),
@@ -20,6 +21,7 @@ const desktopApi = {
 beforeEach(() => {
   vi.clearAllMocks();
   desktopApi.getAppVersion.mockResolvedValue('0.1.0');
+  desktopApi.openMediaDialog.mockResolvedValue([]);
   desktopApi.listRecoveries.mockResolvedValue([]);
   desktopApi.deleteRecovery.mockResolvedValue(undefined);
   desktopApi.listRecentProjects.mockResolvedValue([]);
@@ -34,6 +36,60 @@ afterEach(() => {
 });
 
 describe('App', () => {
+  it('adds selected image and video files to the media list', async () => {
+    const user = userEvent.setup();
+    desktopApi.openMediaDialog.mockResolvedValue([
+      {
+        id: 'photo-id',
+        kind: 'image',
+        sourcePath: 'C:\\media\\photo.jpg',
+        fileName: 'photo.jpg',
+      },
+      {
+        id: 'video-id',
+        kind: 'video',
+        sourcePath: 'C:\\media\\clip.mp4',
+        fileName: 'clip.mp4',
+      },
+    ]);
+    render(<App />);
+    await screen.findByText('Combark Shorts Studio');
+
+    await user.click(screen.getByRole('button', { name: '파일 추가' }));
+
+    expect(screen.getByText('photo.jpg')).toBeInTheDocument();
+    expect(screen.getByText('이미지')).toBeInTheDocument();
+    expect(screen.getByText('clip.mp4')).toBeInTheDocument();
+    expect(screen.getByText('영상')).toBeInTheDocument();
+    expect(screen.getByText('저장 필요')).toBeInTheDocument();
+  });
+
+  it('shows media restored from an opened project', async () => {
+    const user = userEvent.setup();
+    const project = {
+      ...createNewProject('미디어 프로젝트'),
+      media: [
+        {
+          id: 'restored-photo-id',
+          kind: 'image' as const,
+          sourcePath: 'C:\\media\\restored.webp',
+          fileName: 'restored.webp',
+        },
+      ],
+    };
+    desktopApi.openProjectDialog.mockResolvedValue(
+      'C:\\projects\\media.cssproj',
+    );
+    desktopApi.readProject.mockResolvedValue(project);
+    render(<App />);
+    await screen.findByText('Combark Shorts Studio');
+
+    await user.click(screen.getByRole('button', { name: '열기' }));
+
+    expect(await screen.findByText('restored.webp')).toBeInTheDocument();
+    expect(screen.getByText('저장됨')).toBeInTheDocument();
+  });
+
   it('blocks the editor while recovery lookup is pending', async () => {
     let finishLookup: (() => void) | undefined;
     desktopApi.listRecoveries.mockReturnValue(

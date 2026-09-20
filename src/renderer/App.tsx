@@ -16,6 +16,7 @@ export function App() {
   const {
     state,
     newProject,
+    importMedia,
     openProject,
     saveProject,
     saveProjectAs,
@@ -91,7 +92,10 @@ export function App() {
         onOpen={openRecentProject}
       />
       <main className="workspace">
-        <MediaSidebar />
+        <MediaSidebar
+          media={state.project.media}
+          onAddMedia={importMedia}
+        />
         <PreviewPanel />
         <PropertiesPanel />
       </main>

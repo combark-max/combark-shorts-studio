@@ -1,5 +1,6 @@
 export const IPC_CHANNELS = {
   appGetVersion: 'app:get-version',
+  mediaOpenDialog: 'media:open-dialog',
   projectOpenDialog: 'project:open-dialog',
   projectSaveDialog: 'project:save-dialog',
   projectRead: 'project:read',

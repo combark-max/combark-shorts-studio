@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { createNewProject } from '../../../src/shared/project/createProject';
 
 describe('createNewProject', () => {
-  it('creates the approved v1 project document', () => {
+  it('creates a v2 project document with an empty media list', () => {
     const project = createNewProject();
 
-    expect(project.schemaVersion).toBe(1);
+    expect(project.schemaVersion).toBe(2);
     expect(project.projectId).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
     );
@@ -17,7 +17,7 @@ describe('createNewProject', () => {
       fps: 30,
     });
 
-    expect(project).not.toHaveProperty('media');
+    expect(project.media).toEqual([]);
     expect(project).not.toHaveProperty('timeline');
     expect(project).not.toHaveProperty('tracks');
     expect(project).not.toHaveProperty('clips');

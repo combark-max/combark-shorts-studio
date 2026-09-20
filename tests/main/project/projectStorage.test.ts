@@ -32,6 +32,45 @@ describe('projectStorage', () => {
     expect(await readProjectFile(filePath)).toEqual(project);
   });
 
+  it('preserves imported media when a project is saved and reopened', async () => {
+    const project = {
+      ...createNewProject('미디어 저장 테스트'),
+      media: [
+        {
+          id: 'photo-id',
+          kind: 'image' as const,
+          sourcePath: 'C:\\media\\photo.png',
+          fileName: 'photo.png',
+        },
+      ],
+    };
+    const filePath = join(temporaryDirectory, 'media-project.cssproj');
+
+    await writeProjectFileAtomic(filePath, project);
+
+    await expect(readProjectFile(filePath)).resolves.toEqual(project);
+  });
+
+  it('opens a legacy v1 project as v2 with empty media', async () => {
+    const currentProject = createNewProject('이전 프로젝트');
+    const legacyProject = {
+      schemaVersion: 1,
+      projectId: currentProject.projectId,
+      name: currentProject.name,
+      createdAt: currentProject.createdAt,
+      updatedAt: currentProject.updatedAt,
+      settings: currentProject.settings,
+    };
+    const filePath = join(temporaryDirectory, 'legacy.cssproj');
+    await writeFile(filePath, JSON.stringify(legacyProject), 'utf8');
+
+    await expect(readProjectFile(filePath)).resolves.toEqual({
+      ...legacyProject,
+      schemaVersion: 2,
+      media: [],
+    });
+  });
+
   it('can replace an existing project file without leaving a temp file', async () => {
     const filePath = join(temporaryDirectory, 'project.cssproj');
     const firstProject = createNewProject('첫 저장');
@@ -56,7 +95,7 @@ describe('projectStorage', () => {
     const project = createNewProject();
     await writeFile(
       filePath,
-      JSON.stringify({ ...project, schemaVersion: 2 }),
+      JSON.stringify({ ...project, schemaVersion: 3 }),
       'utf8',
     );
 

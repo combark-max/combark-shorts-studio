@@ -47,6 +47,7 @@ import {
   listRecentProjects,
   openRecentProjectFile,
   recordRecentProject,
+  removeRecentProject,
 } from '../../../src/main/project/recentProjectStorage';
 import { writeProjectFileAtomic } from '../../../src/main/project/projectStorage';
 import { registerProjectIpc } from '../../../src/main/ipc/registerProjectIpc';
@@ -94,6 +95,30 @@ function getHandler(
 describe('recentProjectStorage', () => {
   it('returns an empty list when the store does not exist', async () => {
     await expect(listRecentProjects(userDataDirectory)).resolves.toEqual([]);
+  });
+
+  it('removes only the requested recent item without deleting its project file', async () => {
+    const removedProject = createNewProject('제거할 프로젝트');
+    const remainingProject = createNewProject('남길 프로젝트');
+    const removedPath = projectPath('removed');
+    const remainingPath = projectPath('remaining');
+    await writeProjectFileAtomic(removedPath, removedProject);
+    await writeProjectFileAtomic(remainingPath, remainingProject);
+    await recordRecentProject(userDataDirectory, removedPath, removedProject);
+    await recordRecentProject(userDataDirectory, remainingPath, remainingProject);
+
+    await expect(
+      removeRecentProject(userDataDirectory, removedPath),
+    ).resolves.toEqual([
+      expect.objectContaining({ filePath: remainingPath }),
+    ]);
+
+    await expect(readFile(removedPath, 'utf8')).resolves.toContain(
+      removedProject.projectId,
+    );
+    await expect(listRecentProjects(userDataDirectory)).resolves.toEqual([
+      expect.objectContaining({ filePath: remainingPath }),
+    ]);
   });
 
   it('records the first recent project in a versioned store', async () => {
@@ -491,5 +516,20 @@ describe('recent project IPC integration', () => {
         projectPath('not-registered'),
       ),
     ).rejects.toThrow('최근 프로젝트에 등록되지 않은 경로입니다.');
+  });
+
+  it('removes a recent project through IPC without deleting the project file', async () => {
+    const project = createNewProject('IPC 제거');
+    const filePath = projectPath('ipc-remove');
+    await writeProjectFileAtomic(filePath, project);
+    await recordRecentProject(userDataDirectory, filePath, project);
+    registerProjectIpc();
+
+    await expect(
+      getHandler(IPC_CHANNELS.projectRecentRemove)(undefined, filePath),
+    ).resolves.toEqual([]);
+    await expect(readFile(filePath, 'utf8')).resolves.toContain(
+      project.projectId,
+    );
   });
 });

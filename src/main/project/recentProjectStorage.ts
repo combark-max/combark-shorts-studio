@@ -219,11 +219,12 @@ export function recordRecentProject(
   });
 }
 
-function removeRecentProject(
+export function removeRecentProject(
   userDataPath: string,
   filePath: string,
 ): Promise<RecentProject[]> {
   return enqueueMutation(async () => {
+    validateFilePath(filePath);
     const normalizedFilePath = normalizeFilePath(filePath);
     const currentProjects = (await readStore(userDataPath)).projects;
     const projects = currentProjects.filter(

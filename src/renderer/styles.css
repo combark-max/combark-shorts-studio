@@ -32,7 +32,7 @@ button:hover {
 
 .app-shell {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) minmax(240px, auto) auto;
+  grid-template-rows: auto auto auto minmax(0, 1fr) minmax(240px, auto) auto;
   min-height: 100vh;
 }
 
@@ -57,6 +57,30 @@ button:hover {
   flex-wrap: wrap;
   gap: 8px;
   justify-content: flex-end;
+}
+
+.save-status-slot {
+  min-height: 0;
+}
+
+.save-status {
+  background: #1d3045;
+  border-bottom: 1px solid #3f6f9b;
+  color: #e4f2ff;
+  font-weight: 600;
+  padding: 10px 20px;
+}
+
+.save-status-success {
+  background: #1d382b;
+  border-bottom-color: #3f805d;
+  color: #dcf7e7;
+}
+
+.save-status-error {
+  background: #472326;
+  border-bottom-color: #9a4f56;
+  color: #ffe4e6;
 }
 
 .workspace {
@@ -228,16 +252,24 @@ button:hover {
   padding: 0;
 }
 
-.recent-project-list button {
+.recent-project-list li {
   display: grid;
   gap: 4px;
   max-width: 320px;
+}
+
+.recent-project-open,
+.recent-project-remove {
   text-align: left;
 }
 
-.recent-project-list span {
-  color: #aab2c0;
+.recent-project-open strong {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.recent-project-remove {
+  color: #aab2c0;
+  font-size: 12px;
 }

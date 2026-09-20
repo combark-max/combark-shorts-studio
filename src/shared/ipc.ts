@@ -10,4 +10,5 @@ export const IPC_CHANNELS = {
   projectRecoveryList: 'project:recovery-list',
   projectRecentList: 'project:recent-list',
   projectRecentOpen: 'project:recent-open',
+  projectRecentRemove: 'project:recent-remove',
 } as const;

@@ -13,6 +13,7 @@ import {
   listRecentProjects,
   openRecentProjectFile,
   recordRecentProject,
+  removeRecentProject,
 } from '../project/recentProjectStorage';
 import { ensureProjectExtension } from '../../shared/project/path';
 import { getMediaKind } from '../../shared/project/media';
@@ -144,5 +145,10 @@ export function registerProjectIpc(): void {
   ipcMain.removeHandler(IPC_CHANNELS.projectRecentOpen);
   ipcMain.handle(IPC_CHANNELS.projectRecentOpen, (_event, filePath: string) =>
     openRecentProjectFile(app.getPath('userData'), filePath),
+  );
+
+  ipcMain.removeHandler(IPC_CHANNELS.projectRecentRemove);
+  ipcMain.handle(IPC_CHANNELS.projectRecentRemove, (_event, filePath: string) =>
+    removeRecentProject(app.getPath('userData'), filePath),
   );
 }

@@ -53,7 +53,8 @@ describe('desktopApi project methods', () => {
         status: 'opened',
         project,
         filePath: recentProject.filePath,
-      });
+      })
+      .mockResolvedValueOnce([]);
 
     expect(Object.keys(desktopApi)).toEqual([
       'getAppVersion',
@@ -67,6 +68,7 @@ describe('desktopApi project methods', () => {
       'listRecoveries',
       'listRecentProjects',
       'openRecentProject',
+      'removeRecentProject',
     ]);
     expect(Object.keys(desktopApi)).not.toContain('recordRecentProject');
     await expect(desktopApi.getAppVersion()).resolves.toBe('1.0.0');
@@ -105,6 +107,9 @@ describe('desktopApi project methods', () => {
       project,
       filePath: recentProject.filePath,
     });
+    await expect(
+      desktopApi.removeRecentProject(recentProject.filePath),
+    ).resolves.toEqual([]);
 
     expect(invoke).toHaveBeenNthCalledWith(1, IPC_CHANNELS.appGetVersion);
     expect(invoke).toHaveBeenNthCalledWith(2, IPC_CHANNELS.mediaOpenDialog);
@@ -146,6 +151,11 @@ describe('desktopApi project methods', () => {
     expect(invoke).toHaveBeenNthCalledWith(
       11,
       IPC_CHANNELS.projectRecentOpen,
+      recentProject.filePath,
+    );
+    expect(invoke).toHaveBeenNthCalledWith(
+      12,
+      IPC_CHANNELS.projectRecentRemove,
       recentProject.filePath,
     );
   });

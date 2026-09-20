@@ -33,9 +33,12 @@ export function App() {
     recentProjectsLoading,
     recentProjectsListFailed,
     recentProjectOpenError,
+    recentProjectRemoveError,
     retryRecentProjects,
     openRecentProject,
+    removeRecentProject,
     projectOpenError,
+    projectSaveStatus,
   } = useProjectController();
 
   useEffect(() => {
@@ -86,6 +89,31 @@ export function App() {
         onAutoShorts={noop}
         onExport={noop}
       />
+      <div className="save-status-slot">
+        <div
+          aria-label="저장 상태"
+          className={
+            projectSaveStatus === 'saving'
+              ? 'save-status'
+              : projectSaveStatus === 'success'
+                ? 'save-status save-status-success'
+                : undefined
+          }
+          role="status"
+        >
+          {projectSaveStatus === 'saving' ? '저장 중...' : null}
+          {projectSaveStatus === 'success' ? '저장 완료' : null}
+        </div>
+        {projectSaveStatus === 'error' ? (
+          <div
+            aria-label="저장 상태"
+            className="save-status save-status-error"
+            role="alert"
+          >
+            프로젝트를 저장하지 못했습니다. 다시 시도해 주세요.
+          </div>
+        ) : null}
+      </div>
       <RecentProjects
         projects={recentProjects}
         loading={recentProjectsLoading}
@@ -93,6 +121,8 @@ export function App() {
         openError={recentProjectOpenError}
         onRetry={retryRecentProjects}
         onOpen={openRecentProject}
+        onRemove={removeRecentProject}
+        removeError={recentProjectRemoveError}
       />
       <main className="workspace">
         <MediaSidebar

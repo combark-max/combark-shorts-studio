@@ -34,6 +34,8 @@ export const desktopApi = {
     ipcRenderer.invoke(IPC_CHANNELS.projectRecentList),
   openRecentProject: (filePath: string): Promise<OpenRecentProjectResult> =>
     ipcRenderer.invoke(IPC_CHANNELS.projectRecentOpen, filePath),
+  removeRecentProject: (filePath: string): Promise<RecentProject[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.projectRecentRemove, filePath),
 };
 
 export type DesktopApi = typeof desktopApi;

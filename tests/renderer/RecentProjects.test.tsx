@@ -25,6 +25,8 @@ const defaultProps = {
   openError: null,
   onRetry: vi.fn(),
   onOpen: vi.fn(),
+  onRemove: vi.fn(),
+  removeError: false,
 };
 
 describe('RecentProjects', () => {
@@ -37,7 +39,7 @@ describe('RecentProjects', () => {
     expect(screen.getByText('최근 프로젝트가 없습니다.')).toBeInTheDocument();
   });
 
-  it('shows project names and full paths and opens the selected item', async () => {
+  it('shows only cssproj filenames and opens the selected item', async () => {
     const user = userEvent.setup();
     const firstProject = createRecentProject(
       '첫 최근 프로젝트',
@@ -56,13 +58,50 @@ describe('RecentProjects', () => {
       />,
     );
 
-    expect(screen.getByText('C:\\projects\\first.cssproj')).toBeInTheDocument();
-    expect(screen.getByText('C:\\projects\\second.cssproj')).toBeInTheDocument();
-    await user.click(
-      screen.getByRole('button', { name: /첫 최근 프로젝트/ }),
-    );
+    expect(screen.getByText('first.cssproj')).toBeInTheDocument();
+    expect(screen.getByText('second.cssproj')).toBeInTheDocument();
+    expect(screen.queryByText('첫 최근 프로젝트')).not.toBeInTheDocument();
+    expect(screen.queryByText('두 번째 최근 프로젝트')).not.toBeInTheDocument();
+    const firstOpenButton = screen.getByRole('button', {
+      name: 'first.cssproj',
+    });
+    expect(firstOpenButton).not.toHaveAttribute('title');
+    await user.click(firstOpenButton);
 
     expect(onOpen).toHaveBeenCalledWith(firstProject.filePath);
+  });
+
+  it('removes the selected recent item without opening it', async () => {
+    const user = userEvent.setup();
+    const project = createRecentProject(
+      '내부 이름',
+      'C:\\projects\\remove-me.cssproj',
+    );
+    const onOpen = vi.fn();
+    const onRemove = vi.fn();
+    render(
+      <RecentProjects
+        {...defaultProps}
+        projects={[project]}
+        onOpen={onOpen}
+        onRemove={onRemove}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole('button', { name: 'remove-me.cssproj 목록에서 제거' }),
+    );
+
+    expect(onRemove).toHaveBeenCalledWith(project.filePath);
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it('shows a recent removal error', () => {
+    render(<RecentProjects {...defaultProps} removeError />);
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '최근 프로젝트를 목록에서 제거하지 못했습니다.',
+    );
   });
 
   it('shows loading without hiding the recent-project region', () => {

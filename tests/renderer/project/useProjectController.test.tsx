@@ -20,6 +20,7 @@ const desktopApi = {
   listRecoveries: vi.fn(),
   listRecentProjects: vi.fn(),
   openRecentProject: vi.fn(),
+  removeRecentProject: vi.fn(),
 };
 
 beforeEach(() => {
@@ -29,6 +30,7 @@ beforeEach(() => {
   desktopApi.deleteRecovery.mockResolvedValue(undefined);
   desktopApi.listRecoveries.mockResolvedValue([]);
   desktopApi.listRecentProjects.mockResolvedValue([]);
+  desktopApi.removeRecentProject.mockResolvedValue([]);
   Object.defineProperty(window, 'combarkDesktop', {
     configurable: true,
     value: desktopApi,
@@ -350,6 +352,44 @@ describe('useProjectController', () => {
     expect(result.current.state).toEqual(initialState);
     expect(result.current.recentProjects).toEqual([recentProject]);
     expect(result.current.recentProjectOpenError).toBe('open');
+  });
+
+  it('removes one recent project using the returned list', async () => {
+    const removedProject = createRecentProject('제거할 최근 프로젝트');
+    const remainingProject = createRecentProject('남길 최근 프로젝트');
+    desktopApi.listRecentProjects.mockResolvedValue([
+      removedProject,
+      remainingProject,
+    ]);
+    desktopApi.removeRecentProject.mockResolvedValue([remainingProject]);
+    const { result } = renderHook(() => useProjectController());
+    await waitFor(() => {
+      expect(result.current.recentProjects).toHaveLength(2);
+    });
+
+    await act(async () => {
+      await result.current.removeRecentProject(removedProject.filePath);
+    });
+
+    expect(result.current.recentProjects).toEqual([remainingProject]);
+    expect(result.current.recentProjectRemoveError).toBe(false);
+  });
+
+  it('keeps recent projects and reports when removal fails', async () => {
+    const recentProject = createRecentProject('제거 실패 최근 프로젝트');
+    desktopApi.listRecentProjects.mockResolvedValue([recentProject]);
+    desktopApi.removeRecentProject.mockRejectedValue(new Error('remove failed'));
+    const { result } = renderHook(() => useProjectController());
+    await waitFor(() => {
+      expect(result.current.recentProjects).toEqual([recentProject]);
+    });
+
+    await act(async () => {
+      await result.current.removeRecentProject(recentProject.filePath);
+    });
+
+    expect(result.current.recentProjects).toEqual([recentProject]);
+    expect(result.current.recentProjectRemoveError).toBe(true);
   });
 
   it('refreshes recent projects after a normal Open succeeds', async () => {
@@ -693,6 +733,37 @@ describe('useProjectController', () => {
     expect(result.current.state.lastSavedAt).toEqual(expect.any(String));
     expect(desktopApi.deleteRecovery).toHaveBeenCalledWith(project.projectId);
     expect(desktopApi.listRecentProjects).toHaveBeenCalledTimes(3);
+    expect(result.current.projectSaveStatus).toBe('success');
+  });
+
+  it('reports saving, then success, and clears successful feedback', async () => {
+    vi.useFakeTimers();
+    let finishWrite: (() => void) | undefined;
+    desktopApi.writeProject.mockReturnValue(
+      new Promise<void>((resolve) => {
+        finishWrite = resolve;
+      }),
+    );
+    const { result } = renderHook(() =>
+      useProjectController(createState({ dirty: false })),
+    );
+
+    let savePromise: Promise<void>;
+    act(() => {
+      savePromise = result.current.saveProject();
+    });
+    expect(result.current.projectSaveStatus).toBe('saving');
+
+    await act(async () => {
+      finishWrite?.();
+      await savePromise;
+    });
+    expect(result.current.projectSaveStatus).toBe('success');
+
+    act(() => {
+      vi.advanceTimersByTime(2_000);
+    });
+    expect(result.current.projectSaveStatus).toBe('idle');
   });
 
   it('keeps media imported during Save marked as unsaved', async () => {
@@ -742,6 +813,7 @@ describe('useProjectController', () => {
     expect(desktopApi.deleteRecovery).toHaveBeenCalledWith(
       result.current.state.project.projectId,
     );
+    expect(result.current.projectSaveStatus).toBe('success');
   });
 
   it('keeps media imported during Save As marked as unsaved', async () => {
@@ -846,6 +918,21 @@ describe('useProjectController', () => {
     expect(desktopApi.deleteRecovery).not.toHaveBeenCalled();
     expect(result.current.state).toEqual(initialState);
     expect(desktopApi.listRecentProjects).toHaveBeenCalledTimes(1);
+    expect(result.current.projectSaveStatus).toBe('idle');
+  });
+
+  it('reports a Save As dialog failure without changing project state', async () => {
+    desktopApi.saveProjectDialog.mockRejectedValue(new Error('dialog failed'));
+    const initialState = createState({ filePath: null });
+    const { result } = renderHook(() => useProjectController(initialState));
+
+    await act(async () => {
+      await result.current.saveProjectAs();
+    });
+
+    expect(result.current.projectSaveStatus).toBe('error');
+    expect(result.current.state).toEqual(initialState);
+    expect(desktopApi.writeProject).not.toHaveBeenCalled();
   });
 
   it('does not delete recovery when a manual save fails', async () => {
@@ -854,11 +941,14 @@ describe('useProjectController', () => {
     const initialState = createState();
     const { result } = renderHook(() => useProjectController(initialState));
 
-    await expect(result.current.saveProject()).rejects.toBe(saveError);
+    await act(async () => {
+      await result.current.saveProject();
+    });
 
     expect(desktopApi.deleteRecovery).not.toHaveBeenCalled();
     expect(result.current.state).toEqual(initialState);
     expect(desktopApi.listRecentProjects).toHaveBeenCalledTimes(1);
+    expect(result.current.projectSaveStatus).toBe('error');
   });
 
   it('refreshes recent projects after a recovered project is saved as', async () => {

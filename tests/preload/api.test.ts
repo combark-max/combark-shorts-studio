@@ -27,6 +27,7 @@ describe('desktopApi', () => {
       'listRecoveries',
       'listRecentProjects',
       'openRecentProject',
+      'removeRecentProject',
     ]);
 
     expect(Object.keys(desktopApi)).not.toContain('recordRecentProject');

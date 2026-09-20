@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { act, cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../src/renderer/App';
@@ -16,6 +16,7 @@ const desktopApi = {
   listRecoveries: vi.fn(),
   listRecentProjects: vi.fn(),
   openRecentProject: vi.fn(),
+  removeRecentProject: vi.fn(),
 };
 
 beforeEach(() => {
@@ -25,6 +26,7 @@ beforeEach(() => {
   desktopApi.listRecoveries.mockResolvedValue([]);
   desktopApi.deleteRecovery.mockResolvedValue(undefined);
   desktopApi.listRecentProjects.mockResolvedValue([]);
+  desktopApi.removeRecentProject.mockResolvedValue([]);
   Object.defineProperty(window, 'combarkDesktop', {
     configurable: true,
     value: desktopApi,
@@ -36,6 +38,81 @@ afterEach(() => {
 });
 
 describe('App', () => {
+  it('shows saving and success feedback for Save', async () => {
+    const user = userEvent.setup();
+    let finishWrite: (() => void) | undefined;
+    desktopApi.saveProjectDialog.mockResolvedValue(
+      'C:\\projects\\saved.cssproj',
+    );
+    desktopApi.writeProject.mockReturnValue(
+      new Promise<void>((resolve) => {
+        finishWrite = resolve;
+      }),
+    );
+    render(<App />);
+    await screen.findByText('Combark Shorts Studio');
+
+    await user.click(screen.getByRole('button', { name: '저장' }));
+    const savingStatus = screen.getByRole('status', { name: '저장 상태' });
+    expect(within(savingStatus).getByText('저장 중...')).toBeInTheDocument();
+    expect(savingStatus.parentElement).toBe(
+      screen.getByRole('banner').nextElementSibling,
+    );
+    expect(
+      within(screen.getByRole('contentinfo')).queryByText('저장 중...'),
+    ).not.toBeInTheDocument();
+
+    await act(async () => {
+      finishWrite?.();
+      await Promise.resolve();
+    });
+    const successStatus = await screen.findByRole('status', {
+      name: '저장 상태',
+    });
+    expect(within(successStatus).getByText('저장 완료')).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('contentinfo')).queryByText('저장 완료'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows a clear error when Save fails', async () => {
+    const user = userEvent.setup();
+    desktopApi.saveProjectDialog.mockResolvedValue(
+      'C:\\projects\\failed.cssproj',
+    );
+    desktopApi.writeProject.mockRejectedValue(new Error('write failed'));
+    render(<App />);
+    await screen.findByText('Combark Shorts Studio');
+
+    await user.click(screen.getByRole('button', { name: '저장' }));
+
+    const saveError = await screen.findByRole('alert', { name: '저장 상태' });
+    expect(saveError).toHaveTextContent(
+      '프로젝트를 저장하지 못했습니다. 다시 시도해 주세요.',
+    );
+    expect(
+      within(screen.getByRole('contentinfo')).queryByText(
+        '프로젝트를 저장하지 못했습니다. 다시 시도해 주세요.',
+      ),
+    ).not.toBeInTheDocument();
+  });
+
+  it('leaves the save status empty when Save As is canceled', async () => {
+    const user = userEvent.setup();
+    desktopApi.saveProjectDialog.mockResolvedValue(null);
+    render(<App />);
+    await screen.findByText('Combark Shorts Studio');
+
+    await user.click(
+      screen.getByRole('button', { name: '다른 이름으로 저장' }),
+    );
+
+    expect(screen.getByRole('status', { name: '저장 상태' })).toBeEmptyDOMElement();
+    expect(
+      screen.queryByRole('alert', { name: '저장 상태' }),
+    ).not.toBeInTheDocument();
+  });
+
   it('adds selected image and video files to the media list', async () => {
     const user = userEvent.setup();
     desktopApi.openMediaDialog.mockResolvedValue([
@@ -223,7 +300,37 @@ describe('App', () => {
 
     await user.click(screen.getByRole('button', { name: '복구' }));
 
-    expect(await screen.findByText('최근 프로젝트 항목')).toBeInTheDocument();
+    expect(await screen.findByText('recent.cssproj')).toBeInTheDocument();
+  });
+
+  it('removes a recent project from the displayed list', async () => {
+    const user = userEvent.setup();
+    const firstProject = {
+      filePath: 'C:\\projects\\first.cssproj',
+      projectId: 'first-id',
+      name: '새 프로젝트',
+      lastUsedAt: '2026-09-19T04:00:00.000Z',
+    };
+    const secondProject = {
+      filePath: 'C:\\projects\\second.cssproj',
+      projectId: 'second-id',
+      name: '새 프로젝트',
+      lastUsedAt: '2026-09-19T03:00:00.000Z',
+    };
+    desktopApi.listRecentProjects.mockResolvedValue([
+      firstProject,
+      secondProject,
+    ]);
+    desktopApi.removeRecentProject.mockResolvedValue([secondProject]);
+    render(<App />);
+
+    expect(await screen.findByText('first.cssproj')).toBeInTheDocument();
+    await user.click(
+      screen.getByRole('button', { name: 'first.cssproj 목록에서 제거' }),
+    );
+
+    expect(screen.queryByText('first.cssproj')).not.toBeInTheDocument();
+    expect(screen.getByText('second.cssproj')).toBeInTheDocument();
   });
 
   it('shows a general Open error without replacing the current project', async () => {

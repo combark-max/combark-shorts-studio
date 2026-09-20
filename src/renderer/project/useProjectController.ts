@@ -8,6 +8,9 @@ import type {
 } from '../../shared/project/types';
 
 const RECOVERY_AUTOSAVE_INTERVAL_MS = 30_000;
+const SAVE_SUCCESS_FEEDBACK_MS = 2_000;
+
+type ProjectSaveStatus = 'idle' | 'saving' | 'success' | 'error';
 
 export function useProjectController(initialState?: ProjectState) {
   const [state, setState] = useState<ProjectState>(
@@ -27,13 +30,27 @@ export function useProjectController(initialState?: ProjectState) {
   const [recentProjectOpenError, setRecentProjectOpenError] = useState<
     'missing' | 'open' | null
   >(null);
+  const [recentProjectRemoveError, setRecentProjectRemoveError] =
+    useState(false);
   const [projectOpenError, setProjectOpenError] = useState(false);
+  const [projectSaveStatus, setProjectSaveStatus] =
+    useState<ProjectSaveStatus>('idle');
   const stateRef = useRef(state);
   const recoveryWriteRef = useRef<Promise<void> | null>(null);
   const manualSaveInProgressCountRef = useRef(0);
   const documentGenerationRef = useRef(0);
   const saveSequenceRef = useRef(0);
+  const saveFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   stateRef.current = state;
+
+  const clearSaveFeedbackTimeout = (): void => {
+    if (saveFeedbackTimeoutRef.current) {
+      clearTimeout(saveFeedbackTimeoutRef.current);
+      saveFeedbackTimeoutRef.current = null;
+    }
+  };
 
   const replaceState = (nextState: ProjectState): void => {
     stateRef.current = nextState;
@@ -42,6 +59,8 @@ export function useProjectController(initialState?: ProjectState) {
 
   const replaceDocumentState = (nextState: ProjectState): void => {
     documentGenerationRef.current += 1;
+    clearSaveFeedbackTimeout();
+    setProjectSaveStatus('idle');
     replaceState(nextState);
   };
 
@@ -50,13 +69,13 @@ export function useProjectController(initialState?: ProjectState) {
     savedProject: ProjectState['project'],
     documentGeneration: number,
     saveSequence: number,
-  ): void => {
+  ): boolean => {
     if (
       documentGenerationRef.current !== documentGeneration ||
       saveSequenceRef.current !== saveSequence ||
       stateRef.current.project.projectId !== savedProject.projectId
     ) {
-      return;
+      return false;
     }
 
     const nextState = {
@@ -66,6 +85,39 @@ export function useProjectController(initialState?: ProjectState) {
       lastSavedAt: new Date().toISOString(),
     };
     replaceState(nextState);
+    return true;
+  };
+
+  const isCurrentSave = (
+    documentGeneration: number,
+    saveSequence: number,
+  ): boolean =>
+    documentGenerationRef.current === documentGeneration &&
+    saveSequenceRef.current === saveSequence;
+
+  const startSaveFeedback = (): void => {
+    clearSaveFeedbackTimeout();
+    setProjectSaveStatus('saving');
+  };
+
+  const finishSaveFeedback = (
+    status: 'success' | 'error',
+    documentGeneration: number,
+    saveSequence: number,
+  ): void => {
+    if (!isCurrentSave(documentGeneration, saveSequence)) {
+      return;
+    }
+
+    setProjectSaveStatus(status);
+    if (status === 'success') {
+      saveFeedbackTimeoutRef.current = setTimeout(() => {
+        if (isCurrentSave(documentGeneration, saveSequence)) {
+          setProjectSaveStatus('idle');
+        }
+        saveFeedbackTimeoutRef.current = null;
+      }, SAVE_SUCCESS_FEEDBACK_MS);
+    }
   };
 
   const deleteRecoveryAfterSave = async (projectId: string): Promise<void> => {
@@ -164,9 +216,28 @@ export function useProjectController(initialState?: ProjectState) {
     }
   };
 
+  const removeRecentProject = async (filePath: string): Promise<void> => {
+    setRecentProjectRemoveError(false);
+
+    try {
+      setRecentProjects(
+        await window.combarkDesktop.removeRecentProject(filePath),
+      );
+    } catch {
+      setRecentProjectRemoveError(true);
+    }
+  };
+
   useEffect(() => {
     void retryRecoveryList();
   }, []);
+
+  useEffect(
+    () => () => {
+      clearSaveFeedbackTimeout();
+    },
+    [],
+  );
 
   useEffect(() => {
     void retryRecentProjects();
@@ -351,9 +422,20 @@ export function useProjectController(initialState?: ProjectState) {
     const documentGeneration = documentGenerationRef.current;
     const saveSequence = ++saveSequenceRef.current;
     const project = stateRef.current.project;
-    const filePath = await window.combarkDesktop.saveProjectDialog(project.name);
+    startSaveFeedback();
+    let filePath: string | null;
+
+    try {
+      filePath = await window.combarkDesktop.saveProjectDialog(project.name);
+    } catch {
+      finishSaveFeedback('error', documentGeneration, saveSequence);
+      return;
+    }
 
     if (!filePath || documentGenerationRef.current !== documentGeneration) {
+      if (isCurrentSave(documentGeneration, saveSequence)) {
+        setProjectSaveStatus('idle');
+      }
       return;
     }
 
@@ -362,13 +444,18 @@ export function useProjectController(initialState?: ProjectState) {
     try {
       await window.combarkDesktop.writeProject(filePath, project);
       await deleteRecoveryAfterSave(project.projectId);
-      finishManualSave(
+      const saveApplied = finishManualSave(
         filePath,
         project,
         documentGeneration,
         saveSequence,
       );
       await loadRecentProjects(false);
+      if (saveApplied) {
+        finishSaveFeedback('success', documentGeneration, saveSequence);
+      }
+    } catch {
+      finishSaveFeedback('error', documentGeneration, saveSequence);
     } finally {
       manualSaveInProgressCountRef.current -= 1;
     }
@@ -384,6 +471,7 @@ export function useProjectController(initialState?: ProjectState) {
 
     const documentGeneration = documentGenerationRef.current;
     const saveSequence = ++saveSequenceRef.current;
+    startSaveFeedback();
     manualSaveInProgressCountRef.current += 1;
 
     try {
@@ -392,13 +480,18 @@ export function useProjectController(initialState?: ProjectState) {
         currentState.project,
       );
       await deleteRecoveryAfterSave(currentState.project.projectId);
-      finishManualSave(
+      const saveApplied = finishManualSave(
         currentState.filePath,
         currentState.project,
         documentGeneration,
         saveSequence,
       );
       await loadRecentProjects(false);
+      if (saveApplied) {
+        finishSaveFeedback('success', documentGeneration, saveSequence);
+      }
+    } catch {
+      finishSaveFeedback('error', documentGeneration, saveSequence);
     } finally {
       manualSaveInProgressCountRef.current -= 1;
     }
@@ -416,9 +509,12 @@ export function useProjectController(initialState?: ProjectState) {
     recentProjectsLoading,
     recentProjectsListFailed,
     recentProjectOpenError,
+    recentProjectRemoveError,
     retryRecentProjects,
     openRecentProject,
+    removeRecentProject,
     projectOpenError,
+    projectSaveStatus,
     newProject,
     importMedia,
     moveScene,

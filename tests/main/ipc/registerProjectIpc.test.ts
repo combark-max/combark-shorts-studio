@@ -75,4 +75,28 @@ describe('registerProjectIpc media import', () => {
 
     await expect(handler?.({})).resolves.toEqual([]);
   });
+
+  it.each([
+    ['C:\\audio\\voice.mp3', 'voice.mp3'],
+    ['C:\\audio\\VOICE.WAV', 'VOICE.WAV'],
+  ])('returns one supported narration file: %s', async (sourcePath, fileName) => {
+    showOpenDialog.mockResolvedValue({
+      canceled: false,
+      filePaths: [sourcePath],
+    });
+    const handler = handlers.get(IPC_CHANNELS.narrationOpenDialog);
+
+    await expect(handler?.({})).resolves.toEqual({ sourcePath, fileName });
+    expect(showOpenDialog).toHaveBeenCalledWith({
+      properties: ['openFile'],
+      filters: [{ name: '내레이션', extensions: ['mp3', 'wav'] }],
+    });
+  });
+
+  it('returns null when narration selection is cancelled', async () => {
+    showOpenDialog.mockResolvedValue({ canceled: true, filePaths: [] });
+    const handler = handlers.get(IPC_CHANNELS.narrationOpenDialog);
+
+    await expect(handler?.({})).resolves.toBeNull();
+  });
 });

@@ -7,7 +7,7 @@ export function createNewProject(
   const now = new Date().toISOString();
 
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     projectId: globalThis.crypto.randomUUID(),
     name,
     createdAt: now,
@@ -15,5 +15,6 @@ export function createNewProject(
     settings: DEFAULT_PROJECT_SETTINGS,
     media: [],
     scenes: [],
+    narration: null,
   };
 }

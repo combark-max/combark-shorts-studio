@@ -152,6 +152,12 @@ button:hover {
   color: #ffd5d8;
 }
 
+.narration-error {
+  color: #ffd5d8;
+  margin: 0;
+  text-align: center;
+}
+
 .preview-subtitle {
   background: rgba(0, 0, 0, 0.72);
   bottom: 24px;
@@ -295,6 +301,34 @@ button:hover {
 .media-kind {
   color: #aab2c0;
   font-size: 12px;
+}
+
+.media-import-controls {
+  display: grid;
+  gap: 12px;
+}
+
+.media-import-control,
+.narration-control {
+  background: #151920;
+  border: 1px solid #303641;
+  border-radius: 4px;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+
+.media-import-label {
+  color: #c9d0dc;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.narration-file-name {
+  color: #aab2c0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .recent-projects {

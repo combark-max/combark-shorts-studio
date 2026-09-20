@@ -18,6 +18,7 @@ describe('desktopApi', () => {
     expect(Object.keys(desktopApi)).toEqual([
       'getAppVersion',
       'openMediaDialog',
+      'openNarrationDialog',
       'openProjectDialog',
       'saveProjectDialog',
       'readProject',

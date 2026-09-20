@@ -2,6 +2,7 @@ import { ipcRenderer } from 'electron';
 
 import type {
   MediaAsset,
+  NarrationAsset,
   OpenRecentProjectResult,
   ProjectDocument,
   RecentProject,
@@ -14,6 +15,8 @@ export const desktopApi = {
     ipcRenderer.invoke(IPC_CHANNELS.appGetVersion),
   openMediaDialog: (): Promise<MediaAsset[]> =>
     ipcRenderer.invoke(IPC_CHANNELS.mediaOpenDialog),
+  openNarrationDialog: (): Promise<NarrationAsset | null> =>
+    ipcRenderer.invoke(IPC_CHANNELS.narrationOpenDialog),
   openProjectDialog: (): Promise<string | null> =>
     ipcRenderer.invoke(IPC_CHANNELS.projectOpenDialog),
   saveProjectDialog: (suggestedName: string): Promise<string | null> =>

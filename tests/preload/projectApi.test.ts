@@ -59,6 +59,7 @@ describe('desktopApi project methods', () => {
     expect(Object.keys(desktopApi)).toEqual([
       'getAppVersion',
       'openMediaDialog',
+      'openNarrationDialog',
       'openProjectDialog',
       'saveProjectDialog',
       'readProject',
@@ -158,5 +159,18 @@ describe('desktopApi project methods', () => {
       IPC_CHANNELS.projectRecentRemove,
       recentProject.filePath,
     );
+  });
+
+  it('invokes the narration picker channel', async () => {
+    invoke.mockResolvedValue({
+      sourcePath: 'C:\\audio\\voice.mp3',
+      fileName: 'voice.mp3',
+    });
+
+    await expect(desktopApi.openNarrationDialog()).resolves.toEqual({
+      sourcePath: 'C:\\audio\\voice.mp3',
+      fileName: 'voice.mp3',
+    });
+    expect(invoke).toHaveBeenCalledWith(IPC_CHANNELS.narrationOpenDialog);
   });
 });

@@ -18,6 +18,7 @@ export function App() {
     state,
     newProject,
     importMedia,
+    selectNarration,
     moveScene,
     deleteScene,
     updateSceneDuration,
@@ -144,10 +145,13 @@ export function App() {
       <main className="workspace">
         <MediaSidebar
           media={state.project.media}
+          narration={state.project.narration}
           onAddMedia={importMedia}
+          onSelectNarration={selectNarration}
         />
         <PreviewPanel
           media={state.project.media}
+          narration={state.project.narration}
           scenes={state.project.scenes}
           selectedMediaId={selectedMediaId}
           onSelectScene={setSelectedMediaId}

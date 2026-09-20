@@ -1,21 +1,52 @@
-import type { MediaAsset } from '../../shared/project/types';
+import type {
+  MediaAsset,
+  NarrationAsset,
+} from '../../shared/project/types';
 
 export interface MediaSidebarProps {
   media: MediaAsset[];
+  narration: NarrationAsset | null;
   onAddMedia(): Promise<void>;
+  onSelectNarration(): Promise<void>;
 }
 
-export function MediaSidebar({ media, onAddMedia }: MediaSidebarProps) {
+export function MediaSidebar({
+  media,
+  narration,
+  onAddMedia,
+  onSelectNarration,
+}: MediaSidebarProps) {
   return (
     <aside className="panel media-sidebar" aria-label="미디어">
-      <button
-        type="button"
-        onClick={() => {
-          void onAddMedia();
-        }}
-      >
-        파일 추가
-      </button>
+      <div className="media-import-controls">
+        <div className="media-import-control">
+          <span className="media-import-label">사진/영상</span>
+          <button
+            type="button"
+            onClick={() => {
+              void onAddMedia();
+            }}
+          >
+            파일 추가
+          </button>
+        </div>
+        <div className="narration-control">
+          <span className="media-import-label">내레이션</span>
+          <button
+            type="button"
+            onClick={() => {
+              void onSelectNarration();
+            }}
+          >
+            {narration
+              ? 'MP3/WAV 내레이션 교체'
+              : 'MP3/WAV 내레이션 선택'}
+          </button>
+          {narration ? (
+            <span className="narration-file-name">{narration.fileName}</span>
+          ) : null}
+        </div>
+      </div>
       {media.length === 0 ? (
         <p className="media-empty">추가된 미디어가 없습니다.</p>
       ) : (

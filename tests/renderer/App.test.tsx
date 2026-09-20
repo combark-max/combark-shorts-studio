@@ -7,6 +7,7 @@ import { createNewProject } from '../../src/shared/project/createProject';
 const desktopApi = {
   getAppVersion: vi.fn(),
   openMediaDialog: vi.fn(),
+  openNarrationDialog: vi.fn(),
   openProjectDialog: vi.fn(),
   saveProjectDialog: vi.fn(),
   readProject: vi.fn(),
@@ -21,8 +22,12 @@ const desktopApi = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(
+    () => undefined,
+  );
   desktopApi.getAppVersion.mockResolvedValue('0.1.0');
   desktopApi.openMediaDialog.mockResolvedValue([]);
+  desktopApi.openNarrationDialog.mockResolvedValue(null);
   desktopApi.listRecoveries.mockResolvedValue([]);
   desktopApi.deleteRecovery.mockResolvedValue(undefined);
   desktopApi.listRecentProjects.mockResolvedValue([]);
@@ -35,6 +40,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
 });
 
 describe('App', () => {
@@ -148,6 +154,51 @@ describe('App', () => {
     );
     expect(screen.getByText('여행 시작')).toBeInTheDocument();
     expect(screen.getByText('저장 필요')).toBeInTheDocument();
+  });
+
+  it('separates media and narration pickers while allowing narration replacement', async () => {
+    const user = userEvent.setup();
+    desktopApi.openNarrationDialog
+      .mockResolvedValueOnce({
+        sourcePath: 'C:\\audio\\voice.mp3',
+        fileName: 'voice.mp3',
+      })
+      .mockResolvedValueOnce({
+        sourcePath: 'C:\\audio\\new-voice.wav',
+        fileName: 'new-voice.wav',
+      });
+    render(<App />);
+    await screen.findByText('Combark Shorts Studio');
+
+    expect(
+      screen.getByRole('button', { name: '파일 추가' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'MP3/WAV 내레이션 선택' }),
+    ).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole('button', { name: 'MP3/WAV 내레이션 선택' }),
+    );
+    expect(desktopApi.openNarrationDialog).toHaveBeenCalledTimes(1);
+    expect(desktopApi.openMediaDialog).not.toHaveBeenCalled();
+    expect(screen.getByText('voice.mp3')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'MP3/WAV 내레이션 교체' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('저장 필요')).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole('button', { name: 'MP3/WAV 내레이션 교체' }),
+    );
+    expect(desktopApi.openNarrationDialog).toHaveBeenCalledTimes(2);
+    expect(desktopApi.openMediaDialog).not.toHaveBeenCalled();
+    expect(screen.getByText('new-voice.wav')).toBeInTheDocument();
+    expect(screen.queryByText('voice.mp3')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '파일 추가' }));
+    expect(desktopApi.openMediaDialog).toHaveBeenCalledTimes(1);
+    expect(desktopApi.openNarrationDialog).toHaveBeenCalledTimes(2);
   });
 
   it('shows media restored from an opened project', async () => {

@@ -69,6 +69,20 @@ describe('registerMediaProtocol', () => {
     );
   });
 
+  it.each(['mp3', 'wav'])('serves a supported %s narration path', async (extension) => {
+    const response = new Response('narration');
+    fetchFile.mockResolvedValue(response);
+    registerMediaProtocol();
+    const handler = handlers.get(MEDIA_PROTOCOL_SCHEME);
+
+    const result = await handler?.(
+      new Request(createMediaUrl(`C:\\audio\\voice.${extension}`)),
+    );
+
+    expect(result).toBe(response);
+    expect(fetchFile).toHaveBeenCalledOnce();
+  });
+
   it.each([
     ['non-GET request', createMediaUrl('C:\\media\\photo.jpg'), 'POST'],
     ['unexpected host', 'combark-media://other/?path=C%3A%5Cmedia%5Cphoto.jpg', 'GET'],

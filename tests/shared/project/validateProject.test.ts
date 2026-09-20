@@ -51,39 +51,82 @@ const validProjectV4 = {
   ],
 };
 
+const validProjectV5 = {
+  ...validProjectV4,
+  schemaVersion: 5,
+  narration: {
+    sourcePath: 'C:\\audio\\narration.mp3',
+    fileName: 'narration.mp3',
+  },
+};
+
 describe('validateProjectDocument', () => {
-  it('migrates a valid v1 project document to v4 with empty media and scenes', () => {
+  it('migrates a valid v1 project document to v5 with empty media, scenes, and narration', () => {
     expect(validateProjectDocument(validProjectV1)).toEqual({
       ...validProjectV1,
-      schemaVersion: 4,
+      schemaVersion: 5,
       media: [],
       scenes: [],
+      narration: null,
     });
   });
 
-  it('migrates a valid v2 project document to v4 with one scene per media asset', () => {
+  it('migrates a valid v2 project document to v5 with one scene per media asset', () => {
     expect(validateProjectDocument(validProjectV2)).toEqual({
       ...validProjectV4,
       scenes: [
         { mediaId: 'image-id', durationMs: 3000, subtitle: '' },
         { mediaId: 'video-id', durationMs: null, subtitle: '' },
       ],
+      schemaVersion: 5,
+      narration: null,
     });
   });
 
-  it('migrates a valid v3 project document to v4 with empty subtitles', () => {
+  it('migrates a valid v3 project document to v5 with empty subtitles', () => {
     expect(validateProjectDocument(validProjectV3)).toEqual({
       ...validProjectV3,
-      schemaVersion: 4,
+      schemaVersion: 5,
       scenes: [
         { mediaId: 'image-id', durationMs: 3000, subtitle: '' },
         { mediaId: 'video-id', durationMs: null, subtitle: '' },
       ],
+      narration: null,
     });
   });
 
-  it('accepts a valid v4 project document with scene subtitles', () => {
-    expect(validateProjectDocument(validProjectV4)).toEqual(validProjectV4);
+  it('migrates a valid v4 project document to v5 without narration', () => {
+    expect(validateProjectDocument(validProjectV4)).toEqual({
+      ...validProjectV4,
+      schemaVersion: 5,
+      narration: null,
+    });
+  });
+
+  it.each(['mp3', 'wav'])('accepts a valid v5 %s narration', (extension) => {
+    const project = {
+      ...validProjectV5,
+      narration: {
+        sourcePath: `C:\\audio\\voice.${extension}`,
+        fileName: `voice.${extension}`,
+      },
+    };
+
+    expect(validateProjectDocument(project)).toEqual(project);
+  });
+
+  it.each([
+    ['relative path', { sourcePath: 'voice.mp3', fileName: 'voice.mp3' }],
+    ['unsupported extension', { sourcePath: 'C:\\audio\\voice.aac', fileName: 'voice.aac' }],
+    ['missing file name', { sourcePath: 'C:\\audio\\voice.wav' }],
+    [
+      'unknown field',
+      { sourcePath: 'C:\\audio\\voice.mp3', fileName: 'voice.mp3', duration: 3 },
+    ],
+  ])('rejects v5 narration with %s', (_label, narration) => {
+    expect(() =>
+      validateProjectDocument({ ...validProjectV5, narration }),
+    ).toThrow();
   });
 
   it.each([null, [], 'project', 1, true])('rejects non-object input: %p', (value) => {
@@ -91,7 +134,7 @@ describe('validateProjectDocument', () => {
   });
 
   it.each([
-    ['schemaVersion', { schemaVersion: 5 }],
+    ['schemaVersion', { schemaVersion: 6 }],
     ['projectId missing', { projectId: undefined }],
     ['projectId empty', { projectId: '' }],
     ['name missing', { name: undefined }],

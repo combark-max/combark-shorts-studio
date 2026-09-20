@@ -1,27 +1,39 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { createMediaUrl } from '../../shared/mediaProtocol';
-import type { MediaAsset, Scene } from '../../shared/project/types';
+import type {
+  MediaAsset,
+  NarrationAsset,
+  Scene,
+} from '../../shared/project/types';
 
 interface PreviewPanelProps {
   media: MediaAsset[];
+  narration: NarrationAsset | null;
   scenes: Scene[];
   selectedMediaId: string | null;
   onSelectScene: (mediaId: string) => void;
 }
 
 type MediaError = 'load' | 'play' | null;
+type NarrationError = 'load' | 'play' | null;
 
 export function PreviewPanel({
   media,
+  narration,
   scenes,
   selectedMediaId,
   onSelectScene,
 }: PreviewPanelProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [mediaError, setMediaError] = useState<MediaError>(null);
+  const [narrationError, setNarrationError] =
+    useState<NarrationError>(null);
+  const [narrationEnded, setNarrationEnded] = useState(false);
+  const [playbackRestartToken, setPlaybackRestartToken] = useState(0);
   const remainingImageMsRef = useRef(0);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const currentIndex = scenes.findIndex(
     (scene) => scene.mediaId === selectedMediaId,
@@ -35,9 +47,19 @@ export function PreviewPanel({
 
     if (!currentScene || !currentAsset) {
       videoRef.current?.pause();
+      audioRef.current?.pause();
       setIsPlaying(false);
     }
   }, [currentAsset, currentScene?.durationMs, currentScene?.mediaId]);
+
+  useEffect(() => {
+    setNarrationError(null);
+    setNarrationEnded(false);
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+  }, [narration?.sourcePath]);
 
   useEffect(() => {
     if (
@@ -62,6 +84,7 @@ export function PreviewPanel({
       if (nextScene) {
         onSelectScene(nextScene.mediaId);
       } else {
+        audioRef.current?.pause();
         setIsPlaying(false);
       }
     }, remainingImageMsRef.current);
@@ -83,6 +106,7 @@ export function PreviewPanel({
     isPlaying,
     mediaError,
     onSelectScene,
+    playbackRestartToken,
     scenes,
   ]);
 
@@ -94,6 +118,7 @@ export function PreviewPanel({
     let active = true;
     void videoRef.current.play().catch(() => {
       if (active) {
+        audioRef.current?.pause();
         setMediaError('play');
         setIsPlaying(false);
       }
@@ -102,7 +127,41 @@ export function PreviewPanel({
     return () => {
       active = false;
     };
-  }, [currentAsset?.kind, selectedMediaId, isPlaying]);
+  }, [
+    currentAsset?.kind,
+    selectedMediaId,
+    isPlaying,
+    playbackRestartToken,
+  ]);
+
+  useEffect(() => {
+    if (
+      !isPlaying ||
+      !narration ||
+      narrationError ||
+      narrationEnded ||
+      !audioRef.current
+    ) {
+      return;
+    }
+
+    let active = true;
+    void audioRef.current.play().catch(() => {
+      if (active) {
+        setNarrationError('play');
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [
+    isPlaying,
+    narration,
+    narrationEnded,
+    narrationError,
+    playbackRestartToken,
+  ]);
 
   const selectScene = (index: number): void => {
     if (index < 0 || index >= scenes.length) {
@@ -112,6 +171,7 @@ export function PreviewPanel({
     if (isPlaying && currentAsset?.kind === 'video') {
       videoRef.current?.pause();
     }
+    audioRef.current?.pause();
     setIsPlaying(false);
     onSelectScene(scenes[index].mediaId);
   };
@@ -125,6 +185,7 @@ export function PreviewPanel({
       if (currentAsset.kind === 'video') {
         videoRef.current?.pause();
       }
+      audioRef.current?.pause();
       setIsPlaying(false);
       return;
     }
@@ -137,13 +198,39 @@ export function PreviewPanel({
     if (nextScene) {
       onSelectScene(nextScene.mediaId);
     } else {
+      audioRef.current?.pause();
       setIsPlaying(false);
     }
   };
 
   const handleLoadError = (): void => {
+    audioRef.current?.pause();
     setMediaError('load');
     setIsPlaying(false);
+  };
+
+  const restartPlayback = (): void => {
+    const firstScene = scenes[0];
+    const firstAsset = media.find(({ id }) => id === firstScene?.mediaId);
+    if (!firstScene || !firstAsset) {
+      return;
+    }
+
+    if (videoRef.current) {
+      videoRef.current.pause();
+      videoRef.current.currentTime = 0;
+    }
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+    remainingImageMsRef.current = 0;
+    setMediaError(null);
+    setNarrationError(null);
+    setNarrationEnded(false);
+    onSelectScene(firstScene.mediaId);
+    setPlaybackRestartToken((token) => token + 1);
+    setIsPlaying(true);
   };
 
   return (
@@ -180,7 +267,31 @@ export function PreviewPanel({
           <p className="preview-subtitle">{currentScene.subtitle}</p>
         ) : null}
       </div>
+      {narration ? (
+        <audio
+          aria-label="내레이션"
+          onEnded={() => setNarrationEnded(true)}
+          onError={() => setNarrationError('load')}
+          preload="metadata"
+          ref={audioRef}
+          src={createMediaUrl(narration.sourcePath)}
+        />
+      ) : null}
+      {narrationError ? (
+        <p className="narration-error" role="alert">
+          {narrationError === 'play'
+            ? '내레이션을 재생하지 못했습니다.'
+            : '내레이션을 불러오지 못했습니다.'}
+        </p>
+      ) : null}
       <div className="preview-controls">
+        <button
+          type="button"
+          disabled={scenes.length === 0}
+          onClick={restartPlayback}
+        >
+          처음부터
+        </button>
         <button
           type="button"
           disabled={currentIndex <= 0}

@@ -302,6 +302,25 @@ export function useProjectController(initialState?: ProjectState) {
     });
   };
 
+  const selectNarration = async (): Promise<void> => {
+    const narration = await window.combarkDesktop.openNarrationDialog();
+
+    if (!narration) {
+      return;
+    }
+
+    const currentState = stateRef.current;
+    replaceState({
+      ...currentState,
+      project: {
+        ...currentState.project,
+        updatedAt: new Date().toISOString(),
+        narration,
+      },
+      dirty: true,
+    });
+  };
+
   const moveScene = (mediaId: string, direction: 'up' | 'down'): void => {
     const currentState = stateRef.current;
     const currentIndex = currentState.project.scenes.findIndex(
@@ -546,6 +565,7 @@ export function useProjectController(initialState?: ProjectState) {
     projectSaveStatus,
     newProject,
     importMedia,
+    selectNarration,
     moveScene,
     deleteScene,
     updateSceneDuration,

@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { createNewProject } from '../../../src/shared/project/createProject';
 
 describe('createNewProject', () => {
-  it('creates a v4 project document with empty media and scene lists', () => {
+  it('creates a v5 project document without media, scenes, or narration', () => {
     const project = createNewProject();
 
-    expect(project.schemaVersion).toBe(4);
+    expect(project.schemaVersion).toBe(5);
     expect(project.projectId).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
     );
@@ -19,6 +19,7 @@ describe('createNewProject', () => {
 
     expect(project.media).toEqual([]);
     expect(project.scenes).toEqual([]);
+    expect(project.narration).toBeNull();
     expect(project).not.toHaveProperty('timeline');
     expect(project).not.toHaveProperty('tracks');
     expect(project).not.toHaveProperty('clips');

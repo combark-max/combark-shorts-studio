@@ -1,9 +1,10 @@
 import type {
   MediaAsset,
+  NarrationAsset,
   ProjectDocument,
   Scene,
 } from './types';
-import { getMediaKind } from './media';
+import { getMediaKind, isSupportedNarrationPath } from './media';
 
 const INVALID_PROJECT_MESSAGE = '유효하지 않은 프로젝트 파일입니다.';
 
@@ -19,11 +20,13 @@ const PROJECT_V1_KEYS = [
 const PROJECT_V2_KEYS = [...PROJECT_V1_KEYS, 'media'] as const;
 const PROJECT_V3_KEYS = [...PROJECT_V2_KEYS, 'scenes'] as const;
 const PROJECT_V4_KEYS = PROJECT_V3_KEYS;
+const PROJECT_V5_KEYS = [...PROJECT_V4_KEYS, 'narration'] as const;
 
 const SETTINGS_KEYS = ['width', 'height', 'fps'] as const;
 const MEDIA_KEYS = ['id', 'kind', 'sourcePath', 'fileName'] as const;
 const SCENE_V3_KEYS = ['mediaId', 'durationMs'] as const;
 const SCENE_V4_KEYS = [...SCENE_V3_KEYS, 'subtitle'] as const;
+const NARRATION_KEYS = ['sourcePath', 'fileName'] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -48,16 +51,19 @@ export function validateProjectDocument(
   const isV2 = value.schemaVersion === 2;
   const isV3 = value.schemaVersion === 3;
   const isV4 = value.schemaVersion === 4;
+  const isV5 = value.schemaVersion === 5;
   const projectKeys = isV1
     ? PROJECT_V1_KEYS
     : isV2
       ? PROJECT_V2_KEYS
       : isV3
         ? PROJECT_V3_KEYS
-        : PROJECT_V4_KEYS;
+        : isV4
+          ? PROJECT_V4_KEYS
+          : PROJECT_V5_KEYS;
 
   if (
-    (!isV1 && !isV2 && !isV3 && !isV4) ||
+    (!isV1 && !isV2 && !isV3 && !isV4 && !isV5) ||
     !hasExactKeys(value, projectKeys)
   ) {
     throw new Error(INVALID_PROJECT_MESSAGE);
@@ -85,7 +91,7 @@ export function validateProjectDocument(
 
   let media: MediaAsset[] = [];
 
-  if (isV2 || isV3 || isV4) {
+  if (isV2 || isV3 || isV4 || isV5) {
     if (!Array.isArray(value.media)) {
       throw new Error(INVALID_PROJECT_MESSAGE);
     }
@@ -121,7 +127,7 @@ export function validateProjectDocument(
 
   let scenes: Scene[];
 
-  if (isV3 || isV4) {
+  if (isV3 || isV4 || isV5) {
     if (!Array.isArray(value.scenes)) {
       throw new Error(INVALID_PROJECT_MESSAGE);
     }
@@ -132,11 +138,11 @@ export function validateProjectDocument(
     scenes = value.scenes.map((scene): Scene => {
       if (
         !isRecord(scene) ||
-        !hasExactKeys(scene, isV4 ? SCENE_V4_KEYS : SCENE_V3_KEYS) ||
+        !hasExactKeys(scene, isV4 || isV5 ? SCENE_V4_KEYS : SCENE_V3_KEYS) ||
         typeof scene.mediaId !== 'string' ||
         scene.mediaId.length === 0 ||
         sceneMediaIds.has(scene.mediaId) ||
-        (isV4 && typeof scene.subtitle !== 'string')
+        ((isV4 || isV5) && typeof scene.subtitle !== 'string')
       ) {
         throw new Error(INVALID_PROJECT_MESSAGE);
       }
@@ -159,7 +165,7 @@ export function validateProjectDocument(
       return {
         mediaId: scene.mediaId,
         durationMs: scene.durationMs as number | null,
-        subtitle: isV4 ? (scene.subtitle as string) : '',
+        subtitle: isV4 || isV5 ? (scene.subtitle as string) : '',
       };
     });
   } else if (isV2) {
@@ -172,8 +178,29 @@ export function validateProjectDocument(
     scenes = [];
   }
 
+  let narration: NarrationAsset | null = null;
+
+  if (isV5 && value.narration !== null) {
+    if (
+      !isRecord(value.narration) ||
+      !hasExactKeys(value.narration, NARRATION_KEYS) ||
+      typeof value.narration.sourcePath !== 'string' ||
+      !isAbsoluteWindowsPath(value.narration.sourcePath) ||
+      !isSupportedNarrationPath(value.narration.sourcePath) ||
+      typeof value.narration.fileName !== 'string' ||
+      value.narration.fileName.length === 0
+    ) {
+      throw new Error(INVALID_PROJECT_MESSAGE);
+    }
+
+    narration = {
+      sourcePath: value.narration.sourcePath,
+      fileName: value.narration.fileName,
+    };
+  }
+
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     projectId: value.projectId,
     name: value.name,
     createdAt: value.createdAt,
@@ -185,5 +212,6 @@ export function validateProjectDocument(
     },
     media,
     scenes,
+    narration,
   };
 }

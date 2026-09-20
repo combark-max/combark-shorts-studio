@@ -16,9 +16,13 @@ import {
   removeRecentProject,
 } from '../project/recentProjectStorage';
 import { ensureProjectExtension } from '../../shared/project/path';
-import { getMediaKind } from '../../shared/project/media';
+import {
+  getMediaKind,
+  isSupportedNarrationPath,
+} from '../../shared/project/media';
 import type {
   MediaAsset,
+  NarrationAsset,
   ProjectDocument,
 } from '../../shared/project/types';
 import { IPC_CHANNELS } from '../../shared/ipc';
@@ -33,6 +37,11 @@ const mediaFileFilter = {
   extensions: ['jpg', 'jpeg', 'png', 'webp', 'mp4'],
 };
 
+const narrationFileFilter = {
+  name: '내레이션',
+  extensions: ['mp3', 'wav'],
+};
+
 function createMediaAsset(filePath: string): MediaAsset | null {
   const kind = getMediaKind(filePath);
 
@@ -43,6 +52,17 @@ function createMediaAsset(filePath: string): MediaAsset | null {
   return {
     id: randomUUID(),
     kind,
+    sourcePath: filePath,
+    fileName: basename(filePath),
+  };
+}
+
+function createNarrationAsset(filePath: string): NarrationAsset | null {
+  if (!isSupportedNarrationPath(filePath)) {
+    return null;
+  }
+
+  return {
     sourcePath: filePath,
     fileName: basename(filePath),
   };
@@ -61,6 +81,20 @@ export function registerProjectIpc(): void {
       : result.filePaths
           .map(createMediaAsset)
           .filter((asset): asset is MediaAsset => asset !== null);
+  });
+
+  ipcMain.removeHandler(IPC_CHANNELS.narrationOpenDialog);
+  ipcMain.handle(IPC_CHANNELS.narrationOpenDialog, async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      filters: [narrationFileFilter],
+    });
+
+    if (result.canceled || !result.filePaths[0]) {
+      return null;
+    }
+
+    return createNarrationAsset(result.filePaths[0]);
   });
 
   ipcMain.removeHandler(IPC_CHANNELS.projectOpenDialog);

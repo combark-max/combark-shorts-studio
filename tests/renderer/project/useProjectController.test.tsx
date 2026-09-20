@@ -11,6 +11,7 @@ import type {
 const desktopApi = {
   getAppVersion: vi.fn(),
   openMediaDialog: vi.fn(),
+  openNarrationDialog: vi.fn(),
   openProjectDialog: vi.fn(),
   saveProjectDialog: vi.fn(),
   readProject: vi.fn(),
@@ -27,6 +28,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   desktopApi.writeRecovery.mockResolvedValue(undefined);
   desktopApi.openMediaDialog.mockResolvedValue([]);
+  desktopApi.openNarrationDialog.mockResolvedValue(null);
   desktopApi.deleteRecovery.mockResolvedValue(undefined);
   desktopApi.listRecoveries.mockResolvedValue([]);
   desktopApi.listRecentProjects.mockResolvedValue([]);
@@ -189,6 +191,57 @@ describe('useProjectController', () => {
     expect(result.current.state.project.updatedAt).not.toBe(
       initialState.project.updatedAt,
     );
+  });
+
+  it('selects and replaces one narration while updating project edit state', async () => {
+    desktopApi.openNarrationDialog
+      .mockResolvedValueOnce({
+        sourcePath: 'C:\\audio\\first.mp3',
+        fileName: 'first.mp3',
+      })
+      .mockResolvedValueOnce({
+        sourcePath: 'C:\\audio\\replacement.wav',
+        fileName: 'replacement.wav',
+      });
+    const initialState = createState({
+      dirty: false,
+      project: {
+        ...createNewProject('narration project'),
+        updatedAt: '2026-09-19T00:00:00.000Z',
+      },
+    });
+    const { result } = renderHook(() => useProjectController(initialState));
+
+    await act(async () => {
+      await result.current.selectNarration();
+    });
+    expect(result.current.state.project.narration).toEqual({
+      sourcePath: 'C:\\audio\\first.mp3',
+      fileName: 'first.mp3',
+    });
+    expect(result.current.state.dirty).toBe(true);
+    expect(result.current.state.project.updatedAt).not.toBe(
+      initialState.project.updatedAt,
+    );
+
+    await act(async () => {
+      await result.current.selectNarration();
+    });
+    expect(result.current.state.project.narration).toEqual({
+      sourcePath: 'C:\\audio\\replacement.wav',
+      fileName: 'replacement.wav',
+    });
+  });
+
+  it('leaves the project unchanged when narration selection is cancelled', async () => {
+    const { result } = renderHook(() => useProjectController());
+    const initialState = result.current.state;
+
+    await act(async () => {
+      await result.current.selectNarration();
+    });
+
+    expect(result.current.state).toBe(initialState);
   });
 
   it('does not change state when moving a scene beyond either boundary', () => {

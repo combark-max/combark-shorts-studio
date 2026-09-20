@@ -3,7 +3,10 @@ import { pathToFileURL } from 'node:url';
 import { net, protocol } from 'electron';
 
 import { MEDIA_PROTOCOL_SCHEME } from '../../shared/mediaProtocol';
-import { getMediaKind } from '../../shared/project/media';
+import {
+  getMediaKind,
+  isSupportedNarrationPath,
+} from '../../shared/project/media';
 
 function isAbsoluteWindowsPath(value: string): boolean {
   return /^[A-Za-z]:[\\/]/.test(value) || value.startsWith('\\\\');
@@ -38,7 +41,8 @@ export function registerMediaProtocol(): void {
       url.host !== 'local' ||
       !sourcePath ||
       !isAbsoluteWindowsPath(sourcePath) ||
-      !getMediaKind(sourcePath)
+      !getMediaKind(sourcePath) &&
+      !isSupportedNarrationPath(sourcePath)
     ) {
       return new Response(null, { status: 400 });
     }

@@ -61,7 +61,24 @@ export interface ProjectDocumentV4 {
   scenes: Scene[];
 }
 
-export type ProjectDocument = ProjectDocumentV4;
+export interface NarrationAsset {
+  sourcePath: string;
+  fileName: string;
+}
+
+export interface ProjectDocumentV5 {
+  schemaVersion: 5;
+  projectId: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  settings: ProjectSettings;
+  media: MediaAsset[];
+  scenes: Scene[];
+  narration: NarrationAsset | null;
+}
+
+export type ProjectDocument = ProjectDocumentV5;
 
 export interface RecoveryCandidate {
   projectId: string;

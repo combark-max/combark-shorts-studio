@@ -64,9 +64,135 @@ describe('TimelineShell', () => {
     expect(within(items[1]).getByText('2')).toBeInTheDocument();
     expect(within(items[1]).getByText('clip.mp4')).toBeInTheDocument();
     expect(within(items[1]).getByText('영상')).toBeInTheDocument();
-    expect(within(items[1]).getByText('길이 미확인')).toBeInTheDocument();
+    expect(within(items[1]).getByText('길이 확인 중...')).toBeInTheDocument();
     expect(within(items[1]).queryByRole('spinbutton')).not.toBeInTheDocument();
     expect(within(items[1]).getByRole('button', { name: '아래' })).toBeDisabled();
+  });
+
+  it('renders image and video thumbnails from combark-media URLs', () => {
+    const { container } = render(
+      <TimelineShell
+        media={media}
+        scenes={scenes}
+        selectedMediaId="photo-id"
+        onSelectScene={vi.fn()}
+        onMoveScene={vi.fn()}
+        onDeleteScene={vi.fn()}
+        onUpdateSceneDuration={vi.fn()}
+        onUpdateSceneSubtitle={vi.fn()}
+      />,
+    );
+
+    const image = container.querySelector('img');
+    const video = container.querySelector('video');
+
+    expect(image).toHaveAttribute(
+      'src',
+      'combark-media://local/?path=C%3A%5Cmedia%5Cphoto.jpg',
+    );
+    expect(video).toHaveAttribute(
+      'src',
+      'combark-media://local/?path=C%3A%5Cmedia%5Cclip.mp4',
+    );
+    expect(video).toHaveAttribute('preload', 'metadata');
+    expect(video).not.toHaveAttribute('controls');
+    expect(video).not.toHaveAttribute('autoplay');
+    expect(video).toHaveProperty('muted', true);
+    expect(video).toHaveProperty('playsInline', true);
+  });
+
+  it.each([
+    [23, '00:23'],
+    [72, '01:12'],
+  ])('shows a %s second video duration as %s', (duration, expected) => {
+    const { container } = render(
+      <TimelineShell
+        media={media}
+        scenes={scenes}
+        selectedMediaId="video-id"
+        onSelectScene={vi.fn()}
+        onMoveScene={vi.fn()}
+        onDeleteScene={vi.fn()}
+        onUpdateSceneDuration={vi.fn()}
+        onUpdateSceneSubtitle={vi.fn()}
+      />,
+    );
+    const video = container.querySelector('video') as HTMLVideoElement;
+    Object.defineProperty(video, 'duration', { configurable: true, value: duration });
+
+    fireEvent.loadedMetadata(video);
+
+    expect(screen.getByText(expected)).toBeInTheDocument();
+  });
+
+  it.each([0, Number.POSITIVE_INFINITY, Number.NaN])(
+    'shows an unavailable duration for invalid metadata duration %s',
+    (duration) => {
+      const { container } = render(
+        <TimelineShell
+          media={media}
+          scenes={scenes}
+          selectedMediaId="video-id"
+          onSelectScene={vi.fn()}
+          onMoveScene={vi.fn()}
+          onDeleteScene={vi.fn()}
+          onUpdateSceneDuration={vi.fn()}
+          onUpdateSceneSubtitle={vi.fn()}
+        />,
+      );
+      const video = container.querySelector('video') as HTMLVideoElement;
+      Object.defineProperty(video, 'duration', { configurable: true, value: duration });
+
+      fireEvent.loadedMetadata(video);
+
+      expect(screen.getByText('길이 확인 불가')).toBeInTheDocument();
+    },
+  );
+
+  it('shows an unavailable duration when video metadata loading fails', () => {
+    const { container } = render(
+      <TimelineShell
+        media={media}
+        scenes={scenes}
+        selectedMediaId="video-id"
+        onSelectScene={vi.fn()}
+        onMoveScene={vi.fn()}
+        onDeleteScene={vi.fn()}
+        onUpdateSceneDuration={vi.fn()}
+        onUpdateSceneSubtitle={vi.fn()}
+      />,
+    );
+
+    fireEvent.error(container.querySelector('video') as HTMLVideoElement);
+
+    expect(screen.getByText('길이 확인 불가')).toBeInTheDocument();
+  });
+
+  it('keeps a valid duration when seeking the thumbnail frame fails', () => {
+    const { container } = render(
+      <TimelineShell
+        media={media}
+        scenes={scenes}
+        selectedMediaId="video-id"
+        onSelectScene={vi.fn()}
+        onMoveScene={vi.fn()}
+        onDeleteScene={vi.fn()}
+        onUpdateSceneDuration={vi.fn()}
+        onUpdateSceneSubtitle={vi.fn()}
+      />,
+    );
+    const video = container.querySelector('video') as HTMLVideoElement;
+    Object.defineProperty(video, 'duration', { configurable: true, value: 23 });
+    Object.defineProperty(video, 'currentTime', {
+      configurable: true,
+      set: () => {
+        throw new Error('seek failed');
+      },
+    });
+
+    fireEvent.loadedMetadata(video);
+
+    expect(screen.getByText('00:23')).toBeInTheDocument();
   });
 
   it('forwards move, file removal, duration, and subtitle changes', async () => {

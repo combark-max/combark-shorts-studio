@@ -341,6 +341,47 @@ describe('useProjectController', () => {
     expect(result.current.state).toBe(initialState);
   });
 
+  it('removes narration and marks the project as edited', () => {
+    const initialState = createState({
+      dirty: false,
+      project: {
+        ...createNewProject('narration project'),
+        updatedAt: '2026-09-19T00:00:00.000Z',
+        narration: {
+          sourcePath: 'C:\\audio\\voice.mp3',
+          fileName: 'voice.mp3',
+        },
+      },
+    });
+    const { result } = renderHook(() => useProjectController(initialState));
+
+    act(() => {
+      result.current.removeNarration();
+    });
+
+    expect(result.current.state.project.narration).toBeNull();
+    expect(result.current.state.dirty).toBe(true);
+    expect(result.current.state.project.updatedAt).not.toBe(
+      initialState.project.updatedAt,
+    );
+  });
+
+  it('keeps the same state when narration is already absent', () => {
+    const initialState = createState({ dirty: false });
+    const { result } = renderHook(() => useProjectController(initialState));
+    const stateBeforeRemoval = result.current.state;
+
+    act(() => {
+      result.current.removeNarration();
+    });
+
+    expect(result.current.state).toBe(stateBeforeRemoval);
+    expect(result.current.state.dirty).toBe(false);
+    expect(result.current.state.project.updatedAt).toBe(
+      initialState.project.updatedAt,
+    );
+  });
+
   it('does not change state when moving a scene beyond either boundary', () => {
     const initialState = createSceneState();
     const { result } = renderHook(() => useProjectController(initialState));

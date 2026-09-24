@@ -330,6 +330,24 @@ export function useProjectController(initialState?: ProjectState) {
     });
   };
 
+  const removeNarration = (): void => {
+    const currentState = stateRef.current;
+
+    if (!currentState.project.narration) {
+      return;
+    }
+
+    replaceState({
+      ...currentState,
+      project: {
+        ...currentState.project,
+        updatedAt: new Date().toISOString(),
+        narration: null,
+      },
+      dirty: true,
+    });
+  };
+
   const moveScene = (mediaId: string, direction: 'up' | 'down'): void => {
     const currentState = stateRef.current;
     const currentIndex = currentState.project.scenes.findIndex(
@@ -608,6 +626,7 @@ export function useProjectController(initialState?: ProjectState) {
     newProject,
     importMedia,
     selectNarration,
+    removeNarration,
     moveScene,
     deleteScene,
     updateSceneDuration,

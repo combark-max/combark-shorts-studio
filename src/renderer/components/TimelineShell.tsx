@@ -1,3 +1,6 @@
+import { useState } from 'react';
+
+import { createMediaUrl } from '../../shared/mediaProtocol';
 import type { MediaAsset, Scene } from '../../shared/project/types';
 
 interface TimelineShellProps {
@@ -11,6 +14,15 @@ interface TimelineShellProps {
   onUpdateSceneSubtitle: (mediaId: string, subtitle: string) => void;
 }
 
+type VideoDurations = Record<string, number | null>;
+
+function formatDuration(durationSeconds: number): string {
+  const minutes = Math.floor(durationSeconds / 60);
+  const seconds = durationSeconds % 60;
+
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
 export function TimelineShell({
   media,
   scenes,
@@ -21,6 +33,25 @@ export function TimelineShell({
   onUpdateSceneDuration,
   onUpdateSceneSubtitle,
 }: TimelineShellProps) {
+  const [videoDurations, setVideoDurations] = useState<VideoDurations>({});
+
+  const updateVideoDuration = (mediaId: string, duration: number): void => {
+    const durationSeconds =
+      Number.isFinite(duration) && duration > 0 ? Math.floor(duration) : null;
+    setVideoDurations((currentDurations) => ({
+      ...currentDurations,
+      [mediaId]: durationSeconds,
+    }));
+  };
+
+  const markVideoDurationUnavailable = (mediaId: string): void => {
+    setVideoDurations((currentDurations) =>
+      Object.prototype.hasOwnProperty.call(currentDurations, mediaId)
+        ? currentDurations
+        : { ...currentDurations, [mediaId]: null },
+    );
+  };
+
   return (
     <section className="timeline-shell" aria-labelledby="timeline-heading">
       <h2 id="timeline-heading">장면 목록</h2>
@@ -51,6 +82,37 @@ export function TimelineShell({
                   type="button"
                   onClick={() => onSelectScene(scene.mediaId)}
                 >
+                  <span className="scene-thumbnail" aria-hidden="true">
+                    {asset.kind === 'image' ? (
+                      <img
+                        alt=""
+                        src={createMediaUrl(asset.sourcePath)}
+                      />
+                    ) : (
+                      <video
+                        muted
+                        playsInline
+                        preload="metadata"
+                        src={createMediaUrl(asset.sourcePath)}
+                        onError={() => markVideoDurationUnavailable(asset.id)}
+                        onLoadedMetadata={(event) => {
+                          const { duration } = event.currentTarget;
+                          updateVideoDuration(asset.id, duration);
+
+                          if (Number.isFinite(duration) && duration > 0) {
+                            try {
+                              event.currentTarget.currentTime = Math.min(
+                                0.01,
+                                duration / 2,
+                              );
+                            } catch {
+                              // Duration remains usable when thumbnail seeking fails.
+                            }
+                          }
+                        }}
+                      />
+                    )}
+                  </span>
                   <span className="scene-number">{index + 1}</span>
                   <span className="scene-name">{asset.fileName}</span>
                   <span className="scene-kind">
@@ -77,7 +139,16 @@ export function TimelineShell({
                       />
                     </label>
                   ) : (
-                    <span>길이 미확인</span>
+                    <span>
+                      {!Object.prototype.hasOwnProperty.call(
+                        videoDurations,
+                        asset.id,
+                      )
+                        ? '길이 확인 중...'
+                        : videoDurations[asset.id] === null
+                          ? '길이 확인 불가'
+                          : formatDuration(videoDurations[asset.id])}
+                    </span>
                   )}
                 </div>
                 <label className="scene-subtitle">

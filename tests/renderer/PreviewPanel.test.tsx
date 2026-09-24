@@ -74,6 +74,59 @@ afterEach(() => {
 });
 
 describe('PreviewPanel', () => {
+  it('guides an empty project to add an image or video', () => {
+    render(
+      <PreviewPanel
+        media={[]}
+        narration={null}
+        scenes={[]}
+        selectedMediaId={null}
+        onSelectScene={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByText('사진 또는 영상을 추가하면 편집을 시작할 수 있습니다.'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '처음부터' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '이전' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '재생' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '다음' })).toBeDisabled();
+  });
+
+  it('guides a narration-only project to add an image or video', () => {
+    render(
+      <PreviewPanel
+        media={[]}
+        narration={narration}
+        scenes={[]}
+        selectedMediaId={null}
+        onSelectScene={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        '내레이션은 선택되어 있습니다. 미리보려면 사진 또는 영상을 추가하세요.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '재생' })).toBeDisabled();
+  });
+
+  it('keeps the generic empty message when the selected scene is missing', () => {
+    render(
+      <PreviewPanel
+        media={media}
+        narration={null}
+        scenes={scenes}
+        selectedMediaId="missing"
+        onSelectScene={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('미리볼 장면이 없습니다.')).toBeInTheDocument();
+  });
+
   it('renders the scene selected by its parent', () => {
     render(
       <PreviewPanel

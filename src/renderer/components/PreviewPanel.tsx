@@ -238,7 +238,13 @@ export function PreviewPanel({
       <h2 id="preview-heading">미리보기</h2>
       <div className="preview-frame">
         {!currentScene || !currentAsset ? (
-          <p className="preview-empty">미리볼 장면이 없습니다.</p>
+          <p className="preview-empty">
+            {scenes.length === 0
+              ? narration
+                ? '내레이션은 선택되어 있습니다. 미리보려면 사진 또는 영상을 추가하세요.'
+                : '사진 또는 영상을 추가하면 편집을 시작할 수 있습니다.'
+              : '미리볼 장면이 없습니다.'}
+          </p>
         ) : mediaError ? (
           <p className="preview-error" role="alert">
             {mediaError === 'play'

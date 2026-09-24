@@ -7,6 +7,7 @@ export interface MediaSidebarProps {
   media: MediaAsset[];
   narration: NarrationAsset | null;
   onAddMedia(): Promise<void>;
+  onRemoveNarration(): void;
   onSelectNarration(): Promise<void>;
 }
 
@@ -14,6 +15,7 @@ export function MediaSidebar({
   media,
   narration,
   onAddMedia,
+  onRemoveNarration,
   onSelectNarration,
 }: MediaSidebarProps) {
   return (
@@ -43,7 +45,12 @@ export function MediaSidebar({
               : 'MP3/WAV 내레이션 선택'}
           </button>
           {narration ? (
-            <span className="narration-file-name">{narration.fileName}</span>
+            <>
+              <span className="narration-file-name">{narration.fileName}</span>
+              <button type="button" onClick={onRemoveNarration}>
+                내레이션 제거
+              </button>
+            </>
           ) : null}
         </div>
       </div>

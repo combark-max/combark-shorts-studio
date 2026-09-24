@@ -181,6 +181,15 @@ button:hover {
   justify-content: center;
 }
 
+.preview-controls button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.preview-controls button:disabled:hover {
+  background: #20252e;
+}
+
 .properties-panel p {
   color: #aab2c0;
   line-height: 1.5;
@@ -224,10 +233,30 @@ button:hover {
   align-items: center;
   display: grid;
   gap: 12px;
-  grid-template-columns: 32px minmax(120px, 1fr) 64px;
+  grid-template-columns: 48px 32px minmax(120px, 1fr) 64px;
   min-width: 0;
   padding: 6px 8px;
   text-align: left;
+}
+
+.scene-thumbnail {
+  align-items: center;
+  background: #111318;
+  border-radius: 3px;
+  display: flex;
+  height: 32px;
+  justify-content: center;
+  overflow: hidden;
+  pointer-events: none;
+  width: 48px;
+}
+
+.scene-thumbnail img,
+.scene-thumbnail video {
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+  width: 100%;
 }
 
 .scene-number,

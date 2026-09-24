@@ -40,6 +40,7 @@ export function App() {
     newProject,
     importMedia,
     selectNarration,
+    removeNarration,
     moveScene,
     deleteScene,
     updateSceneDuration,
@@ -198,6 +199,7 @@ export function App() {
           media={state.project.media}
           narration={state.project.narration}
           onAddMedia={importMedia}
+          onRemoveNarration={removeNarration}
           onSelectNarration={selectNarration}
         />
         <PreviewPanel

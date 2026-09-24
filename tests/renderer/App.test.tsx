@@ -266,6 +266,17 @@ describe('App', () => {
     expect(desktopApi.openMediaDialog).not.toHaveBeenCalled();
     expect(screen.getByText('new-voice.wav')).toBeInTheDocument();
     expect(screen.queryByText('voice.mp3')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('내레이션')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: '내레이션 제거' }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '내레이션 제거' }));
+    expect(screen.queryByText('new-voice.wav')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('내레이션')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: '내레이션 제거' }),
+    ).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '파일 추가' }));
     expect(desktopApi.openMediaDialog).toHaveBeenCalledTimes(1);

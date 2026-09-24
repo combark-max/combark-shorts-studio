@@ -43,20 +43,22 @@ const narration: NarrationAsset = {
 
 function StatefulPreview({
   narrationAsset = null,
-  initialMediaId = 'first-image',
+  initialSceneIndex = 0,
+  sceneList = scenes,
 }: {
   narrationAsset?: NarrationAsset | null;
-  initialMediaId?: string;
+  initialSceneIndex?: number;
+  sceneList?: Scene[];
 }) {
-  const [selectedMediaId, setSelectedMediaId] = useState(initialMediaId);
+  const [selectedSceneIndex, setSelectedSceneIndex] = useState(initialSceneIndex);
 
   return (
     <PreviewPanel
       media={media}
       narration={narrationAsset}
-      scenes={scenes}
-      selectedMediaId={selectedMediaId}
-      onSelectScene={setSelectedMediaId}
+      scenes={sceneList}
+      selectedSceneIndex={selectedSceneIndex}
+      onSelectScene={setSelectedSceneIndex}
     />
   );
 }
@@ -80,7 +82,7 @@ describe('PreviewPanel', () => {
         media={[]}
         narration={null}
         scenes={[]}
-        selectedMediaId={null}
+        selectedSceneIndex={null}
         onSelectScene={vi.fn()}
       />,
     );
@@ -100,7 +102,7 @@ describe('PreviewPanel', () => {
         media={[]}
         narration={narration}
         scenes={[]}
-        selectedMediaId={null}
+        selectedSceneIndex={null}
         onSelectScene={vi.fn()}
       />,
     );
@@ -119,7 +121,7 @@ describe('PreviewPanel', () => {
         media={media}
         narration={null}
         scenes={scenes}
-        selectedMediaId="missing"
+        selectedSceneIndex={99}
         onSelectScene={vi.fn()}
       />,
     );
@@ -133,7 +135,7 @@ describe('PreviewPanel', () => {
         media={media}
         narration={null}
         scenes={scenes}
-        selectedMediaId="video"
+        selectedSceneIndex={1}
         onSelectScene={vi.fn()}
       />,
     );
@@ -161,12 +163,62 @@ describe('PreviewPanel', () => {
   });
 
   it('renders a centered small subtitle using the shared normalized style', () => {
-    render(<StatefulPreview initialMediaId="video" />);
+    render(<StatefulPreview initialSceneIndex={1} />);
 
     const subtitle = screen.getByText('영상 자막');
     expect(subtitle.style.fontSize).toBe(`${(48 / 1080) * 100}cqw`);
     expect(subtitle.style.top).toBe('50%');
     expect(subtitle.style.transform).toBe('translateY(-50%)');
+  });
+
+  it('previews and navigates scenes with the same media independently by index', () => {
+    const duplicateScenes: Scene[] = [
+      { ...scenes[0], subtitle: '원본 자막' },
+      {
+        ...scenes[0],
+        subtitle: '복제 자막',
+        subtitlePosition: 'top',
+        subtitleSize: 'large',
+      },
+    ];
+    render(
+      <StatefulPreview sceneList={duplicateScenes} initialSceneIndex={1} />,
+    );
+
+    const duplicateSubtitle = screen.getByText('복제 자막');
+    expect(duplicateSubtitle.style.top).toBe(`${(150 / 1920) * 100}%`);
+    expect(duplicateSubtitle.style.fontSize).toBe(`${(80 / 1080) * 100}cqw`);
+
+    fireEvent.click(screen.getByRole('button', { name: '이전' }));
+    expect(screen.getByText('원본 자막')).toBeInTheDocument();
+  });
+
+  it('advances image playback between consecutive scenes with the same media', async () => {
+    vi.useFakeTimers();
+    const duplicateScenes: Scene[] = [
+      { ...scenes[0], durationMs: 1000, subtitle: '원본 이미지' },
+      { ...scenes[0], durationMs: 1500, subtitle: '복제 이미지' },
+    ];
+    render(<StatefulPreview sceneList={duplicateScenes} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '재생' }));
+    await act(async () => vi.advanceTimersByTimeAsync(1000));
+    expect(screen.getByText('복제 이미지')).toBeInTheDocument();
+
+    await act(async () => vi.advanceTimersByTimeAsync(1500));
+    expect(screen.getByRole('button', { name: '재생' })).toBeInTheDocument();
+  });
+
+  it('advances at video EOF between consecutive scenes with the same media', () => {
+    const duplicateVideos: Scene[] = [
+      { ...scenes[1], subtitle: '원본 영상' },
+      { ...scenes[1], subtitle: '복제 영상' },
+    ];
+    render(<StatefulPreview sceneList={duplicateVideos} />);
+
+    fireEvent.ended(screen.getByLabelText('clip.mp4 미리보기'));
+
+    expect(screen.getByText('복제 영상')).toBeInTheDocument();
   });
 
   it('moves between image and video scenes with previous and next', () => {
@@ -312,7 +364,7 @@ describe('PreviewPanel', () => {
     vi.useFakeTimers();
     vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
     render(
-      <StatefulPreview narrationAsset={narration} initialMediaId="video" />,
+      <StatefulPreview narrationAsset={narration} initialSceneIndex={1} />,
     );
     const video = screen.getByLabelText('clip.mp4 미리보기') as HTMLVideoElement;
     const audio = screen.getByLabelText('내레이션') as HTMLAudioElement;
@@ -359,7 +411,7 @@ describe('PreviewPanel', () => {
         media={[media[1]]}
         narration={narration}
         scenes={[scenes[1]]}
-        selectedMediaId="video"
+        selectedSceneIndex={0}
         onSelectScene={vi.fn()}
       />,
     );
@@ -415,7 +467,7 @@ describe('PreviewPanel', () => {
 
   it('pauses narration when video playback fails', async () => {
     render(
-      <StatefulPreview narrationAsset={narration} initialMediaId="video" />,
+      <StatefulPreview narrationAsset={narration} initialSceneIndex={1} />,
     );
     const video = screen.getByLabelText('clip.mp4 미리보기') as HTMLVideoElement;
     const audio = screen.getByLabelText('내레이션') as HTMLAudioElement;

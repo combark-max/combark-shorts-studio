@@ -157,7 +157,7 @@ export function validateProjectDocument(
         ) ||
         typeof scene.mediaId !== 'string' ||
         scene.mediaId.length === 0 ||
-        sceneMediaIds.has(scene.mediaId) ||
+        (!isV6 && sceneMediaIds.has(scene.mediaId)) ||
         ((isV4 || isV5 || isV6) && typeof scene.subtitle !== 'string') ||
         (isV6 &&
           scene.subtitlePosition !== 'top' &&

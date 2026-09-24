@@ -220,6 +220,65 @@ describe('exportProject pipeline', () => {
     expect(remove).toHaveBeenCalledWith('C:\\Temp\\combark 한글');
   });
 
+  it('renders duplicated scenes as separate ordered segments from the shared source', async () => {
+    const baseProject = createExportProject();
+    const project: ProjectDocument = {
+      ...baseProject,
+      media: [baseProject.media[0]],
+      scenes: [
+        {
+          mediaId: 'image-id',
+          durationMs: 1200,
+          subtitle: 'original scene',
+          subtitlePosition: 'bottom',
+          subtitleSize: 'medium',
+        },
+        {
+          mediaId: 'image-id',
+          durationMs: 2400,
+          subtitle: 'duplicated scene',
+          subtitlePosition: 'top',
+          subtitleSize: 'large',
+        },
+      ],
+    };
+    const calls: string[][] = [];
+    const writes: Array<[string, string]> = [];
+
+    await exportProject(project, 'C:\\exports\\duplicated.mp4', {
+      ffmpegPath: 'C:\\tools\\ffmpeg.exe',
+      fontPath: 'C:\\Windows\\Fonts\\malgun.ttf',
+      makeTempDirectory: vi.fn().mockResolvedValue('C:\\Temp\\duplicated-scenes'),
+      pathExists: vi.fn().mockResolvedValue(true),
+      writeTextFile: vi.fn(async (path: string, content: string) => {
+        writes.push([path, content]);
+      }),
+      runFfmpeg: vi.fn(async (_path: string, args: string[]) => {
+        calls.push(args);
+      }),
+      copyFile: vi.fn().mockResolvedValue(undefined),
+      removeDirectory: vi.fn().mockResolvedValue(undefined),
+    });
+
+    expect(calls).toHaveLength(4);
+    expect(calls[0]).toEqual(
+      expect.arrayContaining(['-i', baseProject.media[0].sourcePath, '-t', '1.2']),
+    );
+    expect(calls[1]).toEqual(
+      expect.arrayContaining(['-i', baseProject.media[0].sourcePath, '-t', '2.4']),
+    );
+    expect(writes).toEqual(
+      expect.arrayContaining([
+        [expect.stringContaining('subtitle-000000.ass'), expect.stringContaining('original scene')],
+        [expect.stringContaining('subtitle-000001.ass'), expect.stringContaining('duplicated scene')],
+        [
+          expect.stringContaining('scenes.txt'),
+          "file 'scene-000000.mp4'\nfile 'scene-000001.mp4'\n",
+        ],
+      ]),
+    );
+  });
+
   it('rejects empty scenes, missing sources, missing Korean font, and source/output collisions', async () => {
     const project = createExportProject();
     const baseDependencies = {

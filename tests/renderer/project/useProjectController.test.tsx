@@ -268,7 +268,7 @@ describe('useProjectController', () => {
     const { result } = renderHook(() => useProjectController(initialState));
 
     act(() => {
-      result.current.moveScene('middle-video', 'up');
+      result.current.moveScene(1, 'up');
     });
     expect(result.current.state.project.scenes.map(({ mediaId }) => mediaId)).toEqual([
       'middle-video',
@@ -277,7 +277,7 @@ describe('useProjectController', () => {
     ]);
 
     act(() => {
-      result.current.moveScene('first-image', 'down');
+      result.current.moveScene(1, 'down');
     });
     expect(result.current.state.project.scenes.map(({ mediaId }) => mediaId)).toEqual([
       'middle-video',
@@ -288,6 +288,49 @@ describe('useProjectController', () => {
     expect(result.current.state.project.updatedAt).not.toBe(
       initialState.project.updatedAt,
     );
+  });
+
+  it('duplicates one scene immediately after its source as a separate object', () => {
+    const initialState = createSceneState();
+    const { result } = renderHook(() => useProjectController(initialState));
+    let duplicated = false;
+
+    act(() => {
+      duplicated = result.current.duplicateScene(0);
+    });
+
+    expect(duplicated).toBe(true);
+    expect(result.current.state.project.scenes).toHaveLength(4);
+    expect(result.current.state.project.scenes[1]).toEqual({
+      mediaId: 'first-image',
+      durationMs: 3000,
+      subtitle: '첫 장면',
+      subtitlePosition: 'bottom',
+      subtitleSize: 'medium',
+    });
+    expect(result.current.state.project.scenes[1]).not.toBe(
+      result.current.state.project.scenes[0],
+    );
+    expect(result.current.state.project.scenes.slice(2)).toEqual(
+      initialState.project.scenes.slice(1),
+    );
+    expect(result.current.state.dirty).toBe(true);
+    expect(result.current.state.project.updatedAt).not.toBe(
+      initialState.project.updatedAt,
+    );
+  });
+
+  it.each([-1, 3])('does not change state when duplicating invalid index %s', (sceneIndex) => {
+    const initialState = createSceneState();
+    const { result } = renderHook(() => useProjectController(initialState));
+    let duplicated = true;
+
+    act(() => {
+      duplicated = result.current.duplicateScene(sceneIndex);
+    });
+
+    expect(duplicated).toBe(false);
+    expect(result.current.state).toBe(initialState);
   });
 
   it('selects and replaces one narration while updating project edit state', async () => {
@@ -387,8 +430,8 @@ describe('useProjectController', () => {
     const { result } = renderHook(() => useProjectController(initialState));
 
     act(() => {
-      result.current.moveScene('first-image', 'up');
-      result.current.moveScene('last-image', 'down');
+      result.current.moveScene(0, 'up');
+      result.current.moveScene(2, 'down');
     });
 
     expect(result.current.state).toBe(initialState);
@@ -400,7 +443,7 @@ describe('useProjectController', () => {
     vi.clearAllMocks();
 
     act(() => {
-      result.current.deleteScene('middle-video');
+      result.current.deleteScene(1);
     });
 
     expect(result.current.state.project.scenes.map(({ mediaId }) => mediaId)).toEqual([
@@ -420,12 +463,68 @@ describe('useProjectController', () => {
     }
   });
 
+  it('keeps shared media until its final scene reference is deleted', () => {
+    const initialState = createSceneState();
+    const { result } = renderHook(() => useProjectController(initialState));
+
+    act(() => {
+      result.current.duplicateScene(0);
+      result.current.deleteScene(0);
+    });
+
+    expect(result.current.state.project.scenes[0].mediaId).toBe('first-image');
+    expect(result.current.state.project.media.some(({ id }) => id === 'first-image')).toBe(true);
+
+    act(() => {
+      result.current.deleteScene(0);
+    });
+
+    expect(result.current.state.project.scenes.some(({ mediaId }) => mediaId === 'first-image')).toBe(false);
+    expect(result.current.state.project.media.some(({ id }) => id === 'first-image')).toBe(false);
+  });
+
+  it('edits and moves only one of two scenes that share a media asset', () => {
+    const initialState = createSceneState();
+    const { result } = renderHook(() => useProjectController(initialState));
+
+    act(() => {
+      result.current.duplicateScene(0);
+      result.current.updateSceneDuration(1, 4500);
+      result.current.updateSceneSubtitle(1, '복제 자막');
+      result.current.updateSceneSubtitlePosition(1, 'top');
+      result.current.updateSceneSubtitleSize(1, 'large');
+    });
+
+    expect(result.current.state.project.scenes[0]).toEqual(
+      initialState.project.scenes[0],
+    );
+    expect(result.current.state.project.scenes[1]).toMatchObject({
+      mediaId: 'first-image',
+      durationMs: 4500,
+      subtitle: '복제 자막',
+      subtitlePosition: 'top',
+      subtitleSize: 'large',
+    });
+
+    act(() => {
+      result.current.moveScene(1, 'down');
+    });
+
+    expect(result.current.state.project.scenes.map(({ mediaId }) => mediaId)).toEqual([
+      'first-image',
+      'middle-video',
+      'first-image',
+      'last-image',
+    ]);
+    expect(result.current.state.project.scenes[2].subtitle).toBe('복제 자막');
+  });
+
   it('changes image duration but does not allow changing video duration', () => {
     const initialState = createSceneState();
     const { result } = renderHook(() => useProjectController(initialState));
 
     act(() => {
-      result.current.updateSceneDuration('first-image', 4500);
+      result.current.updateSceneDuration(0, 4500);
     });
     expect(result.current.state.project.scenes[0]).toEqual({
       mediaId: 'first-image',
@@ -437,7 +536,7 @@ describe('useProjectController', () => {
 
     const afterImageChange = result.current.state;
     act(() => {
-      result.current.updateSceneDuration('middle-video', 5000);
+      result.current.updateSceneDuration(1, 5000);
     });
     expect(result.current.state).toBe(afterImageChange);
   });
@@ -447,7 +546,7 @@ describe('useProjectController', () => {
     const { result } = renderHook(() => useProjectController(initialState));
 
     act(() => {
-      result.current.updateSceneSubtitle('middle-video', '새 자막');
+      result.current.updateSceneSubtitle(1, '새 자막');
     });
 
     expect(result.current.state.project.scenes[1]).toEqual({
@@ -464,8 +563,8 @@ describe('useProjectController', () => {
 
     const afterChange = result.current.state;
     act(() => {
-      result.current.updateSceneSubtitle('middle-video', '새 자막');
-      result.current.updateSceneSubtitle('missing-media', '무시');
+      result.current.updateSceneSubtitle(1, '새 자막');
+      result.current.updateSceneSubtitle(99, '무시');
     });
     expect(result.current.state).toBe(afterChange);
   });
@@ -475,8 +574,8 @@ describe('useProjectController', () => {
     const { result } = renderHook(() => useProjectController(initialState));
 
     act(() => {
-      result.current.updateSceneSubtitlePosition('middle-video', 'top');
-      result.current.updateSceneSubtitleSize('middle-video', 'large');
+      result.current.updateSceneSubtitlePosition(1, 'top');
+      result.current.updateSceneSubtitleSize(1, 'large');
     });
 
     expect(result.current.state.project.scenes[1]).toMatchObject({
@@ -493,10 +592,10 @@ describe('useProjectController', () => {
 
     const afterChange = result.current.state;
     act(() => {
-      result.current.updateSceneSubtitlePosition('middle-video', 'top');
-      result.current.updateSceneSubtitleSize('middle-video', 'large');
-      result.current.updateSceneSubtitlePosition('missing-media', 'center');
-      result.current.updateSceneSubtitleSize('missing-media', 'small');
+      result.current.updateSceneSubtitlePosition(1, 'top');
+      result.current.updateSceneSubtitleSize(1, 'large');
+      result.current.updateSceneSubtitlePosition(99, 'center');
+      result.current.updateSceneSubtitleSize(99, 'small');
     });
     expect(result.current.state).toBe(afterChange);
   });
@@ -1280,6 +1379,24 @@ describe('useProjectController', () => {
     expect(desktopApi.writeRecovery).toHaveBeenCalledTimes(1);
     expect(desktopApi.writeRecovery).toHaveBeenCalledWith(initialState.project);
     expect(result.current.state).toEqual(initialState);
+  });
+
+  it('includes duplicated scenes in the autosave recovery payload', async () => {
+    vi.useFakeTimers();
+    const { result } = renderHook(() => useProjectController(createSceneState()));
+
+    act(() => {
+      result.current.duplicateScene(0);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+
+    expect(desktopApi.writeRecovery).toHaveBeenCalledOnce();
+    expect(desktopApi.writeRecovery.mock.calls[0][0].scenes).toHaveLength(4);
+    expect(desktopApi.writeRecovery.mock.calls[0][0].scenes[1]).toEqual(
+      desktopApi.writeRecovery.mock.calls[0][0].scenes[0],
+    );
   });
 
   it('does not write recovery for a clean project across multiple intervals', async () => {

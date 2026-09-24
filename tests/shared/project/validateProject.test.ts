@@ -158,6 +158,22 @@ describe('validateProjectDocument', () => {
     expect(validateProjectDocument(project)).toEqual(project);
   });
 
+  it('accepts multiple v6 scenes that reference the same media asset', () => {
+    const duplicateScene = {
+      ...validProjectV6.scenes[0],
+      durationMs: 4500,
+      subtitle: '복제 자막',
+      subtitlePosition: 'top',
+      subtitleSize: 'large',
+    };
+    const project = {
+      ...validProjectV6,
+      scenes: [validProjectV6.scenes[0], duplicateScene],
+    };
+
+    expect(validateProjectDocument(project)).toEqual(project);
+  });
+
   it.each([
     ['missing position', { subtitlePosition: undefined }],
     ['invalid position', { subtitlePosition: 'left' }],

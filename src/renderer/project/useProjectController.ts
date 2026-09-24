@@ -356,25 +356,27 @@ export function useProjectController(initialState?: ProjectState) {
     });
   };
 
-  const moveScene = (mediaId: string, direction: 'up' | 'down'): void => {
+  const moveScene = (
+    sceneIndex: number,
+    direction: 'up' | 'down',
+  ): boolean => {
     const currentState = stateRef.current;
-    const currentIndex = currentState.project.scenes.findIndex(
-      (scene) => scene.mediaId === mediaId,
-    );
-    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    const targetIndex = direction === 'up' ? sceneIndex - 1 : sceneIndex + 1;
 
     if (
-      currentIndex < 0 ||
+      !Number.isInteger(sceneIndex) ||
+      sceneIndex < 0 ||
+      sceneIndex >= currentState.project.scenes.length ||
       targetIndex < 0 ||
       targetIndex >= currentState.project.scenes.length
     ) {
-      return;
+      return false;
     }
 
     const scenes = [...currentState.project.scenes];
-    [scenes[currentIndex], scenes[targetIndex]] = [
+    [scenes[sceneIndex], scenes[targetIndex]] = [
       scenes[targetIndex],
-      scenes[currentIndex],
+      scenes[sceneIndex],
     ];
     replaceState({
       ...currentState,
@@ -385,37 +387,68 @@ export function useProjectController(initialState?: ProjectState) {
       },
       dirty: true,
     });
+    return true;
   };
 
-  const deleteScene = (mediaId: string): void => {
+  const duplicateScene = (sceneIndex: number): boolean => {
     const currentState = stateRef.current;
-    const scenes = currentState.project.scenes.filter(
-      (scene) => scene.mediaId !== mediaId,
-    );
+    const sourceScene = currentState.project.scenes[sceneIndex];
 
-    if (scenes.length === currentState.project.scenes.length) {
-      return;
+    if (!Number.isInteger(sceneIndex) || !sourceScene) {
+      return false;
     }
+
+    const scenes = [...currentState.project.scenes];
+    scenes.splice(sceneIndex + 1, 0, { ...sourceScene });
+    replaceState({
+      ...currentState,
+      project: {
+        ...currentState.project,
+        updatedAt: new Date().toISOString(),
+        scenes,
+      },
+      dirty: true,
+    });
+    return true;
+  };
+
+  const deleteScene = (sceneIndex: number): boolean => {
+    const currentState = stateRef.current;
+    const deletedScene = currentState.project.scenes[sceneIndex];
+
+    if (!Number.isInteger(sceneIndex) || !deletedScene) {
+      return false;
+    }
+
+    const scenes = currentState.project.scenes.filter(
+      (_scene, index) => index !== sceneIndex,
+    );
+    const mediaStillUsed = scenes.some(
+      (scene) => scene.mediaId === deletedScene.mediaId,
+    );
 
     replaceState({
       ...currentState,
       project: {
         ...currentState.project,
         updatedAt: new Date().toISOString(),
-        media: currentState.project.media.filter(
-          (asset) => asset.id !== mediaId,
-        ),
+        media: mediaStillUsed
+          ? currentState.project.media
+          : currentState.project.media.filter(
+              (asset) => asset.id !== deletedScene.mediaId,
+            ),
         scenes,
       },
       dirty: true,
     });
+    return true;
   };
 
-  const updateSceneDuration = (mediaId: string, durationMs: number): void => {
+  const updateSceneDuration = (sceneIndex: number, durationMs: number): void => {
     const currentState = stateRef.current;
-    const asset = currentState.project.media.find(({ id }) => id === mediaId);
-    const scene = currentState.project.scenes.find(
-      (candidate) => candidate.mediaId === mediaId,
+    const scene = currentState.project.scenes[sceneIndex];
+    const asset = currentState.project.media.find(
+      ({ id }) => id === scene?.mediaId,
     );
 
     if (
@@ -433,8 +466,8 @@ export function useProjectController(initialState?: ProjectState) {
       project: {
         ...currentState.project,
         updatedAt: new Date().toISOString(),
-        scenes: currentState.project.scenes.map((candidate) =>
-          candidate.mediaId === mediaId
+        scenes: currentState.project.scenes.map((candidate, index) =>
+          index === sceneIndex
             ? { ...candidate, durationMs }
             : candidate,
         ),
@@ -443,11 +476,9 @@ export function useProjectController(initialState?: ProjectState) {
     });
   };
 
-  const updateSceneSubtitle = (mediaId: string, subtitle: string): void => {
+  const updateSceneSubtitle = (sceneIndex: number, subtitle: string): void => {
     const currentState = stateRef.current;
-    const scene = currentState.project.scenes.find(
-      (candidate) => candidate.mediaId === mediaId,
-    );
+    const scene = currentState.project.scenes[sceneIndex];
 
     if (!scene || scene.subtitle === subtitle) {
       return;
@@ -458,8 +489,8 @@ export function useProjectController(initialState?: ProjectState) {
       project: {
         ...currentState.project,
         updatedAt: new Date().toISOString(),
-        scenes: currentState.project.scenes.map((candidate) =>
-          candidate.mediaId === mediaId
+        scenes: currentState.project.scenes.map((candidate, index) =>
+          index === sceneIndex
             ? { ...candidate, subtitle }
             : candidate,
         ),
@@ -469,13 +500,11 @@ export function useProjectController(initialState?: ProjectState) {
   };
 
   const updateSceneSubtitlePosition = (
-    mediaId: string,
+    sceneIndex: number,
     subtitlePosition: SubtitlePosition,
   ): void => {
     const currentState = stateRef.current;
-    const scene = currentState.project.scenes.find(
-      (candidate) => candidate.mediaId === mediaId,
-    );
+    const scene = currentState.project.scenes[sceneIndex];
 
     if (!scene || scene.subtitlePosition === subtitlePosition) {
       return;
@@ -486,8 +515,8 @@ export function useProjectController(initialState?: ProjectState) {
       project: {
         ...currentState.project,
         updatedAt: new Date().toISOString(),
-        scenes: currentState.project.scenes.map((candidate) =>
-          candidate.mediaId === mediaId
+        scenes: currentState.project.scenes.map((candidate, index) =>
+          index === sceneIndex
             ? { ...candidate, subtitlePosition }
             : candidate,
         ),
@@ -497,13 +526,11 @@ export function useProjectController(initialState?: ProjectState) {
   };
 
   const updateSceneSubtitleSize = (
-    mediaId: string,
+    sceneIndex: number,
     subtitleSize: SubtitleSize,
   ): void => {
     const currentState = stateRef.current;
-    const scene = currentState.project.scenes.find(
-      (candidate) => candidate.mediaId === mediaId,
-    );
+    const scene = currentState.project.scenes[sceneIndex];
 
     if (!scene || scene.subtitleSize === subtitleSize) {
       return;
@@ -514,8 +541,8 @@ export function useProjectController(initialState?: ProjectState) {
       project: {
         ...currentState.project,
         updatedAt: new Date().toISOString(),
-        scenes: currentState.project.scenes.map((candidate) =>
-          candidate.mediaId === mediaId
+        scenes: currentState.project.scenes.map((candidate, index) =>
+          index === sceneIndex
             ? { ...candidate, subtitleSize }
             : candidate,
         ),
@@ -692,6 +719,7 @@ export function useProjectController(initialState?: ProjectState) {
     selectNarration,
     removeNarration,
     moveScene,
+    duplicateScene,
     deleteScene,
     updateSceneDuration,
     updateSceneSubtitle,

@@ -11,14 +11,15 @@ import type {
 interface TimelineShellProps {
   media: MediaAsset[];
   scenes: Scene[];
-  selectedMediaId: string | null;
-  onSelectScene: (mediaId: string) => void;
-  onMoveScene: (mediaId: string, direction: 'up' | 'down') => void;
-  onDeleteScene: (mediaId: string) => void;
-  onUpdateSceneDuration: (mediaId: string, durationMs: number) => void;
-  onUpdateSceneSubtitle: (mediaId: string, subtitle: string) => void;
-  onUpdateSceneSubtitlePosition: (mediaId: string, position: SubtitlePosition) => void;
-  onUpdateSceneSubtitleSize: (mediaId: string, size: SubtitleSize) => void;
+  selectedSceneIndex: number | null;
+  onSelectScene: (sceneIndex: number) => void;
+  onMoveScene: (sceneIndex: number, direction: 'up' | 'down') => void;
+  onDeleteScene: (sceneIndex: number) => void;
+  onDuplicateScene: (sceneIndex: number) => void;
+  onUpdateSceneDuration: (sceneIndex: number, durationMs: number) => void;
+  onUpdateSceneSubtitle: (sceneIndex: number, subtitle: string) => void;
+  onUpdateSceneSubtitlePosition: (sceneIndex: number, position: SubtitlePosition) => void;
+  onUpdateSceneSubtitleSize: (sceneIndex: number, size: SubtitleSize) => void;
 }
 
 type VideoDurations = Record<string, number | null>;
@@ -33,10 +34,11 @@ function formatDuration(durationSeconds: number): string {
 export function TimelineShell({
   media,
   scenes,
-  selectedMediaId,
+  selectedSceneIndex,
   onSelectScene,
   onMoveScene,
   onDeleteScene,
+  onDuplicateScene,
   onUpdateSceneDuration,
   onUpdateSceneSubtitle,
   onUpdateSceneSubtitlePosition,
@@ -78,18 +80,18 @@ export function TimelineShell({
             return (
               <li
                 className={
-                  scene.mediaId === selectedMediaId
+                  index === selectedSceneIndex
                     ? 'scene-item scene-item-selected'
                     : 'scene-item'
                 }
-                key={scene.mediaId}
+                key={`${scene.mediaId}-${index}`}
               >
                 <button
                   aria-label={`${index + 1}번 장면 선택`}
-                  aria-pressed={scene.mediaId === selectedMediaId}
+                  aria-pressed={index === selectedSceneIndex}
                   className="scene-select"
                   type="button"
-                  onClick={() => onSelectScene(scene.mediaId)}
+                  onClick={() => onSelectScene(index)}
                 >
                   <span className="scene-thumbnail" aria-hidden="true">
                     {asset.kind === 'image' ? (
@@ -142,7 +144,7 @@ export function TimelineShell({
                             Number(event.currentTarget.value) * 1000,
                           );
                           if (durationMs > 0) {
-                            onUpdateSceneDuration(scene.mediaId, durationMs);
+                            onUpdateSceneDuration(index, durationMs);
                           }
                         }}
                       />
@@ -168,7 +170,7 @@ export function TimelineShell({
                       value={scene.subtitle}
                       onChange={(event) =>
                         onUpdateSceneSubtitle(
-                          scene.mediaId,
+                          index,
                           event.currentTarget.value,
                         )
                       }
@@ -181,7 +183,7 @@ export function TimelineShell({
                       value={scene.subtitlePosition}
                       onChange={(event) =>
                         onUpdateSceneSubtitlePosition(
-                          scene.mediaId,
+                          index,
                           event.currentTarget.value as SubtitlePosition,
                         )
                       }
@@ -198,7 +200,7 @@ export function TimelineShell({
                       value={scene.subtitleSize}
                       onChange={(event) =>
                         onUpdateSceneSubtitleSize(
-                          scene.mediaId,
+                          index,
                           event.currentTarget.value as SubtitleSize,
                         )
                       }
@@ -213,20 +215,26 @@ export function TimelineShell({
                   <button
                     type="button"
                     disabled={index === 0}
-                    onClick={() => onMoveScene(scene.mediaId, 'up')}
+                    onClick={() => onMoveScene(index, 'up')}
                   >
                     위
                   </button>
                   <button
                     type="button"
                     disabled={index === scenes.length - 1}
-                    onClick={() => onMoveScene(scene.mediaId, 'down')}
+                    onClick={() => onMoveScene(index, 'down')}
                   >
                     아래
                   </button>
                   <button
                     type="button"
-                    onClick={() => onDeleteScene(scene.mediaId)}
+                    onClick={() => onDuplicateScene(index)}
+                  >
+                    복제
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onDeleteScene(index)}
                   >
                     파일 제거
                   </button>

@@ -64,6 +64,41 @@ describe('projectStorage', () => {
     await expect(readProjectFile(filePath)).resolves.toEqual(project);
   });
 
+  it('preserves duplicated scenes that reference the same media when reopened', async () => {
+    const project = {
+      ...createNewProject('duplicated scenes'),
+      media: [
+        {
+          id: 'shared-photo-id',
+          kind: 'image' as const,
+          sourcePath: 'C:\\media\\shared-photo.png',
+          fileName: 'shared-photo.png',
+        },
+      ],
+      scenes: [
+        {
+          mediaId: 'shared-photo-id',
+          durationMs: 3000,
+          subtitle: 'original',
+          subtitlePosition: 'bottom' as const,
+          subtitleSize: 'medium' as const,
+        },
+        {
+          mediaId: 'shared-photo-id',
+          durationMs: 4500,
+          subtitle: 'duplicate',
+          subtitlePosition: 'top' as const,
+          subtitleSize: 'large' as const,
+        },
+      ],
+    };
+    const filePath = join(temporaryDirectory, 'duplicated-scenes.cssproj');
+
+    await writeProjectFileAtomic(filePath, project);
+
+    await expect(readProjectFile(filePath)).resolves.toEqual(project);
+  });
+
   it('opens a legacy v1 project as v6 with empty media, scenes, and narration', async () => {
     const currentProject = createNewProject('이전 프로젝트');
     const legacyProject = {

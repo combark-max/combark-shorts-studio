@@ -35,10 +35,11 @@ describe('TimelineShell', () => {
       <TimelineShell
         media={media}
         scenes={scenes}
-        selectedMediaId="photo-id"
+        selectedSceneIndex={0}
         onSelectScene={vi.fn()}
         onMoveScene={vi.fn()}
         onDeleteScene={vi.fn()}
+        onDuplicateScene={vi.fn()}
         onUpdateSceneDuration={vi.fn()}
         onUpdateSceneSubtitle={vi.fn()}
         onUpdateSceneSubtitlePosition={vi.fn()}
@@ -76,10 +77,11 @@ describe('TimelineShell', () => {
       <TimelineShell
         media={media}
         scenes={scenes}
-        selectedMediaId="photo-id"
+        selectedSceneIndex={0}
         onSelectScene={vi.fn()}
         onMoveScene={vi.fn()}
         onDeleteScene={vi.fn()}
+        onDuplicateScene={vi.fn()}
         onUpdateSceneDuration={vi.fn()}
         onUpdateSceneSubtitle={vi.fn()}
         onUpdateSceneSubtitlePosition={vi.fn()}
@@ -113,10 +115,11 @@ describe('TimelineShell', () => {
       <TimelineShell
         media={media}
         scenes={scenes}
-        selectedMediaId="video-id"
+        selectedSceneIndex={1}
         onSelectScene={vi.fn()}
         onMoveScene={vi.fn()}
         onDeleteScene={vi.fn()}
+        onDuplicateScene={vi.fn()}
         onUpdateSceneDuration={vi.fn()}
         onUpdateSceneSubtitle={vi.fn()}
         onUpdateSceneSubtitlePosition={vi.fn()}
@@ -138,10 +141,11 @@ describe('TimelineShell', () => {
         <TimelineShell
           media={media}
           scenes={scenes}
-          selectedMediaId="video-id"
+          selectedSceneIndex={1}
           onSelectScene={vi.fn()}
           onMoveScene={vi.fn()}
-        onDeleteScene={vi.fn()}
+          onDeleteScene={vi.fn()}
+          onDuplicateScene={vi.fn()}
         onUpdateSceneDuration={vi.fn()}
         onUpdateSceneSubtitle={vi.fn()}
         onUpdateSceneSubtitlePosition={vi.fn()}
@@ -162,10 +166,11 @@ describe('TimelineShell', () => {
       <TimelineShell
         media={media}
         scenes={scenes}
-        selectedMediaId="video-id"
+        selectedSceneIndex={1}
         onSelectScene={vi.fn()}
         onMoveScene={vi.fn()}
         onDeleteScene={vi.fn()}
+        onDuplicateScene={vi.fn()}
         onUpdateSceneDuration={vi.fn()}
         onUpdateSceneSubtitle={vi.fn()}
         onUpdateSceneSubtitlePosition={vi.fn()}
@@ -183,10 +188,11 @@ describe('TimelineShell', () => {
       <TimelineShell
         media={media}
         scenes={scenes}
-        selectedMediaId="video-id"
+        selectedSceneIndex={1}
         onSelectScene={vi.fn()}
         onMoveScene={vi.fn()}
         onDeleteScene={vi.fn()}
+        onDuplicateScene={vi.fn()}
         onUpdateSceneDuration={vi.fn()}
         onUpdateSceneSubtitle={vi.fn()}
         onUpdateSceneSubtitlePosition={vi.fn()}
@@ -207,10 +213,11 @@ describe('TimelineShell', () => {
     expect(screen.getByText('00:23')).toBeInTheDocument();
   });
 
-  it('forwards move, file removal, duration, and subtitle changes', async () => {
+  it('forwards index-based move, duplicate, file removal, duration, and subtitle changes', async () => {
     const user = userEvent.setup();
     const onMoveScene = vi.fn();
     const onDeleteScene = vi.fn();
+    const onDuplicateScene = vi.fn();
     const onUpdateSceneDuration = vi.fn();
     const onUpdateSceneSubtitle = vi.fn();
     const onUpdateSceneSubtitlePosition = vi.fn();
@@ -219,10 +226,11 @@ describe('TimelineShell', () => {
       <TimelineShell
         media={media}
         scenes={scenes}
-        selectedMediaId="photo-id"
+        selectedSceneIndex={0}
         onSelectScene={vi.fn()}
         onMoveScene={onMoveScene}
         onDeleteScene={onDeleteScene}
+        onDuplicateScene={onDuplicateScene}
         onUpdateSceneDuration={onUpdateSceneDuration}
         onUpdateSceneSubtitle={onUpdateSceneSubtitle}
         onUpdateSceneSubtitlePosition={onUpdateSceneSubtitlePosition}
@@ -235,6 +243,7 @@ describe('TimelineShell', () => {
     await user.click(
       within(items[0]).getByRole('button', { name: '파일 제거' }),
     );
+    await user.click(within(items[0]).getByRole('button', { name: '복제' }));
     fireEvent.change(within(items[0]).getByRole('spinbutton'), {
       target: { value: '4.5' },
     });
@@ -251,19 +260,20 @@ describe('TimelineShell', () => {
       'large',
     );
 
-    expect(onMoveScene).toHaveBeenCalledWith('video-id', 'up');
-    expect(onDeleteScene).toHaveBeenCalledWith('photo-id');
-    expect(onUpdateSceneDuration).toHaveBeenCalledWith('photo-id', 4500);
+    expect(onMoveScene).toHaveBeenCalledWith(1, 'up');
+    expect(onDeleteScene).toHaveBeenCalledWith(0);
+    expect(onDuplicateScene).toHaveBeenCalledWith(0);
+    expect(onUpdateSceneDuration).toHaveBeenCalledWith(0, 4500);
     expect(onUpdateSceneSubtitle).toHaveBeenLastCalledWith(
-      'photo-id',
+      0,
       '변경 자막',
     );
     expect(onUpdateSceneSubtitlePosition).toHaveBeenCalledWith(
-      'photo-id',
+      0,
       'top',
     );
     expect(onUpdateSceneSubtitleSize).toHaveBeenCalledWith(
-      'photo-id',
+      0,
       'large',
     );
   });
@@ -275,10 +285,11 @@ describe('TimelineShell', () => {
       <TimelineShell
         media={media}
         scenes={scenes}
-        selectedMediaId="photo-id"
+        selectedSceneIndex={0}
         onSelectScene={onSelectScene}
         onMoveScene={vi.fn()}
         onDeleteScene={vi.fn()}
+        onDuplicateScene={vi.fn()}
         onUpdateSceneDuration={vi.fn()}
         onUpdateSceneSubtitle={vi.fn()}
         onUpdateSceneSubtitlePosition={vi.fn()}
@@ -294,6 +305,37 @@ describe('TimelineShell', () => {
       screen.getByRole('button', { name: '2번 장면 선택' }),
     );
 
-    expect(onSelectScene).toHaveBeenCalledWith('video-id');
+    expect(onSelectScene).toHaveBeenCalledWith(1);
+  });
+
+  it('selects two scenes with the same media independently by index', async () => {
+    const user = userEvent.setup();
+    const onSelectScene = vi.fn();
+    const duplicateScenes: Scene[] = [
+      scenes[0],
+      { ...scenes[0], subtitle: '복제 자막' },
+    ];
+    render(
+      <TimelineShell
+        media={media}
+        scenes={duplicateScenes}
+        selectedSceneIndex={1}
+        onSelectScene={onSelectScene}
+        onMoveScene={vi.fn()}
+        onDeleteScene={vi.fn()}
+        onDuplicateScene={vi.fn()}
+        onUpdateSceneDuration={vi.fn()}
+        onUpdateSceneSubtitle={vi.fn()}
+        onUpdateSceneSubtitlePosition={vi.fn()}
+        onUpdateSceneSubtitleSize={vi.fn()}
+      />,
+    );
+
+    const sceneButtons = screen.getAllByRole('button', { name: /번 장면 선택/ });
+    expect(sceneButtons[0]).toHaveAttribute('aria-pressed', 'false');
+    expect(sceneButtons[1]).toHaveAttribute('aria-pressed', 'true');
+
+    await user.click(sceneButtons[0]);
+    expect(onSelectScene).toHaveBeenCalledWith(0);
   });
 });

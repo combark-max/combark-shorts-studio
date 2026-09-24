@@ -52,6 +52,15 @@ function readVolume(stderr: string, name: 'mean_volume' | 'max_volume'): number 
   return Number(match[1]);
 }
 
+function readDurationSeconds(stderr: string): number {
+  const match = /Duration: (\d+):(\d+):(\d+(?:\.\d+)?)/.exec(stderr);
+  if (!match) {
+    throw new Error('FFmpeg did not report the output duration.');
+  }
+
+  return Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]);
+}
+
 describe.runIf(runSmoke)('real FFmpeg export smoke', () => {
   let directory: string;
   let imagePath: string;
@@ -127,6 +136,28 @@ describe.runIf(runSmoke)('real FFmpeg export smoke', () => {
       [{ mediaId: 'video', durationMs: null, subtitle: '', subtitlePosition: 'bottom', subtitleSize: 'medium' }],
     ), '영상 결과.mp4');
   }, 30_000);
+
+  it('exports duplicated scenes from one media asset as two ordered segments', async () => {
+    const outputPath = await exportAndDecode(projectWith(
+      [{ id: 'image', kind: 'image', sourcePath: imagePath, fileName: '입력 이미지.png' }],
+      [
+        { mediaId: 'image', durationMs: 600, subtitle: 'original', subtitlePosition: 'bottom', subtitleSize: 'medium' },
+        { mediaId: 'image', durationMs: 600, subtitle: 'duplicate', subtitlePosition: 'top', subtitleSize: 'large' },
+      ],
+    ), '복제 장면 결과.mp4');
+
+    const stderr = await runFfmpegWithStderr(configuredFfmpegPath as string, [
+      '-hide_banner',
+      '-nostdin',
+      '-i', outputPath,
+      '-f', 'null',
+      'NUL',
+    ]);
+    const durationSeconds = readDurationSeconds(stderr);
+
+    expect(durationSeconds).toBeGreaterThanOrEqual(1.1);
+    expect(durationSeconds).toBeLessThanOrEqual(1.3);
+  }, 60_000);
 
   it('exports image, MP4, Korean subtitles, and narration together', async () => {
     const outputPath = await exportAndDecode(projectWith(

@@ -376,6 +376,72 @@ describe('App', () => {
     expect(screen.getByText('저장 필요')).toBeInTheDocument();
   });
 
+  it('selects a duplicate and preserves logical selection through move and delete', async () => {
+    const user = userEvent.setup();
+    const project = {
+      ...createNewProject('복제 프로젝트'),
+      media: [
+        {
+          id: 'photo-id',
+          kind: 'image' as const,
+          sourcePath: 'C:\\media\\photo.jpg',
+          fileName: 'photo.jpg',
+        },
+      ],
+      scenes: [
+        {
+          mediaId: 'photo-id',
+          durationMs: 3000,
+          subtitle: '원본 자막',
+          subtitlePosition: 'bottom' as const,
+          subtitleSize: 'medium' as const,
+        },
+      ],
+    };
+    desktopApi.openProjectDialog.mockResolvedValue('C:\\projects\\duplicate.cssproj');
+    desktopApi.readProject.mockResolvedValue(project);
+    render(<App />);
+    await screen.findByText('Combark Shorts Studio');
+    await user.click(screen.getByRole('button', { name: '열기' }));
+
+    await user.click(screen.getByRole('button', { name: '복제' }));
+    let sceneButtons = screen.getAllByRole('button', { name: /번 장면 선택/ });
+    expect(sceneButtons).toHaveLength(2);
+    expect(sceneButtons[0]).toHaveAttribute('aria-pressed', 'false');
+    expect(sceneButtons[1]).toHaveAttribute('aria-pressed', 'true');
+
+    const subtitleInputs = screen.getAllByRole('textbox', { name: /번 장면 자막/ });
+    await user.clear(subtitleInputs[1]);
+    await user.type(subtitleInputs[1], '복제 자막');
+    expect(subtitleInputs[0]).toHaveValue('원본 자막');
+    expect(screen.getByText('복제 자막')).toBeInTheDocument();
+
+    const itemBeforeMove = sceneButtons[1].closest('li');
+    expect(itemBeforeMove).not.toBeNull();
+    await user.click(
+      within(itemBeforeMove as HTMLLIElement).getByRole('button', { name: '위' }),
+    );
+    sceneButtons = screen.getAllByRole('button', { name: /번 장면 선택/ });
+    expect(sceneButtons[0]).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('복제 자막')).toBeInTheDocument();
+
+    const itemBeforeDelete = sceneButtons[0].closest('li');
+    expect(itemBeforeDelete).not.toBeNull();
+    await user.click(
+      within(itemBeforeDelete as HTMLLIElement).getByRole('button', {
+        name: '파일 제거',
+      }),
+    );
+    sceneButtons = screen.getAllByRole('button', { name: /번 장면 선택/ });
+    expect(sceneButtons).toHaveLength(1);
+    expect(sceneButtons[0]).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('원본 자막')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '파일 제거' }));
+    expect(screen.queryByRole('button', { name: /번 장면 선택/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '재생' })).toBeDisabled();
+  });
+
   it('selects the first scene when the same project is opened again', async () => {
     const user = userEvent.setup();
     const project = {

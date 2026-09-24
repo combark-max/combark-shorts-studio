@@ -13,8 +13,8 @@ interface PreviewPanelProps {
   media: MediaAsset[];
   narration: NarrationAsset | null;
   scenes: Scene[];
-  selectedMediaId: string | null;
-  onSelectScene: (mediaId: string) => void;
+  selectedSceneIndex: number | null;
+  onSelectScene: (sceneIndex: number) => void;
 }
 
 type MediaError = 'load' | 'play' | null;
@@ -24,7 +24,7 @@ export function PreviewPanel({
   media,
   narration,
   scenes,
-  selectedMediaId,
+  selectedSceneIndex,
   onSelectScene,
 }: PreviewPanelProps) {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -37,11 +37,16 @@ export function PreviewPanel({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  const currentIndex = scenes.findIndex(
-    (scene) => scene.mediaId === selectedMediaId,
-  );
+  const currentIndex =
+    selectedSceneIndex !== null &&
+    Number.isInteger(selectedSceneIndex) &&
+    selectedSceneIndex >= 0 &&
+    selectedSceneIndex < scenes.length
+      ? selectedSceneIndex
+      : -1;
   const currentScene = currentIndex >= 0 ? scenes[currentIndex] : null;
-  const currentAsset = media.find(({ id }) => id === selectedMediaId) ?? null;
+  const currentAsset =
+    media.find(({ id }) => id === currentScene?.mediaId) ?? null;
   const subtitleStyle = currentScene
     ? getSubtitleStyle(currentScene.subtitlePosition, currentScene.subtitleSize)
     : null;
@@ -61,13 +66,16 @@ export function PreviewPanel({
   useEffect(() => {
     setMediaError(null);
     remainingImageMsRef.current = currentScene?.durationMs ?? 0;
+    if (currentAsset?.kind === 'video' && videoRef.current) {
+      videoRef.current.currentTime = 0;
+    }
 
     if (!currentScene || !currentAsset) {
       videoRef.current?.pause();
       audioRef.current?.pause();
       setIsPlaying(false);
     }
-  }, [currentAsset, currentScene?.durationMs, currentScene?.mediaId]);
+  }, [currentAsset, currentIndex, currentScene?.durationMs]);
 
   useEffect(() => {
     setNarrationError(null);
@@ -99,7 +107,7 @@ export function PreviewPanel({
       remainingImageMsRef.current = currentScene.durationMs as number;
       const nextScene = scenes[currentIndex + 1];
       if (nextScene) {
-        onSelectScene(nextScene.mediaId);
+        onSelectScene(currentIndex + 1);
       } else {
         audioRef.current?.pause();
         setIsPlaying(false);
@@ -146,7 +154,7 @@ export function PreviewPanel({
     };
   }, [
     currentAsset?.kind,
-    selectedMediaId,
+    selectedSceneIndex,
     isPlaying,
     playbackRestartToken,
   ]);
@@ -190,7 +198,7 @@ export function PreviewPanel({
     }
     audioRef.current?.pause();
     setIsPlaying(false);
-    onSelectScene(scenes[index].mediaId);
+    onSelectScene(index);
   };
 
   const togglePlayback = (): void => {
@@ -213,7 +221,7 @@ export function PreviewPanel({
   const handleVideoEnded = (): void => {
     const nextScene = scenes[currentIndex + 1];
     if (nextScene) {
-      onSelectScene(nextScene.mediaId);
+      onSelectScene(currentIndex + 1);
     } else {
       audioRef.current?.pause();
       setIsPlaying(false);
@@ -245,7 +253,7 @@ export function PreviewPanel({
     setMediaError(null);
     setNarrationError(null);
     setNarrationEnded(false);
-    onSelectScene(firstScene.mediaId);
+    onSelectScene(0);
     setPlaybackRestartToken((token) => token + 1);
     setIsPlaying(true);
   };

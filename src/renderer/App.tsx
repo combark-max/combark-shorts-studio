@@ -34,7 +34,9 @@ function getExportProgressMessage(
 
 export function App() {
   const [appVersion, setAppVersion] = useState('—');
-  const [selectedMediaId, setSelectedMediaId] = useState<string | null>(null);
+  const [selectedSceneIndex, setSelectedSceneIndex] = useState<number | null>(
+    null,
+  );
   const {
     state,
     newProject,
@@ -42,6 +44,7 @@ export function App() {
     selectNarration,
     removeNarration,
     moveScene,
+    duplicateScene,
     deleteScene,
     updateSceneDuration,
     updateSceneSubtitle,
@@ -84,14 +87,79 @@ export function App() {
       previousProjectRef.current !== state.project && !state.dirty;
     previousProjectRef.current = state.project;
 
-    setSelectedMediaId((currentMediaId) =>
-      !documentReplaced &&
-      currentMediaId &&
-      state.project.scenes.some(({ mediaId }) => mediaId === currentMediaId)
-        ? currentMediaId
-        : (state.project.scenes[0]?.mediaId ?? null),
-    );
+    setSelectedSceneIndex((currentIndex) => {
+      if (state.project.scenes.length === 0) {
+        return null;
+      }
+
+      if (
+        documentReplaced ||
+        currentIndex === null ||
+        currentIndex < 0 ||
+        currentIndex >= state.project.scenes.length
+      ) {
+        return 0;
+      }
+
+      return currentIndex;
+    });
   }, [state.dirty, state.project]);
+
+  const handleMoveScene = (
+    sceneIndex: number,
+    direction: 'up' | 'down',
+  ): void => {
+    const targetIndex = direction === 'up' ? sceneIndex - 1 : sceneIndex + 1;
+
+    if (!moveScene(sceneIndex, direction)) {
+      return;
+    }
+
+    setSelectedSceneIndex((currentIndex) => {
+      if (currentIndex === sceneIndex) {
+        return targetIndex;
+      }
+
+      if (currentIndex === targetIndex) {
+        return sceneIndex;
+      }
+
+      return currentIndex;
+    });
+  };
+
+  const handleDuplicateScene = (sceneIndex: number): void => {
+    if (duplicateScene(sceneIndex)) {
+      setSelectedSceneIndex(sceneIndex + 1);
+    }
+  };
+
+  const handleDeleteScene = (sceneIndex: number): void => {
+    if (!deleteScene(sceneIndex)) {
+      return;
+    }
+
+    const remainingSceneCount = state.project.scenes.length - 1;
+    setSelectedSceneIndex((currentIndex) => {
+      if (remainingSceneCount === 0) {
+        return null;
+      }
+
+      if (currentIndex === null) {
+        return 0;
+      }
+
+      if (currentIndex > sceneIndex) {
+        return currentIndex - 1;
+      }
+
+      if (currentIndex === sceneIndex) {
+        return Math.min(sceneIndex, remainingSceneCount - 1);
+      }
+
+      return currentIndex;
+    });
+  };
 
   if (recoveryListFailed) {
     return (
@@ -208,18 +276,19 @@ export function App() {
           media={state.project.media}
           narration={state.project.narration}
           scenes={state.project.scenes}
-          selectedMediaId={selectedMediaId}
-          onSelectScene={setSelectedMediaId}
+          selectedSceneIndex={selectedSceneIndex}
+          onSelectScene={setSelectedSceneIndex}
         />
         <PropertiesPanel />
       </main>
       <TimelineShell
         media={state.project.media}
         scenes={state.project.scenes}
-        selectedMediaId={selectedMediaId}
-        onSelectScene={setSelectedMediaId}
-        onMoveScene={moveScene}
-        onDeleteScene={deleteScene}
+        selectedSceneIndex={selectedSceneIndex}
+        onSelectScene={setSelectedSceneIndex}
+        onMoveScene={handleMoveScene}
+        onDuplicateScene={handleDuplicateScene}
+        onDeleteScene={handleDeleteScene}
         onUpdateSceneDuration={updateSceneDuration}
         onUpdateSceneSubtitle={updateSceneSubtitle}
         onUpdateSceneSubtitlePosition={updateSceneSubtitlePosition}

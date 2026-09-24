@@ -79,6 +79,42 @@ describe('recoveryStorage', () => {
     ]);
   });
 
+  it('preserves duplicated scenes in a recovery candidate', async () => {
+    const project = {
+      ...createNewProject('duplicated recovery scenes'),
+      media: [
+        {
+          id: 'shared-image-id',
+          kind: 'image' as const,
+          sourcePath: 'C:\\media\\shared-image.png',
+          fileName: 'shared-image.png',
+        },
+      ],
+      scenes: [
+        {
+          mediaId: 'shared-image-id',
+          durationMs: 3000,
+          subtitle: 'first scene',
+          subtitlePosition: 'bottom' as const,
+          subtitleSize: 'medium' as const,
+        },
+        {
+          mediaId: 'shared-image-id',
+          durationMs: 5000,
+          subtitle: 'second scene',
+          subtitlePosition: 'center' as const,
+          subtitleSize: 'small' as const,
+        },
+      ],
+    };
+
+    await writeRecoveryFile(userDataDirectory, project);
+
+    const candidates = await listRecoveryFiles(userDataDirectory);
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0].project).toEqual(project);
+  });
+
   it('sorts multiple recovery candidates from newest to oldest', async () => {
     const olderProject = createNewProject('이전 복구');
     const newerProject = createNewProject('최신 복구');

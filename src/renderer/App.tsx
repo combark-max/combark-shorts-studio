@@ -11,6 +11,27 @@ import { useProjectController } from './project/useProjectController';
 
 const noop = (): void => undefined;
 
+function getExportProgressMessage(
+  progress: ReturnType<typeof useProjectController>['exportProgress'],
+): string {
+  switch (progress?.stage) {
+    case 'preparing':
+      return '내보내기 준비 중...';
+    case 'scene':
+      return `장면 ${progress.sceneIndex}/${progress.sceneCount} 처리 중...`;
+    case 'concatenating':
+      return '장면 합치는 중...';
+    case 'muxing-audio':
+      return '오디오 합치는 중...';
+    case 'writing-output':
+      return '파일 저장 중...';
+    case 'complete':
+      return 'MP4 내보내기 완료';
+    default:
+      return '내보내기 준비 중...';
+  }
+}
+
 export function App() {
   const [appVersion, setAppVersion] = useState('—');
   const [selectedMediaId, setSelectedMediaId] = useState<string | null>(null);
@@ -42,6 +63,9 @@ export function App() {
     removeRecentProject,
     projectOpenError,
     projectSaveStatus,
+    exportStatus,
+    exportProgress,
+    exportMp4,
   } = useProjectController();
   const previousProjectRef = useRef(state.project);
 
@@ -105,7 +129,10 @@ export function App() {
         onSaveProject={saveProject}
         onSaveProjectAs={saveProjectAs}
         onAutoShorts={noop}
-        onExport={noop}
+        onExport={() => {
+          void exportMp4();
+        }}
+        exportInProgress={exportStatus === 'exporting'}
       />
       <div className="save-status-slot">
         <div
@@ -129,6 +156,30 @@ export function App() {
             role="alert"
           >
             프로젝트를 저장하지 못했습니다. 다시 시도해 주세요.
+          </div>
+        ) : null}
+      </div>
+      <div className="save-status-slot">
+        {exportStatus === 'exporting' || exportStatus === 'success' ? (
+          <div
+            aria-label="내보내기 상태"
+            className={
+              exportStatus === 'success'
+                ? 'save-status save-status-success'
+                : 'save-status'
+            }
+            role="status"
+          >
+            {getExportProgressMessage(exportProgress)}
+          </div>
+        ) : null}
+        {exportStatus === 'error' ? (
+          <div
+            aria-label="내보내기 상태"
+            className="save-status save-status-error"
+            role="alert"
+          >
+            MP4 파일을 내보내지 못했습니다. 원본 파일과 설정을 확인해 주세요.
           </div>
         ) : null}
       </div>

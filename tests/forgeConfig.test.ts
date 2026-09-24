@@ -26,3 +26,11 @@ describe('Forge development content security policy', () => {
     );
   });
 });
+
+describe('Forge FFmpeg packaging', () => {
+  it('copies ffmpeg.exe outside ASAR as an extra resource', () => {
+    expect(config.packagerConfig?.extraResource).toContain(
+      'node_modules/ffmpeg-static/ffmpeg.exe',
+    );
+  });
+});

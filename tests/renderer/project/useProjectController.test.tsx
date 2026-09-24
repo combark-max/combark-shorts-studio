@@ -10,6 +10,8 @@ import type {
 
 const desktopApi = {
   getAppVersion: vi.fn(),
+  exportMp4: vi.fn(),
+  onExportProgress: vi.fn(),
   openMediaDialog: vi.fn(),
   openNarrationDialog: vi.fn(),
   openProjectDialog: vi.fn(),
@@ -33,6 +35,8 @@ beforeEach(() => {
   desktopApi.listRecoveries.mockResolvedValue([]);
   desktopApi.listRecentProjects.mockResolvedValue([]);
   desktopApi.removeRecentProject.mockResolvedValue([]);
+  desktopApi.exportMp4.mockResolvedValue({ status: 'canceled' });
+  desktopApi.onExportProgress.mockReturnValue(vi.fn());
   Object.defineProperty(window, 'combarkDesktop', {
     configurable: true,
     value: desktopApi,
@@ -114,6 +118,99 @@ function createRecentProject(
 }
 
 describe('useProjectController', () => {
+  it('blocks concurrent exports and reports success', async () => {
+    let progressListener: ((progress: unknown) => void) | undefined;
+    const cleanupProgress = vi.fn();
+    desktopApi.onExportProgress.mockImplementation((listener) => {
+      progressListener = listener;
+      return cleanupProgress;
+    });
+    let finishExport: ((value: { status: 'success'; filePath: string }) => void) | undefined;
+    desktopApi.exportMp4.mockReturnValue(new Promise((resolve) => { finishExport = resolve; }));
+    const initialState = createSceneState();
+    const { result } = renderHook(() => useProjectController(initialState));
+
+    let firstExport: Promise<void>;
+    act(() => {
+      firstExport = result.current.exportMp4();
+      void result.current.exportMp4();
+    });
+    expect(result.current.exportStatus).toBe('exporting');
+    expect(result.current.exportProgress).toEqual({ stage: 'preparing' });
+    expect(desktopApi.onExportProgress.mock.invocationCallOrder[0]).toBeLessThan(
+      desktopApi.exportMp4.mock.invocationCallOrder[0],
+    );
+    expect(desktopApi.exportMp4).toHaveBeenCalledTimes(1);
+    expect(desktopApi.exportMp4).toHaveBeenCalledWith(initialState.project);
+
+    act(() => {
+      progressListener?.({ stage: 'scene', sceneIndex: 2, sceneCount: 3 });
+    });
+    expect(result.current.exportProgress).toEqual({
+      stage: 'scene',
+      sceneIndex: 2,
+      sceneCount: 3,
+    });
+
+    await act(async () => {
+      finishExport?.({ status: 'success', filePath: 'C:\\exports\\video.mp4' });
+      await firstExport;
+    });
+    expect(result.current.exportStatus).toBe('success');
+    expect(result.current.exportProgress).toEqual({ stage: 'complete' });
+    expect(cleanupProgress).toHaveBeenCalledOnce();
+    expect(desktopApi.onExportProgress).toHaveBeenCalledOnce();
+  });
+
+  it('returns to idle on canceled export and reports failures', async () => {
+    const firstCleanup = vi.fn();
+    const secondCleanup = vi.fn();
+    desktopApi.onExportProgress
+      .mockReturnValueOnce(firstCleanup)
+      .mockReturnValueOnce(secondCleanup);
+    const { result } = renderHook(() => useProjectController(createSceneState()));
+    await act(async () => { await result.current.exportMp4(); });
+    expect(result.current.exportStatus).toBe('idle');
+    expect(result.current.exportProgress).toBeNull();
+    expect(firstCleanup).toHaveBeenCalledOnce();
+
+    desktopApi.exportMp4.mockRejectedValue(new Error('ffmpeg failed'));
+    await act(async () => { await result.current.exportMp4(); });
+    expect(result.current.exportStatus).toBe('error');
+    expect(result.current.exportProgress).toBeNull();
+    expect(secondCleanup).toHaveBeenCalledOnce();
+  });
+
+  it('keeps active export progress visible when the project is replaced', async () => {
+    let progressListener: ((progress: unknown) => void) | undefined;
+    desktopApi.onExportProgress.mockImplementation((listener) => {
+      progressListener = listener;
+      return vi.fn();
+    });
+    let finishExport: ((value: { status: 'success'; filePath: string }) => void) | undefined;
+    desktopApi.exportMp4.mockReturnValue(new Promise((resolve) => {
+      finishExport = resolve;
+    }));
+    const { result } = renderHook(() => useProjectController(createSceneState()));
+
+    let activeExport: Promise<void>;
+    act(() => {
+      activeExport = result.current.exportMp4();
+      progressListener?.({ stage: 'muxing-audio' });
+      result.current.newProject();
+    });
+
+    expect(result.current.exportStatus).toBe('exporting');
+    expect(result.current.exportProgress).toEqual({ stage: 'muxing-audio' });
+
+    await act(async () => {
+      finishExport?.({ status: 'success', filePath: 'C:\\exports\\video.mp4' });
+      await activeExport;
+    });
+    expect(result.current.exportStatus).toBe('success');
+    expect(result.current.exportProgress).toEqual({ stage: 'complete' });
+  });
+
   it('adds selected media to the project and marks it dirty', async () => {
     desktopApi.openMediaDialog.mockResolvedValue([
       {

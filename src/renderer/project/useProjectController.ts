@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { createInitialProjectState } from './projectState';
 import type { ProjectState } from './projectState';
+import type { ExportProgress, ExportStatus } from '../../shared/export';
 import type {
   RecentProject,
   RecoveryCandidate,
@@ -35,6 +36,9 @@ export function useProjectController(initialState?: ProjectState) {
   const [projectOpenError, setProjectOpenError] = useState(false);
   const [projectSaveStatus, setProjectSaveStatus] =
     useState<ProjectSaveStatus>('idle');
+  const [exportStatus, setExportStatus] = useState<ExportStatus>('idle');
+  const [exportProgress, setExportProgress] =
+    useState<ExportProgress | null>(null);
   const stateRef = useRef(state);
   const recoveryWriteRef = useRef<Promise<void> | null>(null);
   const manualSaveInProgressCountRef = useRef(0);
@@ -43,6 +47,7 @@ export function useProjectController(initialState?: ProjectState) {
   const saveFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
+  const exportInProgressRef = useRef(false);
   stateRef.current = state;
 
   const clearSaveFeedbackTimeout = (): void => {
@@ -61,6 +66,10 @@ export function useProjectController(initialState?: ProjectState) {
     documentGenerationRef.current += 1;
     clearSaveFeedbackTimeout();
     setProjectSaveStatus('idle');
+    if (!exportInProgressRef.current) {
+      setExportStatus('idle');
+      setExportProgress(null);
+    }
     replaceState(nextState);
   };
 
@@ -545,6 +554,37 @@ export function useProjectController(initialState?: ProjectState) {
     }
   };
 
+  const exportMp4 = async (): Promise<void> => {
+    if (exportInProgressRef.current) {
+      return;
+    }
+
+    exportInProgressRef.current = true;
+    setExportStatus('exporting');
+    setExportProgress({ stage: 'preparing' });
+    const stopListening = window.combarkDesktop.onExportProgress(
+      setExportProgress,
+    );
+    try {
+      const result = await window.combarkDesktop.exportMp4(
+        stateRef.current.project,
+      );
+      if (result.status === 'success') {
+        setExportStatus('success');
+        setExportProgress({ stage: 'complete' });
+      } else {
+        setExportStatus('idle');
+        setExportProgress(null);
+      }
+    } catch {
+      setExportStatus('error');
+      setExportProgress(null);
+    } finally {
+      stopListening();
+      exportInProgressRef.current = false;
+    }
+  };
+
   return {
     state,
     recoveryCandidates,
@@ -563,6 +603,8 @@ export function useProjectController(initialState?: ProjectState) {
     removeRecentProject,
     projectOpenError,
     projectSaveStatus,
+    exportStatus,
+    exportProgress,
     newProject,
     importMedia,
     selectNarration,
@@ -573,5 +615,6 @@ export function useProjectController(initialState?: ProjectState) {
     openProject,
     saveProject,
     saveProjectAs,
+    exportMp4,
   };
 }

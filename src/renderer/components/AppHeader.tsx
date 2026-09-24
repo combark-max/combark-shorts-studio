@@ -5,6 +5,7 @@ export interface AppHeaderProps {
   onSaveProjectAs(): void;
   onAutoShorts(): void;
   onExport(): void;
+  exportInProgress: boolean;
 }
 
 export function AppHeader({
@@ -14,6 +15,7 @@ export function AppHeader({
   onSaveProjectAs,
   onAutoShorts,
   onExport,
+  exportInProgress,
 }: AppHeaderProps) {
   return (
     <header className="app-header">
@@ -24,7 +26,9 @@ export function AppHeader({
         <button type="button" onClick={onSaveProject}>저장</button>
         <button type="button" onClick={onSaveProjectAs}>다른 이름으로 저장</button>
         <button type="button" onClick={onAutoShorts}>쇼츠 자동 만들기</button>
-        <button type="button" onClick={onExport}>YouTube Shorts로 내보내기</button>
+        <button type="button" onClick={onExport} disabled={exportInProgress}>
+          {exportInProgress ? '내보내는 중...' : 'MP4 내보내기'}
+        </button>
       </nav>
     </header>
   );

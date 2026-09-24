@@ -6,6 +6,8 @@ import { createNewProject } from '../../src/shared/project/createProject';
 
 const desktopApi = {
   getAppVersion: vi.fn(),
+  exportMp4: vi.fn(),
+  onExportProgress: vi.fn(),
   openMediaDialog: vi.fn(),
   openNarrationDialog: vi.fn(),
   openProjectDialog: vi.fn(),
@@ -32,6 +34,8 @@ beforeEach(() => {
   desktopApi.deleteRecovery.mockResolvedValue(undefined);
   desktopApi.listRecentProjects.mockResolvedValue([]);
   desktopApi.removeRecentProject.mockResolvedValue([]);
+  desktopApi.exportMp4.mockResolvedValue({ status: 'canceled' });
+  desktopApi.onExportProgress.mockReturnValue(vi.fn());
   Object.defineProperty(window, 'combarkDesktop', {
     configurable: true,
     value: desktopApi,
@@ -44,6 +48,73 @@ afterEach(() => {
 });
 
 describe('App', () => {
+  it('disables MP4 export while running and shows success feedback', async () => {
+    let progressListener: ((progress: unknown) => void) | undefined;
+    desktopApi.onExportProgress.mockImplementation((listener) => {
+      progressListener = listener;
+      return vi.fn();
+    });
+    const user = userEvent.setup();
+    let finishExport: ((value: { status: 'success'; filePath: string }) => void) | undefined;
+    desktopApi.exportMp4.mockReturnValue(new Promise((resolve) => { finishExport = resolve; }));
+    render(<App />);
+    await screen.findByText('Combark Shorts Studio');
+
+    const button = screen.getByRole('button', { name: 'MP4 내보내기' });
+    await user.click(button);
+    expect(button).toBeDisabled();
+    expect(button).toHaveTextContent('내보내는 중...');
+    expect(screen.getByRole('status', { name: '내보내기 상태' })).toHaveTextContent(
+      '내보내기 준비 중...',
+    );
+
+    act(() => {
+      progressListener?.({ stage: 'scene', sceneIndex: 2, sceneCount: 5 });
+    });
+    expect(screen.getByRole('status', { name: '내보내기 상태' })).toHaveTextContent(
+      '장면 2/5 처리 중...',
+    );
+
+    act(() => {
+      progressListener?.({ stage: 'concatenating' });
+    });
+    expect(screen.getByRole('status', { name: '내보내기 상태' })).toHaveTextContent(
+      '장면 합치는 중...',
+    );
+
+    act(() => {
+      progressListener?.({ stage: 'muxing-audio' });
+    });
+    expect(screen.getByRole('status', { name: '내보내기 상태' })).toHaveTextContent(
+      '오디오 합치는 중...',
+    );
+
+    act(() => {
+      progressListener?.({ stage: 'writing-output' });
+    });
+    expect(screen.getByRole('status', { name: '내보내기 상태' })).toHaveTextContent(
+      '파일 저장 중...',
+    );
+
+    await act(async () => {
+      finishExport?.({ status: 'success', filePath: 'C:\\exports\\video.mp4' });
+      await Promise.resolve();
+    });
+    expect(await screen.findByText('MP4 내보내기 완료')).toBeInTheDocument();
+    expect(button).toBeEnabled();
+  });
+
+  it('shows an MP4 export failure message', async () => {
+    const user = userEvent.setup();
+    desktopApi.exportMp4.mockRejectedValue(new Error('ffmpeg failed'));
+    render(<App />);
+    await screen.findByText('Combark Shorts Studio');
+    await user.click(screen.getByRole('button', { name: 'MP4 내보내기' }));
+    expect(await screen.findByRole('alert', { name: '내보내기 상태' })).toHaveTextContent(
+      'MP4 파일을 내보내지 못했습니다.',
+    );
+  });
+
   it('shows saving and success feedback for Save', async () => {
     const user = userEvent.setup();
     let finishWrite: (() => void) | undefined;
@@ -460,7 +531,7 @@ describe('App', () => {
     expect(await screen.findByText('Combark Shorts Studio')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '새 프로젝트' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '쇼츠 자동 만들기' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'YouTube Shorts로 내보내기' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'MP4 내보내기' })).toBeInTheDocument();
 
     expect(screen.getByText('미디어')).toBeInTheDocument();
     expect(screen.getByText('미리보기')).toBeInTheDocument();

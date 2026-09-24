@@ -2,11 +2,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createNewProject } from '../../src/shared/project/createProject';
 import { IPC_CHANNELS } from '../../src/shared/ipc';
 
-const invoke = vi.hoisted(() => vi.fn());
+const { invoke, on, removeListener } = vi.hoisted(() => ({
+  invoke: vi.fn(),
+  on: vi.fn(),
+  removeListener: vi.fn(),
+}));
 
 vi.mock('electron', () => ({
   ipcRenderer: {
     invoke,
+    on,
+    removeListener,
   },
 }));
 
@@ -32,6 +38,7 @@ describe('desktopApi project methods', () => {
       lastUsedAt: '2026-09-19T03:00:00.000Z',
     };
     invoke
+      .mockResolvedValueOnce({ status: 'canceled' })
       .mockResolvedValueOnce('1.0.0')
       .mockResolvedValueOnce([
         {
@@ -58,6 +65,8 @@ describe('desktopApi project methods', () => {
 
     expect(Object.keys(desktopApi)).toEqual([
       'getAppVersion',
+      'exportMp4',
+      'onExportProgress',
       'openMediaDialog',
       'openNarrationDialog',
       'openProjectDialog',
@@ -72,6 +81,7 @@ describe('desktopApi project methods', () => {
       'removeRecentProject',
     ]);
     expect(Object.keys(desktopApi)).not.toContain('recordRecentProject');
+    await expect(desktopApi.exportMp4(project)).resolves.toEqual({ status: 'canceled' });
     await expect(desktopApi.getAppVersion()).resolves.toBe('1.0.0');
     await expect(desktopApi.openMediaDialog()).resolves.toEqual([
       {
@@ -112,50 +122,51 @@ describe('desktopApi project methods', () => {
       desktopApi.removeRecentProject(recentProject.filePath),
     ).resolves.toEqual([]);
 
-    expect(invoke).toHaveBeenNthCalledWith(1, IPC_CHANNELS.appGetVersion);
-    expect(invoke).toHaveBeenNthCalledWith(2, IPC_CHANNELS.mediaOpenDialog);
-    expect(invoke).toHaveBeenNthCalledWith(3, IPC_CHANNELS.projectOpenDialog);
+    expect(invoke).toHaveBeenNthCalledWith(1, IPC_CHANNELS.exportMp4, project);
+    expect(invoke).toHaveBeenNthCalledWith(2, IPC_CHANNELS.appGetVersion);
+    expect(invoke).toHaveBeenNthCalledWith(3, IPC_CHANNELS.mediaOpenDialog);
+    expect(invoke).toHaveBeenNthCalledWith(4, IPC_CHANNELS.projectOpenDialog);
     expect(invoke).toHaveBeenNthCalledWith(
-      4,
+      5,
       IPC_CHANNELS.projectSaveDialog,
       '첫 프로젝트',
     );
     expect(invoke).toHaveBeenNthCalledWith(
-      5,
+      6,
       IPC_CHANNELS.projectRead,
       'C:\\projects\\opened.cssproj',
     );
     expect(invoke).toHaveBeenNthCalledWith(
-      6,
+      7,
       IPC_CHANNELS.projectWrite,
       'C:\\projects\\opened.cssproj',
       project,
     );
     expect(invoke).toHaveBeenNthCalledWith(
-      7,
+      8,
       IPC_CHANNELS.projectRecoveryWrite,
       project,
     );
     expect(invoke).toHaveBeenNthCalledWith(
-      8,
+      9,
       IPC_CHANNELS.projectRecoveryDelete,
       project.projectId,
     );
     expect(invoke).toHaveBeenNthCalledWith(
-      9,
+      10,
       IPC_CHANNELS.projectRecoveryList,
     );
     expect(invoke).toHaveBeenNthCalledWith(
-      10,
+      11,
       IPC_CHANNELS.projectRecentList,
     );
     expect(invoke).toHaveBeenNthCalledWith(
-      11,
+      12,
       IPC_CHANNELS.projectRecentOpen,
       recentProject.filePath,
     );
     expect(invoke).toHaveBeenNthCalledWith(
-      12,
+      13,
       IPC_CHANNELS.projectRecentRemove,
       recentProject.filePath,
     );

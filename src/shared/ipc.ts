@@ -1,5 +1,7 @@
 export const IPC_CHANNELS = {
   appGetVersion: 'app:get-version',
+  exportMp4: 'export:mp4',
+  exportProgress: 'export:progress',
   mediaOpenDialog: 'media:open-dialog',
   narrationOpenDialog: 'narration:open-dialog',
   projectOpenDialog: 'project:open-dialog',

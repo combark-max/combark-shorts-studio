@@ -1,5 +1,6 @@
-import { ipcRenderer } from 'electron';
+import { ipcRenderer, type IpcRendererEvent } from 'electron';
 
+import type { ExportMp4Result, ExportProgress } from '../shared/export';
 import type {
   MediaAsset,
   NarrationAsset,
@@ -13,6 +14,19 @@ import { IPC_CHANNELS } from '../shared/ipc';
 export const desktopApi = {
   getAppVersion: (): Promise<string> =>
     ipcRenderer.invoke(IPC_CHANNELS.appGetVersion),
+  exportMp4: (project: ProjectDocument): Promise<ExportMp4Result> =>
+    ipcRenderer.invoke(IPC_CHANNELS.exportMp4, project),
+  onExportProgress: (
+    listener: (progress: ExportProgress) => void,
+  ): (() => void) => {
+    const handler = (_event: IpcRendererEvent, progress: ExportProgress): void => {
+      listener(progress);
+    };
+    ipcRenderer.on(IPC_CHANNELS.exportProgress, handler);
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.exportProgress, handler);
+    };
+  },
   openMediaDialog: (): Promise<MediaAsset[]> =>
     ipcRenderer.invoke(IPC_CHANNELS.mediaOpenDialog),
   openNarrationDialog: (): Promise<NarrationAsset | null> =>

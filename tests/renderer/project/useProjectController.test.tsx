@@ -84,9 +84,9 @@ function createSceneState(): ProjectState {
         },
       ],
       scenes: [
-        { mediaId: 'first-image', durationMs: 3000, subtitle: '첫 장면' },
-        { mediaId: 'middle-video', durationMs: null, subtitle: '' },
-        { mediaId: 'last-image', durationMs: 3000, subtitle: '' },
+        { mediaId: 'first-image', durationMs: 3000, subtitle: '첫 장면', subtitlePosition: 'bottom', subtitleSize: 'medium' },
+        { mediaId: 'middle-video', durationMs: null, subtitle: '', subtitlePosition: 'bottom', subtitleSize: 'medium' },
+        { mediaId: 'last-image', durationMs: 3000, subtitle: '', subtitlePosition: 'bottom', subtitleSize: 'medium' },
       ],
     },
   });
@@ -254,8 +254,8 @@ describe('useProjectController', () => {
       },
     ]);
     expect(result.current.state.project.scenes).toEqual([
-      { mediaId: 'photo-id', durationMs: 3000, subtitle: '' },
-      { mediaId: 'video-id', durationMs: null, subtitle: '' },
+      { mediaId: 'photo-id', durationMs: 3000, subtitle: '', subtitlePosition: 'bottom', subtitleSize: 'medium' },
+      { mediaId: 'video-id', durationMs: null, subtitle: '', subtitlePosition: 'bottom', subtitleSize: 'medium' },
     ]);
     expect(result.current.state.dirty).toBe(true);
     expect(result.current.state.project.updatedAt).not.toBe(
@@ -431,6 +431,8 @@ describe('useProjectController', () => {
       mediaId: 'first-image',
       durationMs: 4500,
       subtitle: '첫 장면',
+      subtitlePosition: 'bottom',
+      subtitleSize: 'medium',
     });
 
     const afterImageChange = result.current.state;
@@ -452,6 +454,8 @@ describe('useProjectController', () => {
       mediaId: 'middle-video',
       durationMs: null,
       subtitle: '새 자막',
+      subtitlePosition: 'bottom',
+      subtitleSize: 'medium',
     });
     expect(result.current.state.dirty).toBe(true);
     expect(result.current.state.project.updatedAt).not.toBe(
@@ -462,6 +466,37 @@ describe('useProjectController', () => {
     act(() => {
       result.current.updateSceneSubtitle('middle-video', '새 자막');
       result.current.updateSceneSubtitle('missing-media', '무시');
+    });
+    expect(result.current.state).toBe(afterChange);
+  });
+
+  it('changes one scene subtitle style and ignores identical or missing updates', () => {
+    const initialState = createSceneState();
+    const { result } = renderHook(() => useProjectController(initialState));
+
+    act(() => {
+      result.current.updateSceneSubtitlePosition('middle-video', 'top');
+      result.current.updateSceneSubtitleSize('middle-video', 'large');
+    });
+
+    expect(result.current.state.project.scenes[1]).toMatchObject({
+      subtitlePosition: 'top',
+      subtitleSize: 'large',
+    });
+    expect(result.current.state.project.scenes[0]).toBe(
+      initialState.project.scenes[0],
+    );
+    expect(result.current.state.dirty).toBe(true);
+    expect(result.current.state.project.updatedAt).not.toBe(
+      initialState.project.updatedAt,
+    );
+
+    const afterChange = result.current.state;
+    act(() => {
+      result.current.updateSceneSubtitlePosition('middle-video', 'top');
+      result.current.updateSceneSubtitleSize('middle-video', 'large');
+      result.current.updateSceneSubtitlePosition('missing-media', 'center');
+      result.current.updateSceneSubtitleSize('missing-media', 'small');
     });
     expect(result.current.state).toBe(afterChange);
   });

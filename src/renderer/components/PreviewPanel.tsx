@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 
 import { createMediaUrl } from '../../shared/mediaProtocol';
 import type {
@@ -6,6 +7,7 @@ import type {
   NarrationAsset,
   Scene,
 } from '../../shared/project/types';
+import { getSubtitleStyle } from '../../shared/project/subtitleStyle';
 
 interface PreviewPanelProps {
   media: MediaAsset[];
@@ -40,6 +42,21 @@ export function PreviewPanel({
   );
   const currentScene = currentIndex >= 0 ? scenes[currentIndex] : null;
   const currentAsset = media.find(({ id }) => id === selectedMediaId) ?? null;
+  const subtitleStyle = currentScene
+    ? getSubtitleStyle(currentScene.subtitlePosition, currentScene.subtitleSize)
+    : null;
+  const previewSubtitleStyle: CSSProperties | undefined = subtitleStyle
+    ? {
+        fontSize: `${subtitleStyle.normalizedFontSize * 100}cqw`,
+        left: `${subtitleStyle.normalizedHorizontalMargin * 100}%`,
+        right: `${subtitleStyle.normalizedHorizontalMargin * 100}%`,
+        ...(currentScene?.subtitlePosition === 'top'
+          ? { top: `${subtitleStyle.normalizedVerticalMargin * 100}%` }
+          : currentScene?.subtitlePosition === 'center'
+            ? { top: '50%', transform: 'translateY(-50%)' }
+            : { bottom: `${subtitleStyle.normalizedVerticalMargin * 100}%` }),
+      }
+    : undefined;
 
   useEffect(() => {
     setMediaError(null);
@@ -270,7 +287,9 @@ export function PreviewPanel({
           />
         )}
         {currentScene?.subtitle ? (
-          <p className="preview-subtitle">{currentScene.subtitle}</p>
+          <p className="preview-subtitle" style={previewSubtitleStyle}>
+            {currentScene.subtitle}
+          </p>
         ) : null}
       </div>
       {narration ? (

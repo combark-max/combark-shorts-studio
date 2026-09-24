@@ -31,9 +31,9 @@ const media: MediaAsset[] = [
 ];
 
 const scenes: Scene[] = [
-  { mediaId: 'first-image', durationMs: 3000, subtitle: '첫 자막' },
-  { mediaId: 'video', durationMs: null, subtitle: '영상 자막' },
-  { mediaId: 'last-image', durationMs: 2000, subtitle: '' },
+  { mediaId: 'first-image', durationMs: 3000, subtitle: '첫 자막', subtitlePosition: 'top', subtitleSize: 'large' },
+  { mediaId: 'video', durationMs: null, subtitle: '영상 자막', subtitlePosition: 'center', subtitleSize: 'small' },
+  { mediaId: 'last-image', durationMs: 2000, subtitle: '', subtitlePosition: 'bottom', subtitleSize: 'medium' },
 ];
 
 const narration: NarrationAsset = {
@@ -150,10 +150,23 @@ describe('PreviewPanel', () => {
       'src',
       'combark-media://local/?path=C%3A%5Cmedia+folder%5Cfirst+image.jpg',
     );
-    expect(screen.getByText('첫 자막')).toBeInTheDocument();
+    const subtitle = screen.getByText('첫 자막');
+    expect(subtitle).toBeInTheDocument();
+    expect(subtitle.style.fontSize).toBe(`${(80 / 1080) * 100}cqw`);
+    expect(subtitle.style.top).toBe(`${(150 / 1920) * 100}%`);
+    expect(subtitle.style.left).toBe(`${(80 / 1080) * 100}%`);
     expect(screen.getByRole('button', { name: '이전' })).toBeDisabled();
     expect(screen.getByRole('button', { name: '다음' })).toBeEnabled();
     expect(screen.getByRole('button', { name: '재생' })).toBeEnabled();
+  });
+
+  it('renders a centered small subtitle using the shared normalized style', () => {
+    render(<StatefulPreview initialMediaId="video" />);
+
+    const subtitle = screen.getByText('영상 자막');
+    expect(subtitle.style.fontSize).toBe(`${(48 / 1080) * 100}cqw`);
+    expect(subtitle.style.top).toBe('50%');
+    expect(subtitle.style.transform).toBe('translateY(-50%)');
   });
 
   it('moves between image and video scenes with previous and next', () => {

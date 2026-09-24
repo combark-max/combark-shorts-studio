@@ -132,6 +132,7 @@ button:hover {
   overflow: hidden;
   position: relative;
   width: min(360px, 100%);
+  container-type: inline-size;
 }
 
 .preview-media {
@@ -160,16 +161,12 @@ button:hover {
 
 .preview-subtitle {
   background: rgba(0, 0, 0, 0.72);
-  bottom: 24px;
   color: #fff;
-  font-size: 18px;
   font-weight: 600;
-  left: 12px;
   line-height: 1.4;
   margin: 0;
   padding: 8px 12px;
   position: absolute;
-  right: 12px;
   text-align: center;
   white-space: pre-wrap;
   word-break: break-word;
@@ -279,14 +276,32 @@ button:hover {
   gap: 8px;
 }
 
+.scene-subtitle {
+  flex-wrap: wrap;
+}
+
 .scene-subtitle span {
   color: #aab2c0;
   white-space: nowrap;
 }
 
+.scene-subtitle label {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.scene-subtitle-text {
+  flex: 1 1 240px;
+}
+
 .scene-subtitle input {
   min-width: 0;
   width: 100%;
+}
+
+.scene-subtitle select {
+  min-width: 72px;
 }
 
 .scene-duration input {

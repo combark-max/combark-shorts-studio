@@ -5,7 +5,12 @@ import { tmpdir } from 'node:os';
 import { join, win32 } from 'node:path';
 
 import type { ExportProgress } from '../../shared/export';
-import type { MediaAsset } from '../../shared/project/types';
+import type {
+  MediaAsset,
+  SubtitlePosition,
+  SubtitleSize,
+} from '../../shared/project/types';
+import { getSubtitleStyle } from '../../shared/project/subtitleStyle';
 import { validateProjectDocument } from '../../shared/project/validateProject';
 
 const VIDEO_FILTER =
@@ -72,7 +77,12 @@ export function escapeAssText(text: string): string {
     .replace(/\r\n|\r|\n/g, '\\N');
 }
 
-export function buildAssDocument(text: string): string {
+export function buildAssDocument(
+  text: string,
+  position: SubtitlePosition,
+  size: SubtitleSize,
+): string {
+  const style = getSubtitleStyle(position, size);
   return [
     '[Script Info]',
     'ScriptType: v4.00+',
@@ -82,7 +92,7 @@ export function buildAssDocument(text: string): string {
     '',
     '[V4+ Styles]',
     'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
-    'Style: Default,Malgun Gothic,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,4,0,2,80,80,150,1',
+    `Style: Default,Malgun Gothic,${style.fontSize},&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,4,0,${style.alignment},${style.horizontalMargin},${style.horizontalMargin},${style.verticalMargin},1`,
     '',
     '[Events]',
     'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
@@ -252,7 +262,14 @@ export async function exportProject(
       let subtitlePath: string | null = null;
       if (scene.subtitle.length > 0) {
         subtitlePath = join(tempDirectory, `subtitle-${sequence}.ass`);
-        await writeTextFile(subtitlePath, buildAssDocument(scene.subtitle));
+        await writeTextFile(
+          subtitlePath,
+          buildAssDocument(
+            scene.subtitle,
+            scene.subtitlePosition,
+            scene.subtitleSize,
+          ),
+        );
       }
 
       await execute(dependencies.ffmpegPath, buildSceneArgs({

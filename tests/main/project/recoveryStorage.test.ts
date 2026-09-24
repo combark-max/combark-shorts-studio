@@ -52,6 +52,8 @@ describe('recoveryStorage', () => {
           mediaId: 'recovery-photo-id',
           durationMs: 3000,
           subtitle: '복구 자막',
+          subtitlePosition: 'center' as const,
+          subtitleSize: 'small' as const,
         },
       ],
       narration: {

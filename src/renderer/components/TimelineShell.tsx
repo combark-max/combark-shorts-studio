@@ -1,7 +1,12 @@
 import { useState } from 'react';
 
 import { createMediaUrl } from '../../shared/mediaProtocol';
-import type { MediaAsset, Scene } from '../../shared/project/types';
+import type {
+  MediaAsset,
+  Scene,
+  SubtitlePosition,
+  SubtitleSize,
+} from '../../shared/project/types';
 
 interface TimelineShellProps {
   media: MediaAsset[];
@@ -12,6 +17,8 @@ interface TimelineShellProps {
   onDeleteScene: (mediaId: string) => void;
   onUpdateSceneDuration: (mediaId: string, durationMs: number) => void;
   onUpdateSceneSubtitle: (mediaId: string, subtitle: string) => void;
+  onUpdateSceneSubtitlePosition: (mediaId: string, position: SubtitlePosition) => void;
+  onUpdateSceneSubtitleSize: (mediaId: string, size: SubtitleSize) => void;
 }
 
 type VideoDurations = Record<string, number | null>;
@@ -32,6 +39,8 @@ export function TimelineShell({
   onDeleteScene,
   onUpdateSceneDuration,
   onUpdateSceneSubtitle,
+  onUpdateSceneSubtitlePosition,
+  onUpdateSceneSubtitleSize,
 }: TimelineShellProps) {
   const [videoDurations, setVideoDurations] = useState<VideoDurations>({});
 
@@ -151,19 +160,55 @@ export function TimelineShell({
                     </span>
                   )}
                 </div>
-                <label className="scene-subtitle">
-                  <span>{index + 1}번 장면 자막</span>
-                  <input
-                    type="text"
-                    value={scene.subtitle}
-                    onChange={(event) =>
-                      onUpdateSceneSubtitle(
-                        scene.mediaId,
-                        event.currentTarget.value,
-                      )
-                    }
-                  />
-                </label>
+                <div className="scene-subtitle">
+                  <label className="scene-subtitle-text">
+                    <span>{index + 1}번 장면 자막</span>
+                    <input
+                      type="text"
+                      value={scene.subtitle}
+                      onChange={(event) =>
+                        onUpdateSceneSubtitle(
+                          scene.mediaId,
+                          event.currentTarget.value,
+                        )
+                      }
+                    />
+                  </label>
+                  <label>
+                    <span>위치</span>
+                    <select
+                      aria-label={`${index + 1}번 장면 자막 위치`}
+                      value={scene.subtitlePosition}
+                      onChange={(event) =>
+                        onUpdateSceneSubtitlePosition(
+                          scene.mediaId,
+                          event.currentTarget.value as SubtitlePosition,
+                        )
+                      }
+                    >
+                      <option value="top">상단</option>
+                      <option value="center">중앙</option>
+                      <option value="bottom">하단</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>크기</span>
+                    <select
+                      aria-label={`${index + 1}번 장면 자막 크기`}
+                      value={scene.subtitleSize}
+                      onChange={(event) =>
+                        onUpdateSceneSubtitleSize(
+                          scene.mediaId,
+                          event.currentTarget.value as SubtitleSize,
+                        )
+                      }
+                    >
+                      <option value="small">작게</option>
+                      <option value="medium">보통</option>
+                      <option value="large">크게</option>
+                    </select>
+                  </label>
+                </div>
                 <div className="scene-actions">
                   <button
                     type="button"

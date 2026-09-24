@@ -45,6 +45,8 @@ export function App() {
     deleteScene,
     updateSceneDuration,
     updateSceneSubtitle,
+    updateSceneSubtitlePosition,
+    updateSceneSubtitleSize,
     openProject,
     saveProject,
     saveProjectAs,
@@ -220,6 +222,8 @@ export function App() {
         onDeleteScene={deleteScene}
         onUpdateSceneDuration={updateSceneDuration}
         onUpdateSceneSubtitle={updateSceneSubtitle}
+        onUpdateSceneSubtitlePosition={updateSceneSubtitlePosition}
+        onUpdateSceneSubtitleSize={updateSceneSubtitleSize}
       />
       <footer className="app-footer">
         {projectOpenError ? (

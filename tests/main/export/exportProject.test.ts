@@ -30,8 +30,8 @@ function createExportProject(): ProjectDocument {
       },
     ],
     scenes: [
-      { mediaId: 'image-id', durationMs: 2500, subtitle: '첫째\\줄\n{둘째}, 줄' },
-      { mediaId: 'video-id', durationMs: null, subtitle: '영상 자막' },
+      { mediaId: 'image-id', durationMs: 2500, subtitle: '첫째\\줄\n{둘째}, 줄', subtitlePosition: 'top', subtitleSize: 'large' },
+      { mediaId: 'video-id', durationMs: null, subtitle: '영상 자막', subtitlePosition: 'bottom', subtitleSize: 'medium' },
     ],
     narration: null,
   };
@@ -55,8 +55,17 @@ describe('MP4 export argument generation', () => {
     expect(escapeAssText('한글\\N {태그}\r\n둘째\n셋째')).toBe(
       '한글\\\\N \\{태그\\}\\N둘째\\N셋째',
     );
-    expect(buildAssDocument('안녕, 세상')).toContain(
+    expect(buildAssDocument('안녕, 세상', 'bottom', 'medium')).toContain(
       'Dialogue: 0,0:00:00.00,9:59:59.99,Default,,0,0,0,,안녕, 세상',
+    );
+  });
+
+  it('uses canonical subtitle position, size, and safe-area margins in ASS', () => {
+    expect(buildAssDocument('상단 큰 자막', 'top', 'large')).toContain(
+      'Style: Default,Malgun Gothic,80,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,4,0,8,80,80,150,1',
+    );
+    expect(buildAssDocument('중앙 작은 자막', 'center', 'small')).toContain(
+      'Style: Default,Malgun Gothic,48,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,4,0,5,80,80,150,1',
     );
   });
 
@@ -203,6 +212,7 @@ describe('exportProject pipeline', () => {
     expect(calls[2]).toEqual(expect.arrayContaining(['-f', 'concat', '-safe', '0']));
     expect(calls[3]).toContain('anullsrc=channel_layout=stereo:sample_rate=48000');
     expect(writes.some(([, value]) => value.includes("file 'scene-000000.mp4'\nfile 'scene-000001.mp4'"))).toBe(true);
+    expect(writes.some(([, value]) => value.includes('Malgun Gothic,80') && value.includes(',8,80,80,150,1'))).toBe(true);
     expect(copy).toHaveBeenCalledWith(
       'C:\\Temp\\combark 한글\\final.mp4',
       'C:\\exports\\완성 영상.mp4',

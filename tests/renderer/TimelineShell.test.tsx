@@ -21,8 +21,8 @@ const media: MediaAsset[] = [
 ];
 
 const scenes: Scene[] = [
-  { mediaId: 'photo-id', durationMs: 3000, subtitle: '사진 자막' },
-  { mediaId: 'video-id', durationMs: null, subtitle: '' },
+  { mediaId: 'photo-id', durationMs: 3000, subtitle: '사진 자막', subtitlePosition: 'bottom', subtitleSize: 'medium' },
+  { mediaId: 'video-id', durationMs: null, subtitle: '', subtitlePosition: 'bottom', subtitleSize: 'medium' },
 ];
 
 afterEach(() => {
@@ -41,6 +41,8 @@ describe('TimelineShell', () => {
         onDeleteScene={vi.fn()}
         onUpdateSceneDuration={vi.fn()}
         onUpdateSceneSubtitle={vi.fn()}
+        onUpdateSceneSubtitlePosition={vi.fn()}
+        onUpdateSceneSubtitleSize={vi.fn()}
       />,
     );
 
@@ -80,6 +82,8 @@ describe('TimelineShell', () => {
         onDeleteScene={vi.fn()}
         onUpdateSceneDuration={vi.fn()}
         onUpdateSceneSubtitle={vi.fn()}
+        onUpdateSceneSubtitlePosition={vi.fn()}
+        onUpdateSceneSubtitleSize={vi.fn()}
       />,
     );
 
@@ -115,6 +119,8 @@ describe('TimelineShell', () => {
         onDeleteScene={vi.fn()}
         onUpdateSceneDuration={vi.fn()}
         onUpdateSceneSubtitle={vi.fn()}
+        onUpdateSceneSubtitlePosition={vi.fn()}
+        onUpdateSceneSubtitleSize={vi.fn()}
       />,
     );
     const video = container.querySelector('video') as HTMLVideoElement;
@@ -135,10 +141,12 @@ describe('TimelineShell', () => {
           selectedMediaId="video-id"
           onSelectScene={vi.fn()}
           onMoveScene={vi.fn()}
-          onDeleteScene={vi.fn()}
-          onUpdateSceneDuration={vi.fn()}
-          onUpdateSceneSubtitle={vi.fn()}
-        />,
+        onDeleteScene={vi.fn()}
+        onUpdateSceneDuration={vi.fn()}
+        onUpdateSceneSubtitle={vi.fn()}
+        onUpdateSceneSubtitlePosition={vi.fn()}
+        onUpdateSceneSubtitleSize={vi.fn()}
+      />,
       );
       const video = container.querySelector('video') as HTMLVideoElement;
       Object.defineProperty(video, 'duration', { configurable: true, value: duration });
@@ -160,6 +168,8 @@ describe('TimelineShell', () => {
         onDeleteScene={vi.fn()}
         onUpdateSceneDuration={vi.fn()}
         onUpdateSceneSubtitle={vi.fn()}
+        onUpdateSceneSubtitlePosition={vi.fn()}
+        onUpdateSceneSubtitleSize={vi.fn()}
       />,
     );
 
@@ -179,6 +189,8 @@ describe('TimelineShell', () => {
         onDeleteScene={vi.fn()}
         onUpdateSceneDuration={vi.fn()}
         onUpdateSceneSubtitle={vi.fn()}
+        onUpdateSceneSubtitlePosition={vi.fn()}
+        onUpdateSceneSubtitleSize={vi.fn()}
       />,
     );
     const video = container.querySelector('video') as HTMLVideoElement;
@@ -201,6 +213,8 @@ describe('TimelineShell', () => {
     const onDeleteScene = vi.fn();
     const onUpdateSceneDuration = vi.fn();
     const onUpdateSceneSubtitle = vi.fn();
+    const onUpdateSceneSubtitlePosition = vi.fn();
+    const onUpdateSceneSubtitleSize = vi.fn();
     render(
       <TimelineShell
         media={media}
@@ -211,6 +225,8 @@ describe('TimelineShell', () => {
         onDeleteScene={onDeleteScene}
         onUpdateSceneDuration={onUpdateSceneDuration}
         onUpdateSceneSubtitle={onUpdateSceneSubtitle}
+        onUpdateSceneSubtitlePosition={onUpdateSceneSubtitlePosition}
+        onUpdateSceneSubtitleSize={onUpdateSceneSubtitleSize}
       />,
     );
 
@@ -226,6 +242,14 @@ describe('TimelineShell', () => {
       within(items[0]).getByRole('textbox', { name: '1번 장면 자막' }),
       { target: { value: '변경 자막' } },
     );
+    await user.selectOptions(
+      within(items[0]).getByRole('combobox', { name: '1번 장면 자막 위치' }),
+      'top',
+    );
+    await user.selectOptions(
+      within(items[0]).getByRole('combobox', { name: '1번 장면 자막 크기' }),
+      'large',
+    );
 
     expect(onMoveScene).toHaveBeenCalledWith('video-id', 'up');
     expect(onDeleteScene).toHaveBeenCalledWith('photo-id');
@@ -233,6 +257,14 @@ describe('TimelineShell', () => {
     expect(onUpdateSceneSubtitle).toHaveBeenLastCalledWith(
       'photo-id',
       '변경 자막',
+    );
+    expect(onUpdateSceneSubtitlePosition).toHaveBeenCalledWith(
+      'photo-id',
+      'top',
+    );
+    expect(onUpdateSceneSubtitleSize).toHaveBeenCalledWith(
+      'photo-id',
+      'large',
     );
   });
 
@@ -249,6 +281,8 @@ describe('TimelineShell', () => {
         onDeleteScene={vi.fn()}
         onUpdateSceneDuration={vi.fn()}
         onUpdateSceneSubtitle={vi.fn()}
+        onUpdateSceneSubtitlePosition={vi.fn()}
+        onUpdateSceneSubtitleSize={vi.fn()}
       />,
     );
 

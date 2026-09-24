@@ -60,52 +60,77 @@ const validProjectV5 = {
   },
 };
 
+const validProjectV6 = {
+  ...validProjectV5,
+  schemaVersion: 6,
+  scenes: validProjectV4.scenes.map((scene) => ({
+    ...scene,
+    subtitlePosition: 'bottom',
+    subtitleSize: 'medium',
+  })),
+};
+
+const withDefaultSubtitleStyle = (scene: Record<string, unknown>) => ({
+  ...scene,
+  subtitlePosition: 'bottom',
+  subtitleSize: 'medium',
+});
+
 describe('validateProjectDocument', () => {
-  it('migrates a valid v1 project document to v5 with empty media, scenes, and narration', () => {
+  it('migrates a valid v1 project document to v6 with empty media, scenes, and narration', () => {
     expect(validateProjectDocument(validProjectV1)).toEqual({
       ...validProjectV1,
-      schemaVersion: 5,
+      schemaVersion: 6,
       media: [],
       scenes: [],
       narration: null,
     });
   });
 
-  it('migrates a valid v2 project document to v5 with one scene per media asset', () => {
+  it('migrates a valid v2 project document to v6 with one scene per media asset and default subtitle styles', () => {
     expect(validateProjectDocument(validProjectV2)).toEqual({
       ...validProjectV4,
       scenes: [
-        { mediaId: 'image-id', durationMs: 3000, subtitle: '' },
-        { mediaId: 'video-id', durationMs: null, subtitle: '' },
+        withDefaultSubtitleStyle({ mediaId: 'image-id', durationMs: 3000, subtitle: '' }),
+        withDefaultSubtitleStyle({ mediaId: 'video-id', durationMs: null, subtitle: '' }),
       ],
-      schemaVersion: 5,
+      schemaVersion: 6,
       narration: null,
     });
   });
 
-  it('migrates a valid v3 project document to v5 with empty subtitles', () => {
+  it('migrates a valid v3 project document to v6 with empty subtitles and default styles', () => {
     expect(validateProjectDocument(validProjectV3)).toEqual({
       ...validProjectV3,
-      schemaVersion: 5,
+      schemaVersion: 6,
       scenes: [
-        { mediaId: 'image-id', durationMs: 3000, subtitle: '' },
-        { mediaId: 'video-id', durationMs: null, subtitle: '' },
+        withDefaultSubtitleStyle({ mediaId: 'image-id', durationMs: 3000, subtitle: '' }),
+        withDefaultSubtitleStyle({ mediaId: 'video-id', durationMs: null, subtitle: '' }),
       ],
       narration: null,
     });
   });
 
-  it('migrates a valid v4 project document to v5 without narration', () => {
+  it('migrates a valid v4 project document to v6 with default styles and without narration', () => {
     expect(validateProjectDocument(validProjectV4)).toEqual({
       ...validProjectV4,
-      schemaVersion: 5,
+      schemaVersion: 6,
+      scenes: validProjectV4.scenes.map(withDefaultSubtitleStyle),
       narration: null,
     });
   });
 
-  it.each(['mp3', 'wav'])('accepts a valid v5 %s narration', (extension) => {
-    const project = {
+  it('migrates a valid v5 project document to v6 with default subtitle styles', () => {
+    expect(validateProjectDocument(validProjectV5)).toEqual({
       ...validProjectV5,
+      schemaVersion: 6,
+      scenes: validProjectV5.scenes.map(withDefaultSubtitleStyle),
+    });
+  });
+
+  it.each(['mp3', 'wav'])('accepts a valid v6 %s narration', (extension) => {
+    const project = {
+      ...validProjectV6,
       narration: {
         sourcePath: `C:\\audio\\voice.${extension}`,
         fileName: `voice.${extension}`,
@@ -113,6 +138,42 @@ describe('validateProjectDocument', () => {
     };
 
     expect(validateProjectDocument(project)).toEqual(project);
+  });
+
+  it.each(['top', 'center', 'bottom'])('accepts v6 subtitle position %s', (subtitlePosition) => {
+    const project = {
+      ...validProjectV6,
+      scenes: [{ ...validProjectV6.scenes[0], subtitlePosition }],
+    };
+
+    expect(validateProjectDocument(project)).toEqual(project);
+  });
+
+  it.each(['small', 'medium', 'large'])('accepts v6 subtitle size %s', (subtitleSize) => {
+    const project = {
+      ...validProjectV6,
+      scenes: [{ ...validProjectV6.scenes[0], subtitleSize }],
+    };
+
+    expect(validateProjectDocument(project)).toEqual(project);
+  });
+
+  it.each([
+    ['missing position', { subtitlePosition: undefined }],
+    ['invalid position', { subtitlePosition: 'left' }],
+    ['missing size', { subtitleSize: undefined }],
+    ['invalid size', { subtitleSize: 'huge' }],
+    ['unknown field', { style: 'bold' }],
+  ])('rejects v6 scene with %s', (_label, change) => {
+    const scene: Record<string, unknown> = { ...validProjectV6.scenes[0], ...change };
+    if ('subtitlePosition' in change && change.subtitlePosition === undefined) {
+      delete scene.subtitlePosition;
+    }
+    if ('subtitleSize' in change && change.subtitleSize === undefined) {
+      delete scene.subtitleSize;
+    }
+
+    expect(() => validateProjectDocument({ ...validProjectV6, scenes: [scene] })).toThrow();
   });
 
   it.each([
@@ -134,7 +195,7 @@ describe('validateProjectDocument', () => {
   });
 
   it.each([
-    ['schemaVersion', { schemaVersion: 6 }],
+    ['schemaVersion', { schemaVersion: 7 }],
     ['projectId missing', { projectId: undefined }],
     ['projectId empty', { projectId: '' }],
     ['name missing', { name: undefined }],

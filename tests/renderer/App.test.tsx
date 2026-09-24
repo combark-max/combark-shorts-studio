@@ -300,6 +300,8 @@ describe('App', () => {
           mediaId: 'restored-photo-id',
           durationMs: 3000,
           subtitle: '복원된 자막',
+          subtitlePosition: 'bottom' as const,
+          subtitleSize: 'medium' as const,
         },
       ],
     };
@@ -337,8 +339,8 @@ describe('App', () => {
         },
       ],
       scenes: [
-        { mediaId: 'photo-id', durationMs: 3000, subtitle: '사진 자막' },
-        { mediaId: 'video-id', durationMs: null, subtitle: '영상 자막' },
+        { mediaId: 'photo-id', durationMs: 3000, subtitle: '사진 자막', subtitlePosition: 'bottom' as const, subtitleSize: 'medium' as const },
+        { mediaId: 'video-id', durationMs: null, subtitle: '영상 자막', subtitlePosition: 'center' as const, subtitleSize: 'small' as const },
       ],
     };
     desktopApi.openProjectDialog.mockResolvedValue('C:\\projects\\select.cssproj');
@@ -358,6 +360,20 @@ describe('App', () => {
     expect(screen.getByLabelText('clip.mp4 미리보기')).toBeInTheDocument();
     expect(screen.getByText('영상 자막')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '재생' })).toBeEnabled();
+
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: '2번 장면 자막 위치' }),
+      'top',
+    );
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: '2번 장면 자막 크기' }),
+      'large',
+    );
+
+    const subtitle = screen.getByText('영상 자막');
+    expect(subtitle.style.top).toBe(`${(150 / 1920) * 100}%`);
+    expect(subtitle.style.fontSize).toBe(`${(80 / 1080) * 100}cqw`);
+    expect(screen.getByText('저장 필요')).toBeInTheDocument();
   });
 
   it('selects the first scene when the same project is opened again', async () => {
@@ -379,8 +395,8 @@ describe('App', () => {
         },
       ],
       scenes: [
-        { mediaId: 'photo-id', durationMs: 3000, subtitle: '' },
-        { mediaId: 'video-id', durationMs: null, subtitle: '' },
+        { mediaId: 'photo-id', durationMs: 3000, subtitle: '', subtitlePosition: 'bottom' as const, subtitleSize: 'medium' as const },
+        { mediaId: 'video-id', durationMs: null, subtitle: '', subtitlePosition: 'bottom' as const, subtitleSize: 'medium' as const },
       ],
     };
     desktopApi.openProjectDialog.mockResolvedValue('C:\\projects\\reopen.cssproj');

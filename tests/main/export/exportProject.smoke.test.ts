@@ -117,14 +117,14 @@ describe.runIf(runSmoke)('real FFmpeg export smoke', () => {
   it('exports one image with silent AAC and decodes to EOF', async () => {
     await exportAndDecode(projectWith(
       [{ id: 'image', kind: 'image', sourcePath: imagePath, fileName: '입력 이미지.png' }],
-      [{ mediaId: 'image', durationMs: 500, subtitle: '' }],
+      [{ mediaId: 'image', durationMs: 500, subtitle: '', subtitlePosition: 'bottom', subtitleSize: 'medium' }],
     ), '이미지 결과.mp4');
   }, 30_000);
 
   it('exports one MP4 to its source EOF and decodes to EOF', async () => {
     await exportAndDecode(projectWith(
       [{ id: 'video', kind: 'video', sourcePath: videoPath, fileName: '입력 영상.mp4' }],
-      [{ mediaId: 'video', durationMs: null, subtitle: '' }],
+      [{ mediaId: 'video', durationMs: null, subtitle: '', subtitlePosition: 'bottom', subtitleSize: 'medium' }],
     ), '영상 결과.mp4');
   }, 30_000);
 
@@ -135,8 +135,8 @@ describe.runIf(runSmoke)('real FFmpeg export smoke', () => {
         { id: 'video', kind: 'video', sourcePath: videoPath, fileName: '입력 영상.mp4' },
       ],
       [
-        { mediaId: 'image', durationMs: 500, subtitle: '첫 장면\n한글 자막 {테스트}' },
-        { mediaId: 'video', durationMs: null, subtitle: '둘째 장면' },
+        { mediaId: 'image', durationMs: 500, subtitle: '첫 장면\n한글 자막 {테스트}', subtitlePosition: 'top', subtitleSize: 'large' },
+        { mediaId: 'video', durationMs: null, subtitle: '둘째 장면', subtitlePosition: 'center', subtitleSize: 'small' },
       ],
       { sourcePath: narrationPath, fileName: '내레이션.wav' },
     ), '통합 결과.mp4');

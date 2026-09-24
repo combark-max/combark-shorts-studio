@@ -46,8 +46,16 @@ export interface ProjectDocumentV3 {
   scenes: SceneV3[];
 }
 
-export interface Scene extends SceneV3 {
+export interface SceneV4 extends SceneV3 {
   subtitle: string;
+}
+
+export type SubtitlePosition = 'top' | 'center' | 'bottom';
+export type SubtitleSize = 'small' | 'medium' | 'large';
+
+export interface Scene extends SceneV4 {
+  subtitlePosition: SubtitlePosition;
+  subtitleSize: SubtitleSize;
 }
 
 export interface ProjectDocumentV4 {
@@ -58,7 +66,7 @@ export interface ProjectDocumentV4 {
   updatedAt: string;
   settings: ProjectSettings;
   media: MediaAsset[];
-  scenes: Scene[];
+  scenes: SceneV4[];
 }
 
 export interface NarrationAsset {
@@ -74,11 +82,23 @@ export interface ProjectDocumentV5 {
   updatedAt: string;
   settings: ProjectSettings;
   media: MediaAsset[];
+  scenes: SceneV4[];
+  narration: NarrationAsset | null;
+}
+
+export interface ProjectDocumentV6 {
+  schemaVersion: 6;
+  projectId: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  settings: ProjectSettings;
+  media: MediaAsset[];
   scenes: Scene[];
   narration: NarrationAsset | null;
 }
 
-export type ProjectDocument = ProjectDocumentV5;
+export type ProjectDocument = ProjectDocumentV6;
 
 export interface RecoveryCandidate {
   projectId: string;

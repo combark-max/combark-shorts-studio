@@ -6,7 +6,13 @@ import type { ExportProgress, ExportStatus } from '../../shared/export';
 import type {
   RecentProject,
   RecoveryCandidate,
+  SubtitlePosition,
+  SubtitleSize,
 } from '../../shared/project/types';
+import {
+  DEFAULT_SUBTITLE_POSITION,
+  DEFAULT_SUBTITLE_SIZE,
+} from '../../shared/project/subtitleStyle';
 
 const RECOVERY_AUTOSAVE_INTERVAL_MS = 30_000;
 const SAVE_SUCCESS_FEEDBACK_MS = 2_000;
@@ -304,6 +310,8 @@ export function useProjectController(initialState?: ProjectState) {
             mediaId: asset.id,
             durationMs: asset.kind === 'image' ? 3000 : null,
             subtitle: '',
+            subtitlePosition: DEFAULT_SUBTITLE_POSITION,
+            subtitleSize: DEFAULT_SUBTITLE_SIZE,
           })),
         ],
       },
@@ -453,6 +461,62 @@ export function useProjectController(initialState?: ProjectState) {
         scenes: currentState.project.scenes.map((candidate) =>
           candidate.mediaId === mediaId
             ? { ...candidate, subtitle }
+            : candidate,
+        ),
+      },
+      dirty: true,
+    });
+  };
+
+  const updateSceneSubtitlePosition = (
+    mediaId: string,
+    subtitlePosition: SubtitlePosition,
+  ): void => {
+    const currentState = stateRef.current;
+    const scene = currentState.project.scenes.find(
+      (candidate) => candidate.mediaId === mediaId,
+    );
+
+    if (!scene || scene.subtitlePosition === subtitlePosition) {
+      return;
+    }
+
+    replaceState({
+      ...currentState,
+      project: {
+        ...currentState.project,
+        updatedAt: new Date().toISOString(),
+        scenes: currentState.project.scenes.map((candidate) =>
+          candidate.mediaId === mediaId
+            ? { ...candidate, subtitlePosition }
+            : candidate,
+        ),
+      },
+      dirty: true,
+    });
+  };
+
+  const updateSceneSubtitleSize = (
+    mediaId: string,
+    subtitleSize: SubtitleSize,
+  ): void => {
+    const currentState = stateRef.current;
+    const scene = currentState.project.scenes.find(
+      (candidate) => candidate.mediaId === mediaId,
+    );
+
+    if (!scene || scene.subtitleSize === subtitleSize) {
+      return;
+    }
+
+    replaceState({
+      ...currentState,
+      project: {
+        ...currentState.project,
+        updatedAt: new Date().toISOString(),
+        scenes: currentState.project.scenes.map((candidate) =>
+          candidate.mediaId === mediaId
+            ? { ...candidate, subtitleSize }
             : candidate,
         ),
       },
@@ -631,6 +695,8 @@ export function useProjectController(initialState?: ProjectState) {
     deleteScene,
     updateSceneDuration,
     updateSceneSubtitle,
+    updateSceneSubtitlePosition,
+    updateSceneSubtitleSize,
     openProject,
     saveProject,
     saveProjectAs,

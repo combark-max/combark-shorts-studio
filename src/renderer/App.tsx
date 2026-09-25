@@ -69,6 +69,7 @@ export function App() {
     removeRecentProject,
     projectOpenError,
     projectSaveStatus,
+    projectTransitionError,
     exportStatus,
     exportProgress,
     exportMp4,
@@ -230,6 +231,13 @@ export function App() {
           </div>
         ) : null}
       </div>
+      {projectTransitionError ? (
+        <div className="save-status-slot">
+          <div className="save-status save-status-error" role="alert">
+            변경 사항을 안전하게 정리하지 못했습니다. 다시 시도해 주세요.
+          </div>
+        </div>
+      ) : null}
       <div className="save-status-slot">
         {exportStatus === 'exporting' || exportStatus === 'success' ? (
           <div

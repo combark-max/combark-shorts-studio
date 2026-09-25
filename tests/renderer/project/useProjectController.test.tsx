@@ -24,6 +24,9 @@ const desktopApi = {
   listRecentProjects: vi.fn(),
   openRecentProject: vi.fn(),
   removeRecentProject: vi.fn(),
+  confirmUnsavedChanges: vi.fn(),
+  onWindowCloseRequested: vi.fn(),
+  respondToWindowClose: vi.fn(),
 };
 
 beforeEach(() => {
@@ -37,6 +40,8 @@ beforeEach(() => {
   desktopApi.removeRecentProject.mockResolvedValue([]);
   desktopApi.exportMp4.mockResolvedValue({ status: 'canceled' });
   desktopApi.onExportProgress.mockReturnValue(vi.fn());
+  desktopApi.confirmUnsavedChanges.mockResolvedValue('discard');
+  desktopApi.onWindowCloseRequested.mockReturnValue(vi.fn());
   Object.defineProperty(window, 'combarkDesktop', {
     configurable: true,
     value: desktopApi,
@@ -1497,5 +1502,265 @@ describe('useProjectController', () => {
       initialState.project.projectId,
     );
     expect(result.current.state.dirty).toBe(false);
+  });
+
+  it('keeps a dirty project and its recovery when New is canceled', async () => {
+    desktopApi.confirmUnsavedChanges.mockResolvedValue('cancel');
+    const initialState = createState();
+    const { result } = renderHook(() => useProjectController(initialState));
+
+    await act(async () => {
+      await result.current.newProject();
+    });
+
+    expect(desktopApi.confirmUnsavedChanges).toHaveBeenCalledWith('new');
+    expect(desktopApi.deleteRecovery).not.toHaveBeenCalled();
+    expect(result.current.state).toEqual(initialState);
+  });
+
+  it('deletes recovery before replacing a dirty project on explicit discard', async () => {
+    desktopApi.confirmUnsavedChanges.mockResolvedValue('discard');
+    const initialState = createState();
+    const { result } = renderHook(() => useProjectController(initialState));
+
+    await act(async () => {
+      await result.current.newProject();
+    });
+
+    expect(desktopApi.deleteRecovery).toHaveBeenCalledWith(
+      initialState.project.projectId,
+    );
+    expect(result.current.state.project.projectId).not.toBe(
+      initialState.project.projectId,
+    );
+    expect(result.current.state.dirty).toBe(false);
+  });
+
+  it('blocks New and exposes an error when discard recovery cleanup fails', async () => {
+    desktopApi.confirmUnsavedChanges.mockResolvedValue('discard');
+    desktopApi.deleteRecovery.mockRejectedValue(new Error('cleanup failed'));
+    const initialState = createState();
+    const { result } = renderHook(() => useProjectController(initialState));
+
+    await act(async () => {
+      await result.current.newProject();
+    });
+
+    expect(result.current.state).toEqual(initialState);
+    expect(result.current.projectTransitionError).toBe(true);
+  });
+
+  it('does not confirm or read when the Open file dialog is canceled', async () => {
+    desktopApi.openProjectDialog.mockResolvedValue(null);
+    const { result } = renderHook(() => useProjectController(createState()));
+
+    await act(async () => {
+      await result.current.openProject();
+    });
+
+    expect(desktopApi.confirmUnsavedChanges).not.toHaveBeenCalled();
+    expect(desktopApi.readProject).not.toHaveBeenCalled();
+  });
+
+  it('does not read a selected project when dirty confirmation is canceled', async () => {
+    desktopApi.openProjectDialog.mockResolvedValue('C:\\projects\\target.cssproj');
+    desktopApi.confirmUnsavedChanges.mockResolvedValue('cancel');
+    const initialState = createState();
+    const { result } = renderHook(() => useProjectController(initialState));
+
+    await act(async () => {
+      await result.current.openProject();
+    });
+
+    expect(desktopApi.readProject).not.toHaveBeenCalled();
+    expect(result.current.state).toEqual(initialState);
+  });
+
+  it('preserves current recovery when the selected project cannot be read', async () => {
+    desktopApi.openProjectDialog.mockResolvedValue('C:\\projects\\bad.cssproj');
+    desktopApi.confirmUnsavedChanges.mockResolvedValue('discard');
+    desktopApi.readProject.mockRejectedValue(new Error('read failed'));
+    const initialState = createState();
+    const { result } = renderHook(() => useProjectController(initialState));
+
+    await act(async () => {
+      await result.current.openProject();
+    });
+
+    expect(desktopApi.deleteRecovery).not.toHaveBeenCalled();
+    expect(result.current.state).toEqual(initialState);
+    expect(result.current.projectOpenError).toBe(true);
+  });
+
+  it('guards repeated transitions while confirmation is pending', async () => {
+    let finishConfirmation: ((choice: 'cancel') => void) | undefined;
+    desktopApi.confirmUnsavedChanges.mockReturnValue(
+      new Promise((resolve) => {
+        finishConfirmation = resolve;
+      }),
+    );
+    const { result } = renderHook(() => useProjectController(createState()));
+
+    let firstTransition: void | Promise<void>;
+    act(() => {
+      firstTransition = result.current.newProject();
+      void result.current.newProject();
+    });
+    expect(desktopApi.confirmUnsavedChanges).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      finishConfirmation?.('cancel');
+      await firstTransition;
+    });
+  });
+
+  it('reports explicit save outcomes', async () => {
+    desktopApi.writeProject.mockResolvedValue(undefined);
+    const existing = renderHook(() => useProjectController(createState()));
+    await expect(existing.result.current.saveProject()).resolves.toBe('saved');
+    existing.unmount();
+
+    desktopApi.saveProjectDialog.mockResolvedValue(null);
+    const unsaved = renderHook(() =>
+      useProjectController(createState({ filePath: null })),
+    );
+    await expect(unsaved.result.current.saveProject()).resolves.toBe('canceled');
+  });
+
+  it('allows clean close without confirmation and denies a dirty canceled close', async () => {
+    let closeListener: (() => void) | undefined;
+    desktopApi.onWindowCloseRequested.mockImplementation((listener) => {
+      closeListener = listener;
+      return vi.fn();
+    });
+    const clean = renderHook(() =>
+      useProjectController(createState({ dirty: false })),
+    );
+
+    await act(async () => {
+      closeListener?.();
+      await waitFor(() =>
+        expect(desktopApi.respondToWindowClose).toHaveBeenCalledWith(true),
+      );
+    });
+    expect(desktopApi.confirmUnsavedChanges).not.toHaveBeenCalled();
+    clean.unmount();
+
+    desktopApi.respondToWindowClose.mockClear();
+    desktopApi.confirmUnsavedChanges.mockResolvedValue('cancel');
+    const dirty = renderHook(() => useProjectController(createState()));
+    await act(async () => {
+      closeListener?.();
+      await waitFor(() =>
+        expect(desktopApi.respondToWindowClose).toHaveBeenCalledWith(false),
+      );
+    });
+    dirty.unmount();
+  });
+
+  it('waits for an active Save instead of opening a second close confirmation', async () => {
+    let finishWrite: (() => void) | undefined;
+    let closeListener: (() => void) | undefined;
+    desktopApi.writeProject.mockReturnValue(
+      new Promise<void>((resolve) => {
+        finishWrite = resolve;
+      }),
+    );
+    desktopApi.onWindowCloseRequested.mockImplementation((listener) => {
+      closeListener = listener;
+      return vi.fn();
+    });
+    const { result } = renderHook(() => useProjectController(createState()));
+
+    const savePromise = result.current.saveProject();
+    act(() => closeListener?.());
+    expect(desktopApi.confirmUnsavedChanges).not.toHaveBeenCalled();
+
+    await act(async () => {
+      finishWrite?.();
+      await savePromise;
+      await waitFor(() =>
+        expect(desktopApi.respondToWindowClose).toHaveBeenCalledWith(true),
+      );
+    });
+  });
+
+  it('does not start autosave while a transition is pending', async () => {
+    vi.useFakeTimers();
+    let finishConfirmation: ((choice: 'cancel') => void) | undefined;
+    desktopApi.confirmUnsavedChanges.mockReturnValue(
+      new Promise((resolve) => {
+        finishConfirmation = resolve;
+      }),
+    );
+    const { result } = renderHook(() => useProjectController(createState()));
+
+    const transition = result.current.newProject();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    expect(desktopApi.writeRecovery).not.toHaveBeenCalled();
+
+    await act(async () => {
+      finishConfirmation?.('cancel');
+      await transition;
+    });
+  });
+
+  it('does not call recent-project IPC when dirty confirmation is canceled', async () => {
+    desktopApi.confirmUnsavedChanges.mockResolvedValue('cancel');
+    const initialState = createState();
+    const { result } = renderHook(() => useProjectController(initialState));
+
+    await act(async () => {
+      await result.current.openRecentProject('C:\\projects\\recent.cssproj');
+    });
+
+    expect(desktopApi.openRecentProject).not.toHaveBeenCalled();
+    expect(result.current.state).toEqual(initialState);
+  });
+
+  it('waits for an active recovery write before explicit discard cleanup', async () => {
+    vi.useFakeTimers();
+    let finishRecoveryWrite: (() => void) | undefined;
+    desktopApi.writeRecovery.mockReturnValue(
+      new Promise<void>((resolve) => {
+        finishRecoveryWrite = resolve;
+      }),
+    );
+    desktopApi.confirmUnsavedChanges.mockResolvedValue('discard');
+    const { result } = renderHook(() => useProjectController(createState()));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    const transition = result.current.newProject();
+    await Promise.resolve();
+    expect(desktopApi.deleteRecovery).not.toHaveBeenCalled();
+
+    await act(async () => {
+      finishRecoveryWrite?.();
+      await transition;
+    });
+    expect(desktopApi.deleteRecovery).toHaveBeenCalledOnce();
+  });
+
+  it('denies close when explicit discard recovery cleanup fails', async () => {
+    let closeListener: (() => void) | undefined;
+    desktopApi.onWindowCloseRequested.mockImplementation((listener) => {
+      closeListener = listener;
+      return vi.fn();
+    });
+    desktopApi.confirmUnsavedChanges.mockResolvedValue('discard');
+    desktopApi.deleteRecovery.mockRejectedValue(new Error('cleanup failed'));
+    const { result } = renderHook(() => useProjectController(createState()));
+
+    await act(async () => {
+      closeListener?.();
+      await waitFor(() =>
+        expect(desktopApi.respondToWindowClose).toHaveBeenCalledWith(false),
+      );
+    });
+    expect(result.current.projectTransitionError).toBe(true);
   });
 });

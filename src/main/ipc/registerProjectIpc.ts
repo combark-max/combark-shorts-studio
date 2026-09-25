@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { basename } from 'node:path';
 
-import { app, dialog, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 
 import { readProjectFile, writeProjectFileAtomic } from '../project/projectStorage';
 import {
@@ -26,6 +26,10 @@ import type {
   ProjectDocument,
 } from '../../shared/project/types';
 import { IPC_CHANNELS } from '../../shared/ipc';
+import type {
+  UnsavedChangesAction,
+  UnsavedChangesChoice,
+} from '../../shared/ipc';
 
 const projectFileFilter = {
   name: 'Combark Shorts Studio 프로젝트',
@@ -69,6 +73,38 @@ function createNarrationAsset(filePath: string): NarrationAsset | null {
 }
 
 export function registerProjectIpc(): void {
+  ipcMain.removeHandler(IPC_CHANNELS.projectConfirmUnsavedChanges);
+  ipcMain.handle(
+    IPC_CHANNELS.projectConfirmUnsavedChanges,
+    async (event, action: UnsavedChangesAction): Promise<UnsavedChangesChoice> => {
+      if (!['new', 'open', 'recent', 'close'].includes(action)) {
+        return 'cancel';
+      }
+
+      const isClose = action === 'close';
+      const options = {
+        type: 'warning' as const,
+        title: 'Combark Shorts Studio',
+        message: '저장하지 않은 변경 사항이 있습니다.',
+        detail: isClose
+          ? '종료하기 전에 변경 사항을 저장하시겠습니까?'
+          : '계속하기 전에 변경 사항을 저장하시겠습니까?',
+        buttons: isClose
+          ? ['저장하고 종료', '저장하지 않고 종료', '취소']
+          : ['저장하고 계속', '저장하지 않고 계속', '취소'],
+        defaultId: 0,
+        cancelId: 2,
+        noLink: true,
+      };
+      const parent = BrowserWindow.fromWebContents(event.sender);
+      const result = parent
+        ? await dialog.showMessageBox(parent, options)
+        : await dialog.showMessageBox(options);
+
+      return (['save', 'discard', 'cancel'] as const)[result.response] ?? 'cancel';
+    },
+  );
+
   ipcMain.removeHandler(IPC_CHANNELS.mediaOpenDialog);
   ipcMain.handle(IPC_CHANNELS.mediaOpenDialog, async () => {
     const result = await dialog.showOpenDialog({

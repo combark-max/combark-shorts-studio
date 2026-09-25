@@ -1,6 +1,7 @@
-import { BrowserWindow } from 'electron';
+import { BrowserWindow, ipcMain, type IpcMainEvent } from 'electron';
 
 import { APP_NAME } from '../shared/appInfo';
+import { IPC_CHANNELS } from '../shared/ipc';
 
 declare const MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY: string;
 declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
@@ -20,6 +21,45 @@ export function createMainWindow(): BrowserWindow {
       nodeIntegration: false,
       sandbox: true,
     },
+  });
+  let closeRequestPending = false;
+  let allowClose = false;
+
+  const handleCloseResponse = (event: IpcMainEvent, allow: boolean): void => {
+    if (event.sender !== window.webContents || !closeRequestPending) {
+      return;
+    }
+
+    closeRequestPending = false;
+    if (allow !== true) {
+      return;
+    }
+
+    allowClose = true;
+    window.close();
+  };
+
+  ipcMain.on(IPC_CHANNELS.windowCloseResponse, handleCloseResponse);
+
+  window.on('close', (event) => {
+    if (allowClose) {
+      return;
+    }
+
+    event.preventDefault();
+    if (closeRequestPending) {
+      return;
+    }
+
+    closeRequestPending = true;
+    window.webContents.send(IPC_CHANNELS.windowCloseRequested);
+  });
+
+  window.on('closed', () => {
+    ipcMain.removeListener(
+      IPC_CHANNELS.windowCloseResponse,
+      handleCloseResponse,
+    );
   });
 
   window.once('ready-to-show', () => {

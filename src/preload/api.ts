@@ -9,7 +9,11 @@ import type {
   RecentProject,
   RecoveryCandidate,
 } from '../shared/project/types';
-import { IPC_CHANNELS } from '../shared/ipc';
+import {
+  IPC_CHANNELS,
+  type UnsavedChangesAction,
+  type UnsavedChangesChoice,
+} from '../shared/ipc';
 
 export const desktopApi = {
   getAppVersion: (): Promise<string> =>
@@ -53,6 +57,22 @@ export const desktopApi = {
     ipcRenderer.invoke(IPC_CHANNELS.projectRecentOpen, filePath),
   removeRecentProject: (filePath: string): Promise<RecentProject[]> =>
     ipcRenderer.invoke(IPC_CHANNELS.projectRecentRemove, filePath),
+  confirmUnsavedChanges: (
+    action: UnsavedChangesAction,
+  ): Promise<UnsavedChangesChoice> =>
+    ipcRenderer.invoke(IPC_CHANNELS.projectConfirmUnsavedChanges, action),
+  onWindowCloseRequested: (listener: () => void): (() => void) => {
+    const handler = (): void => {
+      listener();
+    };
+    ipcRenderer.on(IPC_CHANNELS.windowCloseRequested, handler);
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.windowCloseRequested, handler);
+    };
+  },
+  respondToWindowClose: (allow: boolean): void => {
+    ipcRenderer.send(IPC_CHANNELS.windowCloseResponse, allow);
+  },
 };
 
 export type DesktopApi = typeof desktopApi;

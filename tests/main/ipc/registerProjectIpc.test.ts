@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { handlers, showOpenDialog } = vi.hoisted(() => ({
+const { handlers, showMessageBox, showOpenDialog, windowFromSender } = vi.hoisted(() => ({
   handlers: new Map<string, (...args: unknown[]) => unknown>(),
+  showMessageBox: vi.fn(),
   showOpenDialog: vi.fn(),
+  windowFromSender: vi.fn(),
 }));
 
 vi.mock('electron', () => ({
@@ -10,8 +12,12 @@ vi.mock('electron', () => ({
     getPath: vi.fn(() => 'C:\\user-data'),
   },
   dialog: {
+    showMessageBox,
     showOpenDialog,
     showSaveDialog: vi.fn(),
+  },
+  BrowserWindow: {
+    fromWebContents: windowFromSender,
   },
   ipcMain: {
     removeHandler: vi.fn(),
@@ -27,7 +33,9 @@ import { IPC_CHANNELS } from '../../../src/shared/ipc';
 describe('registerProjectIpc media import', () => {
   beforeEach(() => {
     handlers.clear();
+    showMessageBox.mockReset();
     showOpenDialog.mockReset();
+    windowFromSender.mockReset();
     registerProjectIpc();
   });
 
@@ -98,5 +106,49 @@ describe('registerProjectIpc media import', () => {
     const handler = handlers.get(IPC_CHANNELS.narrationOpenDialog);
 
     await expect(handler?.({})).resolves.toBeNull();
+  });
+
+  it.each([
+    [0, 'save'],
+    [1, 'discard'],
+    [2, 'cancel'],
+  ] as const)(
+    'maps native confirmation response %s to %s',
+    async (response, expectedChoice) => {
+      const sender = {};
+      const parentWindow = {};
+      windowFromSender.mockReturnValue(parentWindow);
+      showMessageBox.mockResolvedValue({ response });
+      const handler = handlers.get(
+        IPC_CHANNELS.projectConfirmUnsavedChanges,
+      );
+
+      await expect(handler?.({ sender }, 'new')).resolves.toBe(expectedChoice);
+      expect(showMessageBox).toHaveBeenCalledWith(
+        parentWindow,
+        expect.objectContaining({
+          buttons: ['저장하고 계속', '저장하지 않고 계속', '취소'],
+          cancelId: 2,
+          defaultId: 0,
+        }),
+      );
+    },
+  );
+
+  it('uses close-specific labels and rejects an invalid action', async () => {
+    const sender = {};
+    windowFromSender.mockReturnValue({});
+    showMessageBox.mockResolvedValue({ response: 2 });
+    const handler = handlers.get(IPC_CHANNELS.projectConfirmUnsavedChanges);
+
+    await expect(handler?.({ sender }, 'close')).resolves.toBe('cancel');
+    expect(showMessageBox).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        buttons: ['저장하고 종료', '저장하지 않고 종료', '취소'],
+      }),
+    );
+    await expect(handler?.({ sender }, 'invalid')).resolves.toBe('cancel');
+    expect(showMessageBox).toHaveBeenCalledTimes(1);
   });
 });

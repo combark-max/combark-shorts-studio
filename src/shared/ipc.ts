@@ -14,4 +14,10 @@ export const IPC_CHANNELS = {
   projectRecentList: 'project:recent-list',
   projectRecentOpen: 'project:recent-open',
   projectRecentRemove: 'project:recent-remove',
+  projectConfirmUnsavedChanges: 'project:confirm-unsaved-changes',
+  windowCloseRequested: 'window:close-requested',
+  windowCloseResponse: 'window:close-response',
 } as const;
+
+export type UnsavedChangesAction = 'new' | 'open' | 'recent' | 'close';
+export type UnsavedChangesChoice = 'save' | 'discard' | 'cancel';

@@ -79,6 +79,9 @@ describe('desktopApi project methods', () => {
       'listRecentProjects',
       'openRecentProject',
       'removeRecentProject',
+      'confirmUnsavedChanges',
+      'onWindowCloseRequested',
+      'respondToWindowClose',
     ]);
     expect(Object.keys(desktopApi)).not.toContain('recordRecentProject');
     await expect(desktopApi.exportMp4(project)).resolves.toEqual({ status: 'canceled' });

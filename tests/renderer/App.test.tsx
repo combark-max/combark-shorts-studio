@@ -20,6 +20,9 @@ const desktopApi = {
   listRecentProjects: vi.fn(),
   openRecentProject: vi.fn(),
   removeRecentProject: vi.fn(),
+  confirmUnsavedChanges: vi.fn(),
+  onWindowCloseRequested: vi.fn(),
+  respondToWindowClose: vi.fn(),
 };
 
 beforeEach(() => {
@@ -36,6 +39,8 @@ beforeEach(() => {
   desktopApi.removeRecentProject.mockResolvedValue([]);
   desktopApi.exportMp4.mockResolvedValue({ status: 'canceled' });
   desktopApi.onExportProgress.mockReturnValue(vi.fn());
+  desktopApi.confirmUnsavedChanges.mockResolvedValue('cancel');
+  desktopApi.onWindowCloseRequested.mockReturnValue(vi.fn());
   Object.defineProperty(window, 'combarkDesktop', {
     configurable: true,
     value: desktopApi,
@@ -786,5 +791,30 @@ describe('App', () => {
     const footer = screen.getByRole('contentinfo');
     expect(within(footer).getByText('새 프로젝트')).toBeInTheDocument();
     expect(within(footer).getByText('저장됨')).toBeInTheDocument();
+  });
+
+  it('shows a transition cleanup error when explicit discard cannot remove recovery', async () => {
+    const user = userEvent.setup();
+    desktopApi.openMediaDialog.mockResolvedValue([
+      {
+        id: 'dirty-image',
+        kind: 'image',
+        sourcePath: 'C:\\media\\dirty.jpg',
+        fileName: 'dirty.jpg',
+      },
+    ]);
+    desktopApi.confirmUnsavedChanges.mockResolvedValue('discard');
+    desktopApi.deleteRecovery.mockRejectedValue(new Error('cleanup failed'));
+    render(<App />);
+    await screen.findByText('Combark Shorts Studio');
+
+    await user.click(screen.getByRole('button', { name: '파일 추가' }));
+    await screen.findAllByText('dirty.jpg');
+    await user.click(screen.getByRole('button', { name: '새 프로젝트' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '변경 사항을 안전하게 정리하지 못했습니다. 다시 시도해 주세요.',
+    );
+    expect(screen.getAllByText('dirty.jpg').length).toBeGreaterThan(0);
   });
 });

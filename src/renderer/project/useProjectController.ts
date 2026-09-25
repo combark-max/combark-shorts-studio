@@ -13,11 +13,17 @@ import {
   DEFAULT_SUBTITLE_POSITION,
   DEFAULT_SUBTITLE_SIZE,
 } from '../../shared/project/subtitleStyle';
+import type { UnsavedChangesAction } from '../../shared/ipc';
 
 const RECOVERY_AUTOSAVE_INTERVAL_MS = 30_000;
 const SAVE_SUCCESS_FEEDBACK_MS = 2_000;
 
 type ProjectSaveStatus = 'idle' | 'saving' | 'success' | 'error';
+export type ManualSaveOutcome = 'saved' | 'canceled' | 'failed' | 'stale';
+type TransitionPreparation =
+  | { mode: 'proceed'; project: ProjectState['project'] }
+  | { mode: 'discard'; project: ProjectState['project'] }
+  | null;
 
 export function useProjectController(initialState?: ProjectState) {
   const [state, setState] = useState<ProjectState>(
@@ -42,12 +48,17 @@ export function useProjectController(initialState?: ProjectState) {
   const [projectOpenError, setProjectOpenError] = useState(false);
   const [projectSaveStatus, setProjectSaveStatus] =
     useState<ProjectSaveStatus>('idle');
+  const [projectTransitionError, setProjectTransitionError] = useState(false);
   const [exportStatus, setExportStatus] = useState<ExportStatus>('idle');
   const [exportProgress, setExportProgress] =
     useState<ExportProgress | null>(null);
   const stateRef = useRef(state);
   const recoveryWriteRef = useRef<Promise<void> | null>(null);
   const manualSaveInProgressCountRef = useRef(0);
+  const activeManualSavePromisesRef = useRef<Set<Promise<ManualSaveOutcome>>>(
+    new Set(),
+  );
+  const transitionInProgressRef = useRef(false);
   const documentGenerationRef = useRef(0);
   const saveSequenceRef = useRef(0);
   const saveFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
@@ -207,30 +218,6 @@ export function useProjectController(initialState?: ProjectState) {
     await loadRecentProjects(true);
   };
 
-  const openRecentProject = async (filePath: string): Promise<void> => {
-    setRecentProjectOpenError(null);
-
-    try {
-      const result = await window.combarkDesktop.openRecentProject(filePath);
-
-      if (result.status === 'missing') {
-        setRecentProjects(result.recentProjects);
-        setRecentProjectOpenError('missing');
-        return;
-      }
-
-      replaceDocumentState({
-        project: result.project,
-        filePath: result.filePath,
-        dirty: false,
-        lastSavedAt: null,
-      });
-      await loadRecentProjects(false);
-    } catch {
-      setRecentProjectOpenError('open');
-    }
-  };
-
   const removeRecentProject = async (filePath: string): Promise<void> => {
     setRecentProjectRemoveError(false);
 
@@ -265,6 +252,7 @@ export function useProjectController(initialState?: ProjectState) {
       if (
         !currentState.dirty ||
         manualSaveInProgressCountRef.current > 0 ||
+        transitionInProgressRef.current ||
         recoveryWriteRef.current
       ) {
         return;
@@ -285,10 +273,6 @@ export function useProjectController(initialState?: ProjectState) {
       clearInterval(intervalId);
     };
   }, []);
-
-  const newProject = () => {
-    replaceDocumentState(createInitialProjectState());
-  };
 
   const importMedia = async (): Promise<void> => {
     const media = await window.combarkDesktop.openMediaDialog();
@@ -551,40 +535,18 @@ export function useProjectController(initialState?: ProjectState) {
     });
   };
 
-  const openProject = async () => {
-    setProjectOpenError(false);
-    let filePath: string | null;
-
-    try {
-      filePath = await window.combarkDesktop.openProjectDialog();
-    } catch {
-      setProjectOpenError(true);
-      return;
-    }
-
-    if (!filePath) {
-      return;
-    }
-
-    let project: ProjectState['project'];
-
-    try {
-      project = await window.combarkDesktop.readProject(filePath);
-    } catch {
-      setProjectOpenError(true);
-      return;
-    }
-
-    replaceDocumentState({
-      project,
-      filePath,
-      dirty: false,
-      lastSavedAt: null,
-    });
-    await loadRecentProjects(false);
+  const trackManualSave = (
+    promise: Promise<ManualSaveOutcome>,
+  ): Promise<ManualSaveOutcome> => {
+    activeManualSavePromisesRef.current.add(promise);
+    void promise.then(
+      () => activeManualSavePromisesRef.current.delete(promise),
+      () => activeManualSavePromisesRef.current.delete(promise),
+    );
+    return promise;
   };
 
-  const saveProjectAs = async () => {
+  const performSaveProjectAs = async (): Promise<ManualSaveOutcome> => {
     const documentGeneration = documentGenerationRef.current;
     const saveSequence = ++saveSequenceRef.current;
     const project = stateRef.current.project;
@@ -595,14 +557,14 @@ export function useProjectController(initialState?: ProjectState) {
       filePath = await window.combarkDesktop.saveProjectDialog(project.name);
     } catch {
       finishSaveFeedback('error', documentGeneration, saveSequence);
-      return;
+      return 'failed';
     }
 
     if (!filePath || documentGenerationRef.current !== documentGeneration) {
       if (isCurrentSave(documentGeneration, saveSequence)) {
         setProjectSaveStatus('idle');
       }
-      return;
+      return filePath ? 'stale' : 'canceled';
     }
 
     manualSaveInProgressCountRef.current += 1;
@@ -620,19 +582,27 @@ export function useProjectController(initialState?: ProjectState) {
       if (saveApplied) {
         finishSaveFeedback('success', documentGeneration, saveSequence);
       }
+      return saveApplied && !stateRef.current.dirty ? 'saved' : 'stale';
     } catch {
       finishSaveFeedback('error', documentGeneration, saveSequence);
+      return 'failed';
     } finally {
       manualSaveInProgressCountRef.current -= 1;
     }
   };
 
-  const saveProject = async () => {
+  const saveProjectAs = (): Promise<ManualSaveOutcome> => {
+    if (transitionInProgressRef.current) {
+      return Promise.resolve('canceled');
+    }
+    return trackManualSave(performSaveProjectAs());
+  };
+
+  const performSaveProject = async (): Promise<ManualSaveOutcome> => {
     const currentState = stateRef.current;
 
     if (!currentState.filePath) {
-      await saveProjectAs();
-      return;
+      return performSaveProjectAs();
     }
 
     const documentGeneration = documentGenerationRef.current;
@@ -656,12 +626,251 @@ export function useProjectController(initialState?: ProjectState) {
       if (saveApplied) {
         finishSaveFeedback('success', documentGeneration, saveSequence);
       }
+      return saveApplied && !stateRef.current.dirty ? 'saved' : 'stale';
     } catch {
       finishSaveFeedback('error', documentGeneration, saveSequence);
+      return 'failed';
     } finally {
       manualSaveInProgressCountRef.current -= 1;
     }
   };
+
+  const saveProject = (): Promise<ManualSaveOutcome> => {
+    if (transitionInProgressRef.current) {
+      return Promise.resolve('canceled');
+    }
+    return trackManualSave(performSaveProject());
+  };
+
+  const waitForActiveManualSaves = async (): Promise<void> => {
+    while (activeManualSavePromisesRef.current.size > 0) {
+      await Promise.all([...activeManualSavePromisesRef.current]);
+    }
+  };
+
+  const deleteRecoveryForDiscard = async (
+    project: ProjectState['project'],
+  ): Promise<boolean> => {
+    const activeRecoveryWrite = recoveryWriteRef.current;
+    if (activeRecoveryWrite) {
+      await activeRecoveryWrite;
+    }
+
+    if (stateRef.current.project !== project) {
+      return false;
+    }
+
+    try {
+      await window.combarkDesktop.deleteRecovery(project.projectId);
+      return stateRef.current.project === project;
+    } catch {
+      setProjectTransitionError(true);
+      return false;
+    }
+  };
+
+  const prepareTransition = async (
+    action: UnsavedChangesAction,
+  ): Promise<TransitionPreparation> => {
+    const project = stateRef.current.project;
+    if (!stateRef.current.dirty) {
+      return { mode: 'proceed', project };
+    }
+
+    let choice;
+    try {
+      choice = await window.combarkDesktop.confirmUnsavedChanges(action);
+    } catch {
+      return null;
+    }
+
+    if (stateRef.current.project !== project || choice === 'cancel') {
+      return null;
+    }
+    if (choice === 'discard') {
+      return { mode: 'discard', project };
+    }
+
+    const outcome = await trackManualSave(performSaveProject());
+    if (outcome !== 'saved' || stateRef.current.dirty) {
+      return null;
+    }
+    return { mode: 'proceed', project: stateRef.current.project };
+  };
+
+  const runTransition = async (
+    action: UnsavedChangesAction,
+    operation: (preparation: Exclude<TransitionPreparation, null>) => Promise<void>,
+  ): Promise<void> => {
+    if (transitionInProgressRef.current) {
+      return;
+    }
+    if (activeManualSavePromisesRef.current.size > 0) {
+      return;
+    }
+
+    transitionInProgressRef.current = true;
+    setProjectTransitionError(false);
+    try {
+      const preparation = await prepareTransition(action);
+      if (preparation) {
+        await operation(preparation);
+      }
+    } finally {
+      transitionInProgressRef.current = false;
+    }
+  };
+
+  const newProject = (): void | Promise<void> => {
+    if (activeManualSavePromisesRef.current.size > 0) {
+      return;
+    }
+    if (!stateRef.current.dirty && !transitionInProgressRef.current) {
+      replaceDocumentState(createInitialProjectState());
+      return;
+    }
+
+    return runTransition('new', async (preparation) => {
+      if (
+        preparation.mode === 'discard' &&
+        !(await deleteRecoveryForDiscard(preparation.project))
+      ) {
+        return;
+      }
+      replaceDocumentState(createInitialProjectState());
+    });
+  };
+
+  const openProject = async (): Promise<void> => {
+    if (
+      transitionInProgressRef.current ||
+      activeManualSavePromisesRef.current.size > 0
+    ) {
+      return;
+    }
+    transitionInProgressRef.current = true;
+    setProjectOpenError(false);
+    setProjectTransitionError(false);
+
+    try {
+      let filePath: string | null;
+      try {
+        filePath = await window.combarkDesktop.openProjectDialog();
+      } catch {
+        setProjectOpenError(true);
+        return;
+      }
+      if (!filePath) {
+        return;
+      }
+
+      const preparation = await prepareTransition('open');
+      if (!preparation) {
+        return;
+      }
+
+      let project: ProjectState['project'];
+      try {
+        project = await window.combarkDesktop.readProject(filePath);
+      } catch {
+        setProjectOpenError(true);
+        return;
+      }
+
+      if (
+        stateRef.current.project !== preparation.project ||
+        (preparation.mode === 'discard' &&
+          !(await deleteRecoveryForDiscard(preparation.project)))
+      ) {
+        return;
+      }
+
+      replaceDocumentState({
+        project,
+        filePath,
+        dirty: false,
+        lastSavedAt: null,
+      });
+      await loadRecentProjects(false);
+    } finally {
+      transitionInProgressRef.current = false;
+    }
+  };
+
+  const openRecentProject = async (filePath: string): Promise<void> => {
+    setRecentProjectOpenError(null);
+    await runTransition('recent', async (preparation) => {
+      try {
+        const result = await window.combarkDesktop.openRecentProject(filePath);
+        if (result.status === 'missing') {
+          setRecentProjects(result.recentProjects);
+          setRecentProjectOpenError('missing');
+          return;
+        }
+
+        if (
+          stateRef.current.project !== preparation.project ||
+          (preparation.mode === 'discard' &&
+            !(await deleteRecoveryForDiscard(preparation.project)))
+        ) {
+          return;
+        }
+
+        replaceDocumentState({
+          project: result.project,
+          filePath: result.filePath,
+          dirty: false,
+          lastSavedAt: null,
+        });
+        await loadRecentProjects(false);
+      } catch {
+        setRecentProjectOpenError('open');
+      }
+    });
+  };
+
+  const handleWindowCloseRequest = async (): Promise<void> => {
+    if (transitionInProgressRef.current) {
+      window.combarkDesktop.respondToWindowClose(false);
+      return;
+    }
+
+    transitionInProgressRef.current = true;
+    setProjectTransitionError(false);
+    try {
+      const saveWasActive = activeManualSavePromisesRef.current.size > 0;
+      if (saveWasActive) {
+        await waitForActiveManualSaves();
+        window.combarkDesktop.respondToWindowClose(!stateRef.current.dirty);
+        return;
+      }
+
+      const preparation = await prepareTransition('close');
+      if (!preparation) {
+        window.combarkDesktop.respondToWindowClose(false);
+        return;
+      }
+      if (
+        preparation.mode === 'discard' &&
+        !(await deleteRecoveryForDiscard(preparation.project))
+      ) {
+        window.combarkDesktop.respondToWindowClose(false);
+        return;
+      }
+      window.combarkDesktop.respondToWindowClose(true);
+    } catch {
+      window.combarkDesktop.respondToWindowClose(false);
+    } finally {
+      transitionInProgressRef.current = false;
+    }
+  };
+
+  useEffect(() => {
+    const stopListening = window.combarkDesktop.onWindowCloseRequested(() => {
+      void handleWindowCloseRequest();
+    });
+    return stopListening;
+  }, []);
 
   const exportMp4 = async (): Promise<void> => {
     if (exportInProgressRef.current) {
@@ -712,6 +921,7 @@ export function useProjectController(initialState?: ProjectState) {
     removeRecentProject,
     projectOpenError,
     projectSaveStatus,
+    projectTransitionError,
     exportStatus,
     exportProgress,
     newProject,

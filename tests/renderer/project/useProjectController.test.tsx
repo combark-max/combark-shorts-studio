@@ -14,6 +14,8 @@ const desktopApi = {
   onExportProgress: vi.fn(),
   openMediaDialog: vi.fn(),
   openNarrationDialog: vi.fn(),
+  checkProjectSources: vi.fn(),
+  relinkSourceFile: vi.fn(),
   openProjectDialog: vi.fn(),
   saveProjectDialog: vi.fn(),
   readProject: vi.fn(),
@@ -34,6 +36,11 @@ beforeEach(() => {
   desktopApi.writeRecovery.mockResolvedValue(undefined);
   desktopApi.openMediaDialog.mockResolvedValue([]);
   desktopApi.openNarrationDialog.mockResolvedValue(null);
+  desktopApi.checkProjectSources.mockResolvedValue({
+    missingMediaIds: [],
+    narrationMissing: false,
+  });
+  desktopApi.relinkSourceFile.mockResolvedValue(null);
   desktopApi.deleteRecovery.mockResolvedValue(undefined);
   desktopApi.listRecoveries.mockResolvedValue([]);
   desktopApi.listRecentProjects.mockResolvedValue([]);
@@ -463,7 +470,11 @@ describe('useProjectController', () => {
     expect(result.current.state.project.updatedAt).not.toBe(
       initialState.project.updatedAt,
     );
-    for (const apiMethod of Object.values(desktopApi)) {
+    expect(desktopApi.checkProjectSources).toHaveBeenCalledOnce();
+    for (const [name, apiMethod] of Object.entries(desktopApi)) {
+      if (name === 'checkProjectSources') {
+        continue;
+      }
       expect(apiMethod).not.toHaveBeenCalled();
     }
   });
@@ -1762,5 +1773,266 @@ describe('useProjectController', () => {
       );
     });
     expect(result.current.projectTransitionError).toBe(true);
+  });
+
+  it('detects missing project sources without changing dirty or updatedAt', async () => {
+    const initialState = createSceneState();
+    initialState.project.narration = {
+      sourcePath: 'C:\\audio\\voice.wav',
+      fileName: 'voice.wav',
+    };
+    desktopApi.checkProjectSources.mockResolvedValue({
+      missingMediaIds: ['middle-video'],
+      narrationMissing: true,
+    });
+    const { result } = renderHook(() => useProjectController(initialState));
+
+    await waitFor(() => {
+      expect(result.current.missingMediaIds).toEqual(['middle-video']);
+      expect(result.current.narrationMissing).toBe(true);
+    });
+    expect(result.current.sourceCheckFailed).toBe(false);
+    expect(result.current.state.dirty).toBe(false);
+    expect(result.current.state.project.updatedAt).toBe(
+      initialState.project.updatedAt,
+    );
+    expect(desktopApi.checkProjectSources).toHaveBeenCalledWith({
+      media: initialState.project.media.map(({ id, sourcePath }) => ({
+        id,
+        sourcePath,
+      })),
+      narrationSourcePath: 'C:\\audio\\voice.wav',
+    });
+  });
+
+  it('keeps the editor usable when project source inspection fails', async () => {
+    desktopApi.checkProjectSources.mockRejectedValue(new Error('ipc failed'));
+    const initialState = createSceneState();
+    const { result } = renderHook(() => useProjectController(initialState));
+
+    await waitFor(() => expect(result.current.sourceCheckFailed).toBe(true));
+    expect(result.current.missingMediaIds).toEqual([]);
+    expect(result.current.narrationMissing).toBe(false);
+    expect(result.current.state).toEqual(initialState);
+  });
+
+  it('ignores a stale source inspection result after another project opens', async () => {
+    let finishFirstCheck:
+      | ((result: { missingMediaIds: string[]; narrationMissing: boolean }) => void)
+      | undefined;
+    desktopApi.checkProjectSources
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          finishFirstCheck = resolve;
+        }),
+      )
+      .mockResolvedValueOnce({
+        missingMediaIds: ['second-image'],
+        narrationMissing: false,
+      });
+    const firstState = createSceneState();
+    const secondProject = createNewProject('second');
+    secondProject.media = [
+      {
+        id: 'second-image',
+        kind: 'image',
+        sourcePath: 'C:\\media\\second.jpg',
+        fileName: 'second.jpg',
+      },
+    ];
+    secondProject.scenes = [
+      {
+        mediaId: 'second-image',
+        durationMs: 3000,
+        subtitle: '',
+        subtitlePosition: 'bottom',
+        subtitleSize: 'medium',
+      },
+    ];
+    desktopApi.openProjectDialog.mockResolvedValue(
+      'C:\\projects\\second.cssproj',
+    );
+    desktopApi.readProject.mockResolvedValue(secondProject);
+    const { result } = renderHook(() => useProjectController(firstState));
+    await waitFor(() =>
+      expect(desktopApi.checkProjectSources).toHaveBeenCalledTimes(1),
+    );
+
+    await act(async () => {
+      await result.current.openProject();
+    });
+    await waitFor(() =>
+      expect(result.current.missingMediaIds).toEqual(['second-image']),
+    );
+    await act(async () => {
+      finishFirstCheck?.({
+        missingMediaIds: ['first-image'],
+        narrationMissing: true,
+      });
+      await Promise.resolve();
+    });
+
+    expect(result.current.state.project).toBe(secondProject);
+    expect(result.current.missingMediaIds).toEqual(['second-image']);
+    expect(result.current.narrationMissing).toBe(false);
+  });
+
+  it('relinks one media asset while preserving its identity and every scene', async () => {
+    const initialState = createSceneState();
+    initialState.project.scenes = [
+      initialState.project.scenes[0],
+      {
+        ...initialState.project.scenes[0],
+        subtitle: 'shared asset',
+      },
+      ...initialState.project.scenes.slice(1),
+    ];
+    desktopApi.checkProjectSources
+      .mockResolvedValueOnce({
+        missingMediaIds: ['first-image'],
+        narrationMissing: false,
+      })
+      .mockResolvedValue({ missingMediaIds: [], narrationMissing: false });
+    desktopApi.relinkSourceFile.mockResolvedValue({
+      sourcePath: 'D:\\restored\\renamed.png',
+      fileName: 'renamed.png',
+    });
+    const originalScenes = structuredClone(initialState.project.scenes);
+    const untouchedAssets = structuredClone(initialState.project.media.slice(1));
+    const { result } = renderHook(() => useProjectController(initialState));
+    await waitFor(() =>
+      expect(result.current.missingMediaIds).toEqual(['first-image']),
+    );
+
+    await act(async () => {
+      await result.current.relinkMedia('first-image');
+    });
+
+    const relinked = result.current.state.project.media[0];
+    expect(desktopApi.relinkSourceFile).toHaveBeenCalledWith(
+      'image',
+      'C:\\media\\first.jpg',
+    );
+    expect(relinked).toEqual({
+      id: 'first-image',
+      kind: 'image',
+      sourcePath: 'D:\\restored\\renamed.png',
+      fileName: 'renamed.png',
+    });
+    expect(result.current.state.project.media.slice(1)).toEqual(
+      untouchedAssets,
+    );
+    expect(result.current.state.project.scenes).toEqual(originalScenes);
+    expect(result.current.state.dirty).toBe(true);
+    expect(result.current.state.project.updatedAt).not.toBe(
+      initialState.project.updatedAt,
+    );
+    await waitFor(() => expect(result.current.missingMediaIds).toEqual([]));
+  });
+
+  it('does not mutate the project when media relink is canceled or the asset is absent', async () => {
+    const initialState = createSceneState();
+    const { result } = renderHook(() => useProjectController(initialState));
+
+    await act(async () => {
+      await result.current.relinkMedia('first-image');
+    });
+    expect(result.current.state).toEqual(initialState);
+
+    await act(async () => {
+      await result.current.relinkMedia('unknown-id');
+    });
+    expect(desktopApi.relinkSourceFile).toHaveBeenCalledOnce();
+    expect(result.current.state).toEqual(initialState);
+  });
+
+  it('relinks narration without changing other project data', async () => {
+    const initialState = createSceneState();
+    initialState.project.narration = {
+      sourcePath: 'C:\\audio\\old.mp3',
+      fileName: 'old.mp3',
+    };
+    desktopApi.checkProjectSources
+      .mockResolvedValueOnce({ missingMediaIds: [], narrationMissing: true })
+      .mockResolvedValue({ missingMediaIds: [], narrationMissing: false });
+    desktopApi.relinkSourceFile.mockResolvedValue({
+      sourcePath: 'D:\\audio\\new.wav',
+      fileName: 'new.wav',
+    });
+    const originalMedia = structuredClone(initialState.project.media);
+    const originalScenes = structuredClone(initialState.project.scenes);
+    const { result } = renderHook(() => useProjectController(initialState));
+    await waitFor(() => expect(result.current.narrationMissing).toBe(true));
+
+    await act(async () => {
+      await result.current.relinkNarration();
+    });
+
+    expect(desktopApi.relinkSourceFile).toHaveBeenCalledWith(
+      'narration',
+      'C:\\audio\\old.mp3',
+    );
+    expect(result.current.state.project.narration).toEqual({
+      sourcePath: 'D:\\audio\\new.wav',
+      fileName: 'new.wav',
+    });
+    expect(result.current.state.project.media).toEqual(originalMedia);
+    expect(result.current.state.project.scenes).toEqual(originalScenes);
+    expect(result.current.state.dirty).toBe(true);
+    await waitFor(() => expect(result.current.narrationMissing).toBe(false));
+  });
+
+  it('includes relinked media in Save and export payloads', async () => {
+    desktopApi.relinkSourceFile.mockResolvedValue({
+      sourcePath: 'D:\\restored\\saved.jpg',
+      fileName: 'saved.jpg',
+    });
+    desktopApi.writeProject.mockResolvedValue(undefined);
+    const { result } = renderHook(() =>
+      useProjectController(createSceneState()),
+    );
+
+    await act(async () => {
+      await result.current.relinkMedia('first-image');
+      await result.current.saveProject();
+      await result.current.exportMp4();
+    });
+
+    const savedProject = desktopApi.writeProject.mock.calls[0][1];
+    expect(savedProject.media[0]).toEqual(
+      expect.objectContaining({
+        sourcePath: 'D:\\restored\\saved.jpg',
+        fileName: 'saved.jpg',
+      }),
+    );
+    expect(desktopApi.exportMp4).toHaveBeenCalledWith(savedProject);
+  });
+
+  it('includes relinked narration in the existing autosave payload', async () => {
+    vi.useFakeTimers();
+    const initialState = createSceneState();
+    initialState.project.narration = {
+      sourcePath: 'C:\\audio\\old.mp3',
+      fileName: 'old.mp3',
+    };
+    desktopApi.relinkSourceFile.mockResolvedValue({
+      sourcePath: 'D:\\audio\\autosaved.wav',
+      fileName: 'autosaved.wav',
+    });
+    const { result } = renderHook(() => useProjectController(initialState));
+
+    await act(async () => {
+      await result.current.relinkNarration();
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+
+    expect(desktopApi.writeRecovery).toHaveBeenCalledWith(
+      expect.objectContaining({
+        narration: {
+          sourcePath: 'D:\\audio\\autosaved.wav',
+          fileName: 'autosaved.wav',
+        },
+      }),
+    );
   });
 });

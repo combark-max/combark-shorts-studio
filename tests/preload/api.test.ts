@@ -33,6 +33,8 @@ describe('desktopApi', () => {
       'onExportProgress',
       'openMediaDialog',
       'openNarrationDialog',
+      'checkProjectSources',
+      'relinkSourceFile',
       'openProjectDialog',
       'saveProjectDialog',
       'readProject',
@@ -70,6 +72,41 @@ describe('desktopApi', () => {
     expect(removeListener).toHaveBeenCalledWith(
       IPC_CHANNELS.exportProgress,
       registeredListener,
+    );
+  });
+
+  it('invokes the source check and relink channels', async () => {
+    const request = {
+      media: [{ id: 'photo-id', sourcePath: 'C:\\media\\photo.jpg' }],
+      narrationSourcePath: 'C:\\audio\\voice.mp3',
+    };
+    invoke
+      .mockResolvedValueOnce({ missingMediaIds: [], narrationMissing: false })
+      .mockResolvedValueOnce({
+        sourcePath: 'C:\\new\\photo.png',
+        fileName: 'photo.png',
+      });
+
+    await expect(desktopApi.checkProjectSources(request)).resolves.toEqual({
+      missingMediaIds: [],
+      narrationMissing: false,
+    });
+    await expect(
+      desktopApi.relinkSourceFile('image', 'C:\\media\\photo.jpg'),
+    ).resolves.toEqual({
+      sourcePath: 'C:\\new\\photo.png',
+      fileName: 'photo.png',
+    });
+    expect(invoke).toHaveBeenNthCalledWith(
+      1,
+      IPC_CHANNELS.projectSourceCheck,
+      request,
+    );
+    expect(invoke).toHaveBeenNthCalledWith(
+      2,
+      IPC_CHANNELS.sourceRelinkDialog,
+      'image',
+      'C:\\media\\photo.jpg',
     );
   });
 

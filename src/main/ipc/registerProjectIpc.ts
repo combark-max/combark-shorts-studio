@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { stat } from 'node:fs/promises';
 import { basename } from 'node:path';
 
 import { app, BrowserWindow, dialog, ipcMain } from 'electron';
@@ -27,6 +28,10 @@ import type {
 } from '../../shared/project/types';
 import { IPC_CHANNELS } from '../../shared/ipc';
 import type {
+  ProjectSourceCheckRequest,
+  ProjectSourceCheckResult,
+  RelinkedSourceFile,
+  SourceFileKind,
   UnsavedChangesAction,
   UnsavedChangesChoice,
 } from '../../shared/ipc';
@@ -45,6 +50,36 @@ const narrationFileFilter = {
   name: '내레이션',
   extensions: ['mp3', 'wav'],
 };
+
+const relinkFileFilters: Record<SourceFileKind, Electron.FileFilter> = {
+  image: {
+    name: '이미지',
+    extensions: ['jpg', 'jpeg', 'png', 'webp'],
+  },
+  video: {
+    name: '영상',
+    extensions: ['mp4'],
+  },
+  narration: narrationFileFilter,
+};
+
+function isSourceFileKind(value: unknown): value is SourceFileKind {
+  return value === 'image' || value === 'video' || value === 'narration';
+}
+
+function isRelinkPathAllowed(kind: SourceFileKind, filePath: string): boolean {
+  return kind === 'narration'
+    ? isSupportedNarrationPath(filePath)
+    : getMediaKind(filePath) === kind;
+}
+
+async function sourceFileExists(filePath: string): Promise<boolean> {
+  try {
+    return (await stat(filePath)).isFile();
+  } catch {
+    return false;
+  }
+}
 
 function createMediaAsset(filePath: string): MediaAsset | null {
   const kind = getMediaKind(filePath);
@@ -132,6 +167,77 @@ export function registerProjectIpc(): void {
 
     return createNarrationAsset(result.filePaths[0]);
   });
+
+  ipcMain.removeHandler(IPC_CHANNELS.projectSourceCheck);
+  ipcMain.handle(
+    IPC_CHANNELS.projectSourceCheck,
+    async (
+      _event,
+      request: ProjectSourceCheckRequest,
+    ): Promise<ProjectSourceCheckResult> => {
+      if (
+        !request ||
+        !Array.isArray(request.media) ||
+        (request.narrationSourcePath !== null &&
+          typeof request.narrationSourcePath !== 'string') ||
+        request.media.some(
+          (source) =>
+            !source ||
+            typeof source.id !== 'string' ||
+            typeof source.sourcePath !== 'string',
+        )
+      ) {
+        throw new Error('유효하지 않은 원본 파일 검사 요청입니다.');
+      }
+
+      const mediaChecks = await Promise.all(
+        request.media.map(async ({ id, sourcePath }) => ({
+          id,
+          exists: await sourceFileExists(sourcePath),
+        })),
+      );
+      const narrationMissing = request.narrationSourcePath
+        ? !(await sourceFileExists(request.narrationSourcePath))
+        : false;
+
+      return {
+        missingMediaIds: mediaChecks
+          .filter(({ exists }) => !exists)
+          .map(({ id }) => id),
+        narrationMissing,
+      };
+    },
+  );
+
+  ipcMain.removeHandler(IPC_CHANNELS.sourceRelinkDialog);
+  ipcMain.handle(
+    IPC_CHANNELS.sourceRelinkDialog,
+    async (
+      _event,
+      kind: SourceFileKind,
+      previousPath: string,
+    ): Promise<RelinkedSourceFile | null> => {
+      if (!isSourceFileKind(kind) || typeof previousPath !== 'string') {
+        return null;
+      }
+
+      const result = await dialog.showOpenDialog({
+        defaultPath: previousPath,
+        properties: ['openFile'],
+        filters: [relinkFileFilters[kind]],
+      });
+      const sourcePath = result.filePaths[0];
+      if (
+        result.canceled ||
+        !sourcePath ||
+        !isRelinkPathAllowed(kind, sourcePath)
+      ) {
+        return null;
+      }
+
+      return { sourcePath, fileName: basename(sourcePath) };
+    },
+  );
 
   ipcMain.removeHandler(IPC_CHANNELS.projectOpenDialog);
   ipcMain.handle(IPC_CHANNELS.projectOpenDialog, async () => {

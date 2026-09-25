@@ -336,6 +336,10 @@ button:hover {
   padding: 10px 12px;
 }
 
+.media-list li.media-missing {
+  border: 1px solid #92554d;
+}
+
 .media-name {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -373,6 +377,22 @@ button:hover {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.source-missing-status,
+.source-check-error {
+  color: #f0a69c;
+  font-size: 12px;
+}
+
+.source-path {
+  color: #8e98a8;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.source-check-error {
+  margin: 12px 0 0;
 }
 
 .recent-projects {

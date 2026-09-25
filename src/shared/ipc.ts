@@ -4,6 +4,8 @@ export const IPC_CHANNELS = {
   exportProgress: 'export:progress',
   mediaOpenDialog: 'media:open-dialog',
   narrationOpenDialog: 'narration:open-dialog',
+  projectSourceCheck: 'project:source-check',
+  sourceRelinkDialog: 'source:relink-dialog',
   projectOpenDialog: 'project:open-dialog',
   projectSaveDialog: 'project:save-dialog',
   projectRead: 'project:read',
@@ -21,3 +23,20 @@ export const IPC_CHANNELS = {
 
 export type UnsavedChangesAction = 'new' | 'open' | 'recent' | 'close';
 export type UnsavedChangesChoice = 'save' | 'discard' | 'cancel';
+
+export type SourceFileKind = 'image' | 'video' | 'narration';
+
+export interface ProjectSourceCheckRequest {
+  media: Array<{ id: string; sourcePath: string }>;
+  narrationSourcePath: string | null;
+}
+
+export interface ProjectSourceCheckResult {
+  missingMediaIds: string[];
+  narrationMissing: boolean;
+}
+
+export interface RelinkedSourceFile {
+  sourcePath: string;
+  fileName: string;
+}

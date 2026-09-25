@@ -43,6 +43,8 @@ export function App() {
     importMedia,
     selectNarration,
     removeNarration,
+    relinkMedia,
+    relinkNarration,
     moveScene,
     duplicateScene,
     deleteScene,
@@ -70,6 +72,9 @@ export function App() {
     projectOpenError,
     projectSaveStatus,
     projectTransitionError,
+    missingMediaIds,
+    narrationMissing,
+    sourceCheckFailed,
     exportStatus,
     exportProgress,
     exportMp4,
@@ -276,7 +281,12 @@ export function App() {
         <MediaSidebar
           media={state.project.media}
           narration={state.project.narration}
+          missingMediaIds={missingMediaIds}
+          narrationMissing={narrationMissing}
+          sourceCheckFailed={sourceCheckFailed}
           onAddMedia={importMedia}
+          onRelinkMedia={relinkMedia}
+          onRelinkNarration={relinkNarration}
           onRemoveNarration={removeNarration}
           onSelectNarration={selectNarration}
         />

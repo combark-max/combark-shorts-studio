@@ -10,6 +10,8 @@ const desktopApi = {
   onExportProgress: vi.fn(),
   openMediaDialog: vi.fn(),
   openNarrationDialog: vi.fn(),
+  checkProjectSources: vi.fn(),
+  relinkSourceFile: vi.fn(),
   openProjectDialog: vi.fn(),
   saveProjectDialog: vi.fn(),
   readProject: vi.fn(),
@@ -33,6 +35,11 @@ beforeEach(() => {
   desktopApi.getAppVersion.mockResolvedValue('0.1.0');
   desktopApi.openMediaDialog.mockResolvedValue([]);
   desktopApi.openNarrationDialog.mockResolvedValue(null);
+  desktopApi.checkProjectSources.mockResolvedValue({
+    missingMediaIds: [],
+    narrationMissing: false,
+  });
+  desktopApi.relinkSourceFile.mockResolvedValue(null);
   desktopApi.listRecoveries.mockResolvedValue([]);
   desktopApi.deleteRecovery.mockResolvedValue(undefined);
   desktopApi.listRecentProjects.mockResolvedValue([]);
@@ -816,5 +823,80 @@ describe('App', () => {
       '변경 사항을 안전하게 정리하지 못했습니다. 다시 시도해 주세요.',
     );
     expect(screen.getAllByText('dirty.jpg').length).toBeGreaterThan(0);
+  });
+
+  it('shows missing source details and reconnects media from the sidebar', async () => {
+    const user = userEvent.setup();
+    desktopApi.openMediaDialog.mockResolvedValue([
+      {
+        id: 'missing-image',
+        kind: 'image',
+        sourcePath: 'C:\\missing\\old.jpg',
+        fileName: 'old.jpg',
+      },
+    ]);
+    desktopApi.checkProjectSources
+      .mockResolvedValueOnce({ missingMediaIds: [], narrationMissing: false })
+      .mockResolvedValueOnce({
+        missingMediaIds: ['missing-image'],
+        narrationMissing: false,
+      })
+      .mockResolvedValue({ missingMediaIds: [], narrationMissing: false });
+    desktopApi.relinkSourceFile.mockResolvedValue({
+      sourcePath: 'D:\\restored\\new.png',
+      fileName: 'new.png',
+    });
+    render(<App />);
+    await screen.findByText('Combark Shorts Studio');
+
+    await user.click(screen.getByRole('button', { name: '파일 추가' }));
+    expect(await screen.findByText('원본 파일 없음')).toBeInTheDocument();
+    expect(screen.getByText('C:\\missing\\old.jpg')).toBeInTheDocument();
+    await user.click(
+      screen.getByRole('button', { name: 'old.jpg 파일 다시 찾기' }),
+    );
+
+    expect(await screen.findAllByText('new.png')).toHaveLength(2);
+    expect(screen.queryByText('C:\\missing\\old.jpg')).not.toBeInTheDocument();
+    expect(screen.queryByText('원본 파일 없음')).not.toBeInTheDocument();
+    expect(desktopApi.relinkSourceFile).toHaveBeenCalledWith(
+      'image',
+      'C:\\missing\\old.jpg',
+    );
+    expect(within(screen.getByRole('contentinfo')).getByText('저장 필요')).toBeInTheDocument();
+  });
+
+  it('shows missing narration details and keeps a source-check failure non-blocking', async () => {
+    const user = userEvent.setup();
+    desktopApi.openNarrationDialog.mockResolvedValue({
+      sourcePath: 'C:\\missing\\old.mp3',
+      fileName: 'old.mp3',
+    });
+    desktopApi.checkProjectSources
+      .mockResolvedValueOnce({ missingMediaIds: [], narrationMissing: false })
+      .mockResolvedValueOnce({ missingMediaIds: [], narrationMissing: true });
+    render(<App />);
+    await screen.findByText('Combark Shorts Studio');
+
+    await user.click(
+      screen.getByRole('button', { name: 'MP3/WAV 내레이션 선택' }),
+    );
+    expect(await screen.findByText('내레이션 원본 파일 없음')).toBeInTheDocument();
+    expect(screen.getByText('C:\\missing\\old.mp3')).toBeInTheDocument();
+
+    desktopApi.checkProjectSources.mockRejectedValueOnce(new Error('failed'));
+    desktopApi.relinkSourceFile.mockResolvedValue({
+      sourcePath: 'D:\\audio\\new.wav',
+      fileName: 'new.wav',
+    });
+    await user.click(
+      screen.getByRole('button', { name: 'old.mp3 파일 다시 찾기' }),
+    );
+
+    expect(
+      await screen.findByText('원본 파일 상태를 확인하지 못했습니다.'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('new.wav')).toBeInTheDocument();
+    expect(screen.getByText('Combark Shorts Studio')).toBeInTheDocument();
   });
 });

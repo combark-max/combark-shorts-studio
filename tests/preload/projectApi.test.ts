@@ -69,6 +69,8 @@ describe('desktopApi project methods', () => {
       'onExportProgress',
       'openMediaDialog',
       'openNarrationDialog',
+      'checkProjectSources',
+      'relinkSourceFile',
       'openProjectDialog',
       'saveProjectDialog',
       'readProject',

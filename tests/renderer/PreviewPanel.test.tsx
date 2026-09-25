@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PreviewPanel } from '../../src/renderer/components/PreviewPanel';
+import { createMediaUrl } from '../../src/shared/mediaProtocol';
 import type {
   MediaAsset,
   NarrationAsset,
@@ -483,5 +484,41 @@ describe('PreviewPanel', () => {
       '미디어를 재생하지 못했습니다.',
     );
     expect(audioPause).toHaveBeenCalledOnce();
+  });
+
+  it('clears a load error and uses the new source after media is reconnected', async () => {
+    const { rerender } = render(
+      <PreviewPanel
+        media={[media[0]]}
+        narration={null}
+        scenes={[scenes[0]]}
+        selectedSceneIndex={0}
+        onSelectScene={vi.fn()}
+      />,
+    );
+    fireEvent.error(screen.getByRole('img', { name: 'first image.jpg' }));
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '미디어를 불러오지 못했습니다.',
+    );
+
+    const restoredAsset: MediaAsset = {
+      ...media[0],
+      sourcePath: 'D:\\restored\\renamed.png',
+      fileName: 'renamed.png',
+    };
+    rerender(
+      <PreviewPanel
+        media={[restoredAsset]}
+        narration={null}
+        scenes={[scenes[0]]}
+        selectedSceneIndex={0}
+        onSelectScene={vi.fn()}
+      />,
+    );
+
+    expect(
+      await screen.findByRole('img', { name: 'renamed.png' }),
+    ).toHaveAttribute('src', createMediaUrl(restoredAsset.sourcePath));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });

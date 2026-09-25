@@ -11,6 +11,10 @@ import type {
 } from '../shared/project/types';
 import {
   IPC_CHANNELS,
+  type ProjectSourceCheckRequest,
+  type ProjectSourceCheckResult,
+  type RelinkedSourceFile,
+  type SourceFileKind,
   type UnsavedChangesAction,
   type UnsavedChangesChoice,
 } from '../shared/ipc';
@@ -35,6 +39,19 @@ export const desktopApi = {
     ipcRenderer.invoke(IPC_CHANNELS.mediaOpenDialog),
   openNarrationDialog: (): Promise<NarrationAsset | null> =>
     ipcRenderer.invoke(IPC_CHANNELS.narrationOpenDialog),
+  checkProjectSources: (
+    request: ProjectSourceCheckRequest,
+  ): Promise<ProjectSourceCheckResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.projectSourceCheck, request),
+  relinkSourceFile: (
+    kind: SourceFileKind,
+    previousPath: string,
+  ): Promise<RelinkedSourceFile | null> =>
+    ipcRenderer.invoke(
+      IPC_CHANNELS.sourceRelinkDialog,
+      kind,
+      previousPath,
+    ),
   openProjectDialog: (): Promise<string | null> =>
     ipcRenderer.invoke(IPC_CHANNELS.projectOpenDialog),
   saveProjectDialog: (suggestedName: string): Promise<string | null> =>

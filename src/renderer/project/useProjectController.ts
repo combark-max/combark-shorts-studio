@@ -49,6 +49,9 @@ export function useProjectController(initialState?: ProjectState) {
   const [projectSaveStatus, setProjectSaveStatus] =
     useState<ProjectSaveStatus>('idle');
   const [projectTransitionError, setProjectTransitionError] = useState(false);
+  const [missingMediaIds, setMissingMediaIds] = useState<string[]>([]);
+  const [narrationMissing, setNarrationMissing] = useState(false);
+  const [sourceCheckFailed, setSourceCheckFailed] = useState(false);
   const [exportStatus, setExportStatus] = useState<ExportStatus>('idle');
   const [exportProgress, setExportProgress] =
     useState<ExportProgress | null>(null);
@@ -59,6 +62,7 @@ export function useProjectController(initialState?: ProjectState) {
     new Set(),
   );
   const transitionInProgressRef = useRef(false);
+  const sourceCheckSequenceRef = useRef(0);
   const documentGenerationRef = useRef(0);
   const saveSequenceRef = useRef(0);
   const saveFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
@@ -246,6 +250,49 @@ export function useProjectController(initialState?: ProjectState) {
   }, []);
 
   useEffect(() => {
+    const sequence = ++sourceCheckSequenceRef.current;
+    const mediaSnapshot = state.project.media;
+    const narrationSourcePath = state.project.narration?.sourcePath ?? null;
+    setMissingMediaIds([]);
+    setNarrationMissing(false);
+    setSourceCheckFailed(false);
+
+    void window.combarkDesktop
+      .checkProjectSources({
+        media: mediaSnapshot.map(({ id, sourcePath }) => ({ id, sourcePath })),
+        narrationSourcePath,
+      })
+      .then((result) => {
+        if (
+          sourceCheckSequenceRef.current !== sequence ||
+          stateRef.current.project.media !== mediaSnapshot ||
+          (stateRef.current.project.narration?.sourcePath ?? null) !==
+            narrationSourcePath
+        ) {
+          return;
+        }
+
+        const currentMediaIds = new Set(mediaSnapshot.map(({ id }) => id));
+        setMissingMediaIds(
+          result.missingMediaIds.filter((id) => currentMediaIds.has(id)),
+        );
+        setNarrationMissing(
+          narrationSourcePath !== null && result.narrationMissing,
+        );
+      })
+      .catch(() => {
+        if (
+          sourceCheckSequenceRef.current === sequence &&
+          stateRef.current.project.media === mediaSnapshot &&
+          (stateRef.current.project.narration?.sourcePath ?? null) ===
+            narrationSourcePath
+        ) {
+          setSourceCheckFailed(true);
+        }
+      });
+  }, [state.project.media, state.project.narration?.sourcePath]);
+
+  useEffect(() => {
     const intervalId = setInterval(() => {
       const currentState = stateRef.current;
 
@@ -335,6 +382,101 @@ export function useProjectController(initialState?: ProjectState) {
         ...currentState.project,
         updatedAt: new Date().toISOString(),
         narration: null,
+      },
+      dirty: true,
+    });
+  };
+
+  const relinkMedia = async (mediaId: string): Promise<void> => {
+    const assetSnapshot = stateRef.current.project.media.find(
+      ({ id }) => id === mediaId,
+    );
+    if (!assetSnapshot) {
+      return;
+    }
+
+    let replacement;
+    try {
+      replacement = await window.combarkDesktop.relinkSourceFile(
+        assetSnapshot.kind,
+        assetSnapshot.sourcePath,
+      );
+    } catch {
+      return;
+    }
+    if (!replacement) {
+      return;
+    }
+
+    const currentState = stateRef.current;
+    const currentAsset = currentState.project.media.find(
+      ({ id }) => id === mediaId,
+    );
+    if (
+      currentAsset !== assetSnapshot ||
+      (currentAsset.sourcePath === replacement.sourcePath &&
+        currentAsset.fileName === replacement.fileName)
+    ) {
+      return;
+    }
+
+    replaceState({
+      ...currentState,
+      project: {
+        ...currentState.project,
+        updatedAt: new Date().toISOString(),
+        media: currentState.project.media.map((asset) =>
+          asset === assetSnapshot
+            ? {
+                ...asset,
+                sourcePath: replacement.sourcePath,
+                fileName: replacement.fileName,
+              }
+            : asset,
+        ),
+      },
+      dirty: true,
+    });
+  };
+
+  const relinkNarration = async (): Promise<void> => {
+    const narrationSnapshot = stateRef.current.project.narration;
+    if (!narrationSnapshot) {
+      return;
+    }
+
+    let replacement;
+    try {
+      replacement = await window.combarkDesktop.relinkSourceFile(
+        'narration',
+        narrationSnapshot.sourcePath,
+      );
+    } catch {
+      return;
+    }
+    if (!replacement) {
+      return;
+    }
+
+    const currentState = stateRef.current;
+    if (
+      currentState.project.narration !== narrationSnapshot ||
+      (narrationSnapshot.sourcePath === replacement.sourcePath &&
+        narrationSnapshot.fileName === replacement.fileName)
+    ) {
+      return;
+    }
+
+    replaceState({
+      ...currentState,
+      project: {
+        ...currentState.project,
+        updatedAt: new Date().toISOString(),
+        narration: {
+          ...narrationSnapshot,
+          sourcePath: replacement.sourcePath,
+          fileName: replacement.fileName,
+        },
       },
       dirty: true,
     });
@@ -922,12 +1064,17 @@ export function useProjectController(initialState?: ProjectState) {
     projectOpenError,
     projectSaveStatus,
     projectTransitionError,
+    missingMediaIds,
+    narrationMissing,
+    sourceCheckFailed,
     exportStatus,
     exportProgress,
     newProject,
     importMedia,
     selectNarration,
     removeNarration,
+    relinkMedia,
+    relinkNarration,
     moveScene,
     duplicateScene,
     deleteScene,

@@ -2035,4 +2035,194 @@ describe('useProjectController', () => {
       }),
     );
   });
+
+  it('applies an auto-shorts scene plan atomically while preserving media and scene identity fields', () => {
+    const initialState = createSceneState();
+    const projectSnapshot = initialState.project;
+    const mediaSnapshot = initialState.project.media;
+    const nextScenes = initialState.project.scenes.map((scene, index) => ({
+      ...scene,
+      subtitle: `자동 자막 ${index + 1}`,
+      durationMs: scene.durationMs === null ? null : 4500 + index,
+    }));
+    const { result } = renderHook(() => useProjectController(initialState));
+    let accepted = false;
+
+    act(() => {
+      accepted = result.current.applyAutoShorts(projectSnapshot, nextScenes);
+    });
+
+    expect(accepted).toBe(true);
+    expect(result.current.state.project.media).toBe(mediaSnapshot);
+    expect(result.current.state.project.scenes).toEqual(nextScenes);
+    expect(result.current.state.project.scenes.map(({ mediaId }) => mediaId)).toEqual(
+      projectSnapshot.scenes.map(({ mediaId }) => mediaId),
+    );
+    expect(result.current.state.project.scenes[1].durationMs).toBeNull();
+    expect(result.current.state.dirty).toBe(true);
+    expect(result.current.state.project.updatedAt).not.toBe(
+      projectSnapshot.updatedAt,
+    );
+  });
+
+  it('accepts an unchanged value snapshot instead of requiring project object identity', () => {
+    const initialState = createSceneState();
+    const projectSnapshot = structuredClone(initialState.project);
+    const nextScenes = projectSnapshot.scenes.map((scene) => ({
+      ...scene,
+      subtitle: 'fresh plan',
+    }));
+    const { result } = renderHook(() => useProjectController(initialState));
+
+    act(() => {
+      expect(
+        result.current.applyAutoShorts(projectSnapshot, nextScenes),
+      ).toBe(true);
+    });
+
+    expect(result.current.state.project.scenes[0].subtitle).toBe('fresh plan');
+  });
+
+  it('keeps identical and empty auto-shorts plans as no-ops', () => {
+    const initialState = createSceneState();
+    const { result } = renderHook(() => useProjectController(initialState));
+    const initialProject = result.current.state.project;
+
+    act(() => {
+      expect(
+        result.current.applyAutoShorts(
+          initialProject,
+          initialProject.scenes.map((scene) => ({ ...scene })),
+        ),
+      ).toBe(true);
+    });
+    expect(result.current.state.project).toBe(initialProject);
+    expect(result.current.state.dirty).toBe(false);
+
+    const emptyState = createState({
+      dirty: false,
+      project: createNewProject('empty'),
+    });
+    const emptyHook = renderHook(() => useProjectController(emptyState));
+    const emptyProject = emptyHook.result.current.state.project;
+    act(() => {
+      expect(
+        emptyHook.result.current.applyAutoShorts(emptyProject, []),
+      ).toBe(true);
+    });
+    expect(emptyHook.result.current.state.project).toBe(emptyProject);
+    expect(emptyHook.result.current.state.dirty).toBe(false);
+  });
+
+  it.each([
+    [
+      'scene reorder',
+      (controller: ReturnType<typeof useProjectController>) => {
+        controller.moveScene(0, 'down');
+      },
+    ],
+    [
+      'subtitle edit',
+      (controller: ReturnType<typeof useProjectController>) => {
+        controller.updateSceneSubtitle(0, 'newer edit');
+      },
+    ],
+    [
+      'image duration edit',
+      (controller: ReturnType<typeof useProjectController>) => {
+        controller.updateSceneDuration(0, 4321);
+      },
+    ],
+    [
+      'same-count scene replacement',
+      (controller: ReturnType<typeof useProjectController>) => {
+        controller.deleteScene(0);
+        controller.duplicateScene(0);
+      },
+    ],
+  ])('rejects an auto-shorts plan after %s without another state change', (_label, mutate) => {
+    const initialState = createSceneState();
+    const staleProject = structuredClone(initialState.project);
+    const plannedScenes = staleProject.scenes.map((scene) => ({
+      ...scene,
+      subtitle: 'stale',
+    }));
+    const { result } = renderHook(() => useProjectController(initialState));
+
+    act(() => {
+      mutate(result.current);
+    });
+    const stateBeforeApply = result.current.state;
+
+    act(() => {
+      expect(
+        result.current.applyAutoShorts(staleProject, plannedScenes),
+      ).toBe(false);
+    });
+
+    expect(result.current.state).toBe(stateBeforeApply);
+    expect(result.current.state.project).toBe(stateBeforeApply.project);
+    expect(result.current.state.dirty).toBe(stateBeforeApply.dirty);
+    expect(result.current.state.project.updatedAt).toBe(
+      stateBeforeApply.project.updatedAt,
+    );
+  });
+
+  it('includes auto-shorts changes in the existing Save and export payloads', async () => {
+    desktopApi.writeProject.mockResolvedValue(undefined);
+    const initialState = createSceneState();
+    const { result } = renderHook(() => useProjectController(initialState));
+
+    act(() => {
+      result.current.applyAutoShorts(
+        initialState.project,
+        initialState.project.scenes.map((scene) => ({
+          ...scene,
+          subtitle: '저장할 자동 자막',
+        })),
+      );
+    });
+    await act(async () => {
+      await result.current.saveProject();
+      await result.current.exportMp4();
+    });
+
+    const savedProject = desktopApi.writeProject.mock.calls[0][1];
+    expect(desktopApi.writeProject).toHaveBeenCalledWith(
+      initialState.filePath,
+      expect.objectContaining({
+        scenes: expect.arrayContaining([
+          expect.objectContaining({ subtitle: '저장할 자동 자막' }),
+        ]),
+      }),
+    );
+    expect(desktopApi.exportMp4).toHaveBeenCalledWith(savedProject);
+  });
+
+  it('includes auto-shorts changes in the existing recovery autosave payload', async () => {
+    vi.useFakeTimers();
+    const initialState = createSceneState();
+    const { result } = renderHook(() => useProjectController(initialState));
+
+    act(() => {
+      result.current.applyAutoShorts(
+        initialState.project,
+        initialState.project.scenes.map((scene) => ({
+          ...scene,
+          subtitle: '복구할 자동 자막',
+        })),
+      );
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+
+    expect(desktopApi.writeRecovery).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scenes: expect.arrayContaining([
+          expect.objectContaining({ subtitle: '복구할 자동 자막' }),
+        ]),
+      }),
+    );
+  });
 });

@@ -4,8 +4,10 @@ import { createInitialProjectState } from './projectState';
 import type { ProjectState } from './projectState';
 import type { ExportProgress, ExportStatus } from '../../shared/export';
 import type {
+  ProjectDocument,
   RecentProject,
   RecoveryCandidate,
+  Scene,
   SubtitlePosition,
   SubtitleSize,
 } from '../../shared/project/types';
@@ -24,6 +26,49 @@ type TransitionPreparation =
   | { mode: 'proceed'; project: ProjectState['project'] }
   | { mode: 'discard'; project: ProjectState['project'] }
   | null;
+
+function hasSameAutoShortsInputs(
+  snapshot: ProjectDocument,
+  current: ProjectDocument,
+): boolean {
+  if (
+    snapshot.projectId !== current.projectId ||
+    snapshot.scenes.length !== current.scenes.length
+  ) {
+    return false;
+  }
+
+  const snapshotMediaById = new Map(
+    snapshot.media.map((asset) => [asset.id, asset]),
+  );
+  const currentMediaById = new Map(
+    current.media.map((asset) => [asset.id, asset]),
+  );
+  const sameScenes = snapshot.scenes.every((scene, index) => {
+    const currentScene = current.scenes[index];
+    const snapshotAsset = snapshotMediaById.get(scene.mediaId);
+    const currentAsset = currentMediaById.get(currentScene.mediaId);
+    return (
+      scene.mediaId === currentScene.mediaId &&
+      scene.durationMs === currentScene.durationMs &&
+      scene.subtitle === currentScene.subtitle &&
+      scene.subtitlePosition === currentScene.subtitlePosition &&
+      scene.subtitleSize === currentScene.subtitleSize &&
+      snapshotAsset !== undefined &&
+      currentAsset !== undefined &&
+      snapshotAsset.kind === currentAsset.kind &&
+      snapshotAsset.sourcePath === currentAsset.sourcePath
+    );
+  });
+  if (!sameScenes) {
+    return false;
+  }
+
+  return snapshot.narration === null
+    ? current.narration === null
+    : current.narration !== null &&
+        snapshot.narration.sourcePath === current.narration.sourcePath;
+}
 
 export function useProjectController(initialState?: ProjectState) {
   const [state, setState] = useState<ProjectState>(
@@ -480,6 +525,62 @@ export function useProjectController(initialState?: ProjectState) {
       },
       dirty: true,
     });
+  };
+
+  const applyAutoShorts = (
+    projectSnapshot: ProjectDocument,
+    nextScenes: Scene[],
+  ): boolean => {
+    const currentState = stateRef.current;
+    if (
+      !hasSameAutoShortsInputs(projectSnapshot, currentState.project) ||
+      nextScenes.length !== currentState.project.scenes.length
+    ) {
+      return false;
+    }
+
+    const mediaById = new Map(
+      currentState.project.media.map((asset) => [asset.id, asset]),
+    );
+    const validPlan = nextScenes.every((scene, index) => {
+      const currentScene = currentState.project.scenes[index];
+      const asset = mediaById.get(currentScene.mediaId);
+      return (
+        scene.mediaId === currentScene.mediaId &&
+        scene.subtitlePosition === currentScene.subtitlePosition &&
+        scene.subtitleSize === currentScene.subtitleSize &&
+        typeof scene.subtitle === 'string' &&
+        ((asset?.kind === 'image' &&
+          Number.isInteger(scene.durationMs) &&
+          (scene.durationMs as number) > 0) ||
+          (asset?.kind === 'video' && scene.durationMs === null))
+      );
+    });
+    if (!validPlan) {
+      return false;
+    }
+
+    const changed = nextScenes.some((scene, index) => {
+      const currentScene = currentState.project.scenes[index];
+      return (
+        scene.subtitle !== currentScene.subtitle ||
+        scene.durationMs !== currentScene.durationMs
+      );
+    });
+    if (!changed) {
+      return true;
+    }
+
+    replaceState({
+      ...currentState,
+      project: {
+        ...currentState.project,
+        updatedAt: new Date().toISOString(),
+        scenes: nextScenes,
+      },
+      dirty: true,
+    });
+    return true;
   };
 
   const moveScene = (
@@ -1075,6 +1176,7 @@ export function useProjectController(initialState?: ProjectState) {
     removeNarration,
     relinkMedia,
     relinkNarration,
+    applyAutoShorts,
     moveScene,
     duplicateScene,
     deleteScene,

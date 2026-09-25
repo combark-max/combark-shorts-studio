@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { AppHeader } from './components/AppHeader';
+import { AutoShortsDialog } from './components/AutoShortsDialog';
 import { MediaSidebar } from './components/MediaSidebar';
 import { PreviewPanel } from './components/PreviewPanel';
 import { PropertiesPanel } from './components/PropertiesPanel';
@@ -8,8 +9,7 @@ import { RecoveryPrompt } from './components/RecoveryPrompt';
 import { RecentProjects } from './components/RecentProjects';
 import { TimelineShell } from './components/TimelineShell';
 import { useProjectController } from './project/useProjectController';
-
-const noop = (): void => undefined;
+import type { ProjectDocument } from '../shared/project/types';
 
 function getExportProgressMessage(
   progress: ReturnType<typeof useProjectController>['exportProgress'],
@@ -34,6 +34,8 @@ function getExportProgressMessage(
 
 export function App() {
   const [appVersion, setAppVersion] = useState('—');
+  const [autoShortsProject, setAutoShortsProject] =
+    useState<ProjectDocument | null>(null);
   const [selectedSceneIndex, setSelectedSceneIndex] = useState<number | null>(
     null,
   );
@@ -45,6 +47,7 @@ export function App() {
     removeNarration,
     relinkMedia,
     relinkNarration,
+    applyAutoShorts,
     moveScene,
     duplicateScene,
     deleteScene,
@@ -205,12 +208,28 @@ export function App() {
         onOpenProject={openProject}
         onSaveProject={saveProject}
         onSaveProjectAs={saveProjectAs}
-        onAutoShorts={noop}
+        onAutoShorts={() => setAutoShortsProject(state.project)}
+        autoShortsDisabled={exportStatus === 'exporting'}
         onExport={() => {
           void exportMp4();
         }}
         exportInProgress={exportStatus === 'exporting'}
       />
+      {autoShortsProject ? (
+        <AutoShortsDialog
+          project={autoShortsProject}
+          missingMediaIds={missingMediaIds}
+          narrationMissing={narrationMissing}
+          onCancel={() => setAutoShortsProject(null)}
+          onApply={(projectSnapshot, scenes) => {
+            const accepted = applyAutoShorts(projectSnapshot, scenes);
+            if (accepted) {
+              setAutoShortsProject(null);
+            }
+            return accepted;
+          }}
+        />
+      ) : null}
       <div className="save-status-slot">
         <div
           aria-label="저장 상태"

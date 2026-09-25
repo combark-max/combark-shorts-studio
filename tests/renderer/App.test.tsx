@@ -73,8 +73,12 @@ describe('App', () => {
     await screen.findByText('Combark Shorts Studio');
 
     const button = screen.getByRole('button', { name: 'MP4 내보내기' });
+    const autoShortsButton = screen.getByRole('button', {
+      name: '쇼츠 자동 만들기',
+    });
     await user.click(button);
     expect(button).toBeDisabled();
+    expect(autoShortsButton).toBeDisabled();
     expect(button).toHaveTextContent('내보내는 중...');
     expect(screen.getByRole('status', { name: '내보내기 상태' })).toHaveTextContent(
       '내보내기 준비 중...',
@@ -114,6 +118,7 @@ describe('App', () => {
     });
     expect(await screen.findByText('MP4 내보내기 완료')).toBeInTheDocument();
     expect(button).toBeEnabled();
+    expect(autoShortsButton).toBeEnabled();
   });
 
   it('shows an MP4 export failure message', async () => {
@@ -649,6 +654,56 @@ describe('App', () => {
     ).toBeInTheDocument();
 
     expect(await screen.findByText('v0.1.0')).toBeInTheDocument();
+  });
+
+  it('opens auto shorts from the header and applies subtitles and image duration to the existing scene', async () => {
+    const user = userEvent.setup();
+    const project = {
+      ...createNewProject('자동 구성 프로젝트'),
+      media: [
+        {
+          id: 'auto-image',
+          kind: 'image' as const,
+          sourcePath: 'C:\\media\\auto.jpg',
+          fileName: 'auto.jpg',
+        },
+      ],
+      scenes: [
+        {
+          mediaId: 'auto-image',
+          durationMs: 4500,
+          subtitle: '기존 자막',
+          subtitlePosition: 'top' as const,
+          subtitleSize: 'large' as const,
+        },
+      ],
+    };
+    desktopApi.openProjectDialog.mockResolvedValue(
+      'C:\\projects\\auto.cssproj',
+    );
+    desktopApi.readProject.mockResolvedValue(project);
+    render(<App />);
+    await screen.findByText('Combark Shorts Studio');
+    await user.click(screen.getByRole('button', { name: '열기' }));
+
+    await user.click(
+      screen.getByRole('button', { name: '쇼츠 자동 만들기' }),
+    );
+    expect(
+      screen.getByRole('dialog', { name: '쇼츠 자동 만들기' }),
+    ).toBeInTheDocument();
+    await user.type(
+      screen.getByRole('textbox', { name: '대본 또는 자막' }),
+      '자동 생성 자막',
+    );
+    await user.click(screen.getByRole('button', { name: '자동 구성 적용' }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByText('자동 생성 자막')).toBeInTheDocument();
+    expect(screen.getByRole('spinbutton', { name: '표시시간 (초)' })).toHaveValue(3);
+    expect(screen.getByRole('combobox', { name: '1번 장면 자막 위치' })).toHaveValue('top');
+    expect(screen.getByRole('combobox', { name: '1번 장면 자막 크기' })).toHaveValue('large');
+    expect(within(screen.getByRole('contentinfo')).getByText('저장 필요')).toBeInTheDocument();
   });
 
   it('shows the recovery prompt instead of the editor when candidates exist', async () => {

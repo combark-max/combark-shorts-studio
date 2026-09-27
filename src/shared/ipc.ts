@@ -1,5 +1,10 @@
 export const IPC_CHANNELS = {
   appGetVersion: 'app:get-version',
+  contactSheetVideoOpen: 'contact-sheet-video:open',
+  contactSheetVideoAnalyze: 'contact-sheet-video:analyze',
+  contactSheetVideoCreate: 'contact-sheet-video:create',
+  contactSheetVideoCancel: 'contact-sheet-video:cancel',
+  contactSheetVideoProgress: 'contact-sheet-video:progress',
   exportMp4: 'export:mp4',
   exportProgress: 'export:progress',
   mediaOpenDialog: 'media:open-dialog',

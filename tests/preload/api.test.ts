@@ -29,6 +29,11 @@ describe('desktopApi', () => {
 
     expect(Object.keys(desktopApi)).toEqual([
       'getAppVersion',
+      'openContactSheetImages',
+      'analyzeContactSheets',
+      'createContactSheetVideo',
+      'cancelContactSheetVideo',
+      'onContactSheetVideoProgress',
       'exportMp4',
       'onExportProgress',
       'openMediaDialog',
@@ -54,6 +59,51 @@ describe('desktopApi', () => {
 
     await expect(desktopApi.getAppVersion()).resolves.toBe('1.0.0');
     expect(invoke).toHaveBeenCalledWith(IPC_CHANNELS.appGetVersion);
+  });
+
+  it('exposes the scoped contact-sheet workflow and progress subscription', async () => {
+    const sheets = [
+      {
+        id: 'sheet-id',
+        sourcePath: 'C:\\images\\sheet.png',
+        fileName: 'sheet.png',
+      },
+    ];
+    const request = { sheets, fps: 8 as const };
+    invoke
+      .mockResolvedValueOnce(sheets)
+      .mockResolvedValueOnce([
+        { id: 'sheet-id', status: 'recognized', frameCount: 16 },
+      ])
+      .mockResolvedValueOnce({ status: 'success', filePath: 'C:\\out.mp4' })
+      .mockResolvedValueOnce(undefined);
+
+    await expect(desktopApi.openContactSheetImages()).resolves.toEqual(sheets);
+    await expect(desktopApi.analyzeContactSheets(sheets)).resolves.toEqual([
+      { id: 'sheet-id', status: 'recognized', frameCount: 16 },
+    ]);
+    await expect(desktopApi.createContactSheetVideo(request)).resolves.toEqual({
+      status: 'success',
+      filePath: 'C:\\out.mp4',
+    });
+    await expect(desktopApi.cancelContactSheetVideo()).resolves.toBeUndefined();
+    expect(invoke.mock.calls.slice(0, 4)).toEqual([
+      [IPC_CHANNELS.contactSheetVideoOpen],
+      [IPC_CHANNELS.contactSheetVideoAnalyze, sheets],
+      [IPC_CHANNELS.contactSheetVideoCreate, request],
+      [IPC_CHANNELS.contactSheetVideoCancel],
+    ]);
+
+    const listener = vi.fn();
+    const cleanup = desktopApi.onContactSheetVideoProgress(listener);
+    const registeredListener = on.mock.calls.at(-1)?.[1];
+    registeredListener({}, { stage: 'encoding' });
+    expect(listener).toHaveBeenCalledWith({ stage: 'encoding' });
+    cleanup();
+    expect(removeListener).toHaveBeenCalledWith(
+      IPC_CHANNELS.contactSheetVideoProgress,
+      registeredListener,
+    );
   });
 
   it('subscribes to export progress and removes the exact listener', () => {

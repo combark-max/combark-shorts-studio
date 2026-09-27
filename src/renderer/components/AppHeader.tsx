@@ -5,8 +5,11 @@ export interface AppHeaderProps {
   onSaveProjectAs(): void;
   onAutoShorts(): void;
   autoShortsDisabled: boolean;
+  onContactSheetVideo(): void;
+  contactSheetVideoDisabled: boolean;
   onExport(): void;
   exportInProgress: boolean;
+  exportDisabled: boolean;
 }
 
 export function AppHeader({
@@ -16,8 +19,11 @@ export function AppHeader({
   onSaveProjectAs,
   onAutoShorts,
   autoShortsDisabled,
+  onContactSheetVideo,
+  contactSheetVideoDisabled,
   onExport,
   exportInProgress,
+  exportDisabled,
 }: AppHeaderProps) {
   return (
     <header className="app-header">
@@ -34,7 +40,14 @@ export function AppHeader({
         >
           쇼츠 자동 만들기
         </button>
-        <button type="button" onClick={onExport} disabled={exportInProgress}>
+        <button
+          type="button"
+          onClick={onContactSheetVideo}
+          disabled={contactSheetVideoDisabled}
+        >
+          연속 프레임 영상 만들기
+        </button>
+        <button type="button" onClick={onExport} disabled={exportDisabled}>
           {exportInProgress ? '내보내는 중...' : 'MP4 내보내기'}
         </button>
       </nav>

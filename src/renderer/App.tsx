@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { AppHeader } from './components/AppHeader';
 import { AutoShortsDialog } from './components/AutoShortsDialog';
+import { ContactSheetVideoDialog } from './components/ContactSheetVideoDialog';
 import { MediaSidebar } from './components/MediaSidebar';
 import { PreviewPanel } from './components/PreviewPanel';
 import { PropertiesPanel } from './components/PropertiesPanel';
@@ -36,6 +37,8 @@ export function App() {
   const [appVersion, setAppVersion] = useState('—');
   const [autoShortsProject, setAutoShortsProject] =
     useState<ProjectDocument | null>(null);
+  const [contactSheetVideoOpen, setContactSheetVideoOpen] = useState(false);
+  const [contactSheetVideoBusy, setContactSheetVideoBusy] = useState(false);
   const [selectedSceneIndex, setSelectedSceneIndex] = useState<number | null>(
     null,
   );
@@ -210,11 +213,25 @@ export function App() {
         onSaveProjectAs={saveProjectAs}
         onAutoShorts={() => setAutoShortsProject(state.project)}
         autoShortsDisabled={exportStatus === 'exporting'}
+        onContactSheetVideo={() => setContactSheetVideoOpen(true)}
+        contactSheetVideoDisabled={
+          exportStatus === 'exporting' || contactSheetVideoBusy
+        }
         onExport={() => {
           void exportMp4();
         }}
         exportInProgress={exportStatus === 'exporting'}
+        exportDisabled={
+          exportStatus === 'exporting' || contactSheetVideoBusy
+        }
       />
+      {contactSheetVideoOpen ? (
+        <ContactSheetVideoDialog
+          generalExportInProgress={exportStatus === 'exporting'}
+          onClose={() => setContactSheetVideoOpen(false)}
+          onBusyChange={setContactSheetVideoBusy}
+        />
+      ) : null}
       {autoShortsProject ? (
         <AutoShortsDialog
           project={autoShortsProject}

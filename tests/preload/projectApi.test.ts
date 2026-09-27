@@ -65,6 +65,11 @@ describe('desktopApi project methods', () => {
 
     expect(Object.keys(desktopApi)).toEqual([
       'getAppVersion',
+      'openContactSheetImages',
+      'analyzeContactSheets',
+      'createContactSheetVideo',
+      'cancelContactSheetVideo',
+      'onContactSheetVideoProgress',
       'exportMp4',
       'onExportProgress',
       'openMediaDialog',

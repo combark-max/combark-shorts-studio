@@ -1,5 +1,12 @@
 import { ipcRenderer, type IpcRendererEvent } from 'electron';
 
+import type {
+  ContactSheetAnalysisResult,
+  ContactSheetSource,
+  ContactSheetVideoProgress,
+  CreateContactSheetVideoRequest,
+  CreateContactSheetVideoResult,
+} from '../shared/contactSheetVideo';
 import type { ExportMp4Result, ExportProgress } from '../shared/export';
 import type {
   MediaAsset,
@@ -22,6 +29,35 @@ import {
 export const desktopApi = {
   getAppVersion: (): Promise<string> =>
     ipcRenderer.invoke(IPC_CHANNELS.appGetVersion),
+  openContactSheetImages: (): Promise<ContactSheetSource[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.contactSheetVideoOpen),
+  analyzeContactSheets: (
+    sheets: ContactSheetSource[],
+  ): Promise<ContactSheetAnalysisResult[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.contactSheetVideoAnalyze, sheets),
+  createContactSheetVideo: (
+    request: CreateContactSheetVideoRequest,
+  ): Promise<CreateContactSheetVideoResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.contactSheetVideoCreate, request),
+  cancelContactSheetVideo: (): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.contactSheetVideoCancel),
+  onContactSheetVideoProgress: (
+    listener: (progress: ContactSheetVideoProgress) => void,
+  ): (() => void) => {
+    const handler = (
+      _event: IpcRendererEvent,
+      progress: ContactSheetVideoProgress,
+    ): void => {
+      listener(progress);
+    };
+    ipcRenderer.on(IPC_CHANNELS.contactSheetVideoProgress, handler);
+    return () => {
+      ipcRenderer.removeListener(
+        IPC_CHANNELS.contactSheetVideoProgress,
+        handler,
+      );
+    };
+  },
   exportMp4: (project: ProjectDocument): Promise<ExportMp4Result> =>
     ipcRenderer.invoke(IPC_CHANNELS.exportMp4, project),
   onExportProgress: (

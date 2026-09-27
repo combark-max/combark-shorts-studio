@@ -6,6 +6,11 @@ import { createNewProject } from '../../src/shared/project/createProject';
 
 const desktopApi = {
   getAppVersion: vi.fn(),
+  openContactSheetImages: vi.fn(),
+  analyzeContactSheets: vi.fn(),
+  createContactSheetVideo: vi.fn(),
+  cancelContactSheetVideo: vi.fn(),
+  onContactSheetVideoProgress: vi.fn(),
   exportMp4: vi.fn(),
   onExportProgress: vi.fn(),
   openMediaDialog: vi.fn(),
@@ -33,6 +38,11 @@ beforeEach(() => {
     () => undefined,
   );
   desktopApi.getAppVersion.mockResolvedValue('0.1.0');
+  desktopApi.openContactSheetImages.mockResolvedValue([]);
+  desktopApi.analyzeContactSheets.mockResolvedValue([]);
+  desktopApi.createContactSheetVideo.mockResolvedValue({ status: 'canceled' });
+  desktopApi.cancelContactSheetVideo.mockResolvedValue(undefined);
+  desktopApi.onContactSheetVideoProgress.mockReturnValue(vi.fn());
   desktopApi.openMediaDialog.mockResolvedValue([]);
   desktopApi.openNarrationDialog.mockResolvedValue(null);
   desktopApi.checkProjectSources.mockResolvedValue({
@@ -60,6 +70,77 @@ afterEach(() => {
 });
 
 describe('App', () => {
+  it('opens the contact-sheet workflow and disables general export while it creates', async () => {
+    const user = userEvent.setup();
+    const sheet = {
+      id: 'sheet-id',
+      sourcePath: 'C:\\images\\sheet.png',
+      fileName: 'sheet.png',
+    };
+    let finish: ((result: { status: 'canceled' }) => void) | undefined;
+    desktopApi.openContactSheetImages.mockResolvedValue([sheet]);
+    desktopApi.analyzeContactSheets.mockResolvedValue([
+      { id: sheet.id, status: 'recognized', frameCount: 16 },
+    ]);
+    desktopApi.createContactSheetVideo.mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    render(<App />);
+    await screen.findByText('Combark Shorts Studio');
+
+    const workflowButton = screen.getByRole('button', {
+      name: '연속 프레임 영상 만들기',
+    });
+    const exportButton = screen.getByRole('button', { name: 'MP4 내보내기' });
+    await user.click(workflowButton);
+    expect(screen.getByRole('dialog', { name: '연속 프레임 영상 만들기' }))
+      .toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Contact sheet 이미지 추가' }));
+    await screen.findByText('16프레임 인식');
+    await user.click(screen.getByRole('button', { name: '영상 만들기' }));
+
+    expect(workflowButton).toBeDisabled();
+    expect(exportButton).toBeDisabled();
+    finish?.({ status: 'canceled' });
+    await vi.waitFor(() => expect(exportButton).toBeEnabled());
+  });
+
+  it('keeps general export available while the contact dialog is idle and disables contact creation during export', async () => {
+    const user = userEvent.setup();
+    const sheet = {
+      id: 'sheet-id',
+      sourcePath: 'C:\\images\\sheet.png',
+      fileName: 'sheet.png',
+    };
+    let finishExport: ((value: { status: 'canceled' }) => void) | undefined;
+    desktopApi.openContactSheetImages.mockResolvedValue([sheet]);
+    desktopApi.analyzeContactSheets.mockResolvedValue([
+      { id: sheet.id, status: 'recognized', frameCount: 16 },
+    ]);
+    desktopApi.exportMp4.mockReturnValue(new Promise((resolve) => {
+      finishExport = resolve;
+    }));
+    render(<App />);
+    await screen.findByText('Combark Shorts Studio');
+
+    await user.click(screen.getByRole('button', {
+      name: '연속 프레임 영상 만들기',
+    }));
+    const exportButton = screen.getByRole('button', { name: 'MP4 내보내기' });
+    expect(exportButton).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: 'Contact sheet 이미지 추가' }));
+    await screen.findByText('16프레임 인식');
+    await user.click(exportButton);
+
+    expect(screen.getByRole('button', { name: '영상 만들기' })).toBeDisabled();
+    finishExport?.({ status: 'canceled' });
+    await vi.waitFor(() => {
+      expect(screen.getByRole('button', { name: '영상 만들기' })).toBeEnabled();
+    });
+  });
+
   it('disables MP4 export while running and shows success feedback', async () => {
     let progressListener: ((progress: unknown) => void) | undefined;
     desktopApi.onExportProgress.mockImplementation((listener) => {

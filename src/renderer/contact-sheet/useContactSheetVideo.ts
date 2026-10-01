@@ -2,6 +2,7 @@ import { useState } from 'react';
 
 import {
   type ContactSheetFps,
+  type ContactSheetInterpolation,
   type ContactSheetSource,
   type ContactSheetVideoProgress,
 } from '../../shared/contactSheetVideo';
@@ -22,6 +23,9 @@ export function useContactSheetVideo(
 ) {
   const [sheets, setSheets] = useState<ContactSheetListItem[]>([]);
   const [fps, setFps] = useState<ContactSheetFps>(8);
+  const [interpolationEnabled, setInterpolationEnabled] = useState(false);
+  const [interpolation, setInterpolation] =
+    useState<ContactSheetInterpolation>('medium');
   const [adding, setAdding] = useState(false);
   const [status, setStatus] = useState<ContactSheetVideoStatus>('idle');
   const [progress, setProgress] = useState<ContactSheetVideoProgress | null>(
@@ -123,6 +127,7 @@ export function useContactSheetVideo(
           fileName,
         })),
         fps,
+        ...(interpolationEnabled ? { interpolation } : {}),
       });
       if (result.status === 'success') {
         setStatus('success');
@@ -155,11 +160,15 @@ export function useContactSheetVideo(
   return {
     sheets,
     fps,
+    interpolationEnabled,
+    interpolation,
     adding,
     status,
     progress,
     outputPath,
     setFps,
+    setInterpolationEnabled,
+    setInterpolation,
     addSheets,
     moveSheet,
     removeSheet,
@@ -167,4 +176,3 @@ export function useContactSheetVideo(
     cancel,
   };
 }
-

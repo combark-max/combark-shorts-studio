@@ -10,7 +10,10 @@ import type {
   CreateContactSheetVideoRequest,
   CreateContactSheetVideoResult,
 } from '../../shared/contactSheetVideo';
-import { CONTACT_SHEET_FPS_VALUES } from '../../shared/contactSheetVideo';
+import {
+  CONTACT_SHEET_FPS_VALUES,
+  CONTACT_SHEET_INTERPOLATION_VALUES,
+} from '../../shared/contactSheetVideo';
 import { IPC_CHANNELS } from '../../shared/ipc';
 import { analyzeContactSheet } from '../contact-sheet/analyzeContactSheet';
 import { createContactSheetVideo } from '../contact-sheet/createContactSheetVideo';
@@ -64,7 +67,16 @@ function validateCreateRequest(
   validateSheets(value.sheets, false);
   if (
     typeof value.fps !== 'number' ||
-    !CONTACT_SHEET_FPS_VALUES.some((fps) => fps === value.fps)
+    !CONTACT_SHEET_FPS_VALUES.some((fps) => fps === value.fps) ||
+    (
+      value.interpolation !== undefined &&
+      (
+        typeof value.interpolation !== 'string' ||
+        !CONTACT_SHEET_INTERPOLATION_VALUES.some(
+          (interpolation) => interpolation === value.interpolation,
+        )
+      )
+    )
   ) {
     throw new Error('유효하지 않은 contact sheet 영상 생성 요청입니다.');
   }

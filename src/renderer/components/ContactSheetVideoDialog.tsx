@@ -1,5 +1,12 @@
-import type { ContactSheetFps, ContactSheetVideoProgress } from '../../shared/contactSheetVideo';
-import { CONTACT_SHEET_FPS_VALUES } from '../../shared/contactSheetVideo';
+import type {
+  ContactSheetFps,
+  ContactSheetInterpolation,
+  ContactSheetVideoProgress,
+} from '../../shared/contactSheetVideo';
+import {
+  CONTACT_SHEET_FPS_VALUES,
+  CONTACT_SHEET_INTERPOLATION_MULTIPLIERS,
+} from '../../shared/contactSheetVideo';
 import { useContactSheetVideo } from '../contact-sheet/useContactSheetVideo';
 
 export interface ContactSheetVideoDialogProps {
@@ -32,6 +39,10 @@ export function ContactSheetVideoDialog({
 }: ContactSheetVideoDialogProps) {
   const workflow = useContactSheetVideo(onBusyChange);
   const frameCount = workflow.sheets.length * 16;
+  const interpolationMultiplier = workflow.interpolationEnabled
+    ? CONTACT_SHEET_INTERPOLATION_MULTIPLIERS[workflow.interpolation]
+    : 1;
+  const outputFrameCount = frameCount * interpolationMultiplier;
   const canCreate =
     workflow.sheets.length > 0 &&
     workflow.sheets.every(
@@ -126,11 +137,46 @@ export function ContactSheetVideoDialog({
           </select>
         </label>
 
+        <div className="contact-sheet-interpolation">
+          <label>
+            <input
+              type="checkbox"
+              checked={workflow.interpolationEnabled}
+              disabled={workflow.status === 'creating'}
+              onChange={(event) =>
+                workflow.setInterpolationEnabled(event.currentTarget.checked)
+              }
+            />
+            <span>부드러운 미세 동작</span>
+          </label>
+          <label>
+            <span>강도</span>
+            <select
+              aria-label="강도"
+              disabled={
+                !workflow.interpolationEnabled || workflow.status === 'creating'
+              }
+              value={workflow.interpolation}
+              onChange={(event) =>
+                workflow.setInterpolation(
+                  event.currentTarget.value as ContactSheetInterpolation,
+                )
+              }
+            >
+              <option value="light">약하게</option>
+              <option value="medium">보통</option>
+              <option value="strong">많이</option>
+            </select>
+          </label>
+        </div>
+
         <div className="contact-sheet-summary" aria-live="polite">
           <span>이미지 {workflow.sheets.length}장</span>
-          <span>총 {frameCount}프레임</span>
           <span>
-            예상 영상 길이 {frameCount === 0 ? '0.0' : (frameCount / workflow.fps).toFixed(1)}초
+            원본 {frameCount}프레임 → 출력 {outputFrameCount}프레임 / 예상{' '}
+            {outputFrameCount === 0
+              ? '0.0'
+              : (outputFrameCount / workflow.fps).toFixed(1)}초
           </span>
         </div>
 

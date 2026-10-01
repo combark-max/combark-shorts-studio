@@ -122,9 +122,57 @@ describe('buildContactSheetFfmpegArgs', () => {
       ]);
     },
   );
+
+  it.each([
+    ['light', 2, 96],
+    ['medium', 3, 144],
+    ['strong', 4, 192],
+  ] as const)(
+    'uses %s interpolation to stretch timestamps by %i and emit %i frames',
+    (interpolation, multiplier, outputFrameCount) => {
+      expect(buildContactSheetFfmpegArgs(
+        'C:\\Temp\\frames\\frame-%06d.png',
+        48,
+        8,
+        'C:\\Temp\\frames\\final.mp4',
+        interpolation,
+      )).toEqual([
+        '-y',
+        '-framerate', '8',
+        '-start_number', '0',
+        '-i', 'C:\\Temp\\frames\\frame-%06d.png',
+        '-vf',
+        `setpts=${multiplier}*(PTS-STARTPTS),tpad=stop_mode=clone:stop=-1,minterpolate=fps=8:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1:scd=fdiff:scd_threshold=10,trim=end_frame=${outputFrameCount}`,
+        '-frames:v', String(outputFrameCount),
+        '-an',
+        '-c:v', 'libx264',
+        '-crf', '18',
+        '-pix_fmt', 'yuv420p',
+        '-movflags', '+faststart',
+        'C:\\Temp\\frames\\final.mp4',
+      ]);
+    },
+  );
 });
 
 describe('createContactSheetVideo', () => {
+  it.each([null, 2, 'off', 'unexpected'])(
+    'rejects invalid interpolation value %j before reading source images',
+    async (interpolation) => {
+      await expect(createContactSheetVideo(
+        {
+          sheets: sources(1),
+          fps: 8,
+          interpolation,
+        } as never,
+        'C:\\exports\\sequence.mp4',
+        { ffmpegPath: 'C:\\tools\\ffmpeg.exe' },
+      )).rejects.toThrow('유효하지 않은');
+
+      expect(readFileSync).not.toHaveBeenCalled();
+    },
+  );
+
   it.each([
     [1, 16],
     [2, 32],
@@ -195,7 +243,7 @@ describe('createContactSheetVideo', () => {
     const removeDirectory = vi.fn().mockResolvedValue(undefined);
 
     await expect(createContactSheetVideo(
-      { sheets: input, fps: 8 },
+      { sheets: input, fps: 8, interpolation: 'light' },
       'C:\\exports\\existing.mp4',
       {
         ffmpegPath: 'C:\\tools\\ffmpeg.exe',
@@ -215,10 +263,11 @@ describe('createContactSheetVideo', () => {
     const controller = new AbortController();
     createFromBuffer.mockReturnValue(createFixtureImage(0, 20, 20));
     const removeDirectory = vi.fn().mockResolvedValue(undefined);
+    const copyFile = vi.fn();
     let writeCount = 0;
 
     await expect(createContactSheetVideo(
-      { sheets: sources(1), fps: 8 },
+      { sheets: sources(1), fps: 8, interpolation: 'medium' },
       'C:\\exports\\canceled.mp4',
       {
         ffmpegPath: 'C:\\tools\\ffmpeg.exe',
@@ -228,13 +277,14 @@ describe('createContactSheetVideo', () => {
           controller.abort();
         }),
         runFfmpeg: vi.fn(),
-        copyFile: vi.fn(),
+        copyFile,
         removeDirectory,
       },
       controller.signal,
     )).rejects.toMatchObject({ name: 'AbortError' });
 
     expect(writeCount).toBe(1);
+    expect(copyFile).not.toHaveBeenCalled();
     expect(removeDirectory).toHaveBeenCalledWith('C:\\Temp\\canceled-job');
   });
 

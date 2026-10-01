@@ -13,7 +13,10 @@ import { basename, dirname, join } from 'node:path';
 
 import {
   CONTACT_SHEET_FPS_VALUES,
+  CONTACT_SHEET_INTERPOLATION_MULTIPLIERS,
+  CONTACT_SHEET_INTERPOLATION_VALUES,
   type ContactSheetFps,
+  type ContactSheetInterpolation,
   type ContactSheetVideoProgress,
   type CreateContactSheetVideoRequest,
 } from '../../shared/contactSheetVideo';
@@ -80,6 +83,10 @@ function validateRequest(request: CreateContactSheetVideoRequest): void {
     !Array.isArray(request.sheets) ||
     request.sheets.length === 0 ||
     !CONTACT_SHEET_FPS_VALUES.includes(request.fps) ||
+    (
+      request.interpolation !== undefined &&
+      !CONTACT_SHEET_INTERPOLATION_VALUES.includes(request.interpolation)
+    ) ||
     request.sheets.some(
       (sheet) =>
         !sheet ||
@@ -198,7 +205,28 @@ export function buildContactSheetFfmpegArgs(
   frameCount: number,
   fps: ContactSheetFps,
   outputPath: string,
+  interpolation?: ContactSheetInterpolation,
 ): string[] {
+  if (interpolation) {
+    const multiplier = CONTACT_SHEET_INTERPOLATION_MULTIPLIERS[interpolation];
+    const outputFrameCount = frameCount * multiplier;
+    return [
+      '-y',
+      '-framerate', String(fps),
+      '-start_number', '0',
+      '-i', inputPattern,
+      '-vf',
+      `setpts=${multiplier}*(PTS-STARTPTS),tpad=stop_mode=clone:stop=-1,minterpolate=fps=${fps}:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1:scd=fdiff:scd_threshold=10,trim=end_frame=${outputFrameCount}`,
+      '-frames:v', String(outputFrameCount),
+      '-an',
+      '-c:v', 'libx264',
+      '-crf', '18',
+      '-pix_fmt', 'yuv420p',
+      '-movflags', '+faststart',
+      outputPath,
+    ];
+  }
+
   return [
     '-y',
     '-framerate', String(fps),
@@ -351,6 +379,7 @@ export async function createContactSheetVideo(
         totalFrameCount,
         request.fps,
         finalPath,
+        request.interpolation,
       ),
       signal,
     );

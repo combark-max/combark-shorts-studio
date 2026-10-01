@@ -545,10 +545,16 @@ button:hover {
 .contact-sheet-item-actions,
 .contact-sheet-video-actions,
 .contact-sheet-fps,
+.contact-sheet-interpolation,
+.contact-sheet-interpolation label,
 .contact-sheet-summary {
   align-items: center;
   display: flex;
   gap: 8px;
+}
+
+.contact-sheet-interpolation {
+  gap: 16px;
 }
 
 .contact-sheet-item-actions button {

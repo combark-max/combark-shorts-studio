@@ -143,6 +143,10 @@ describe('registerContactSheetVideoIpc', () => {
       fps: 8,
     },
     { sheets: [{ id: 'one', sourcePath: 'C:\\images\\one.png', fileName: 'one.png' }], fps: 9 },
+    { sheets: [{ id: 'one', sourcePath: 'C:\\images\\one.png', fileName: 'one.png' }], fps: 8, interpolation: null },
+    { sheets: [{ id: 'one', sourcePath: 'C:\\images\\one.png', fileName: 'one.png' }], fps: 8, interpolation: 2 },
+    { sheets: [{ id: 'one', sourcePath: 'C:\\images\\one.png', fileName: 'one.png' }], fps: 8, interpolation: 'off' },
+    { sheets: [{ id: 'one', sourcePath: 'C:\\images\\one.png', fileName: 'one.png' }], fps: 8, interpolation: 'unexpected' },
   ])('rejects malformed create IPC input before opening save dialog: %j', async (value) => {
     await expect(
       mocks.handlers.get(IPC_CHANNELS.contactSheetVideoCreate)?.(
@@ -153,6 +157,38 @@ describe('registerContactSheetVideoIpc', () => {
     expect(mocks.showSaveDialog).not.toHaveBeenCalled();
     expect(mocks.createContactSheetVideo).not.toHaveBeenCalled();
   });
+
+  it.each(['light', 'medium', 'strong'] as const)(
+    'accepts %s interpolation and forwards it unchanged',
+    async (interpolation) => {
+      const request = {
+        sheets: [{ id: 'one', sourcePath: 'C:\\images\\one.png', fileName: 'one.png' }],
+        fps: 8 as const,
+        interpolation,
+      };
+      mocks.showSaveDialog.mockResolvedValue({
+        canceled: false,
+        filePath: 'C:\\exports\\sequence.mp4',
+      });
+      mocks.createContactSheetVideo.mockResolvedValue(undefined);
+
+      await expect(
+        mocks.handlers.get(IPC_CHANNELS.contactSheetVideoCreate)?.(
+          { sender: sender() },
+          request,
+        ),
+      ).resolves.toEqual({
+        status: 'success',
+        filePath: 'C:\\exports\\sequence.mp4',
+      });
+      expect(mocks.createContactSheetVideo).toHaveBeenCalledWith(
+        request,
+        'C:\\exports\\sequence.mp4',
+        expect.objectContaining({ ffmpegPath: 'C:\\tools\\ffmpeg.exe' }),
+        expect.any(AbortSignal),
+      );
+    },
+  );
 
   it('creates an mp4, forwards progress, and cancels the active job', async () => {
     const webContents = sender();

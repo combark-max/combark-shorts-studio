@@ -98,4 +98,46 @@ describe.runIf(runSmoke)('real contact-sheet FFmpeg smoke', () => {
     const decodedFrameCounts = [...stderr.matchAll(/frame=\s*(\d+)/g)];
     expect(decodedFrameCounts.at(-1)?.[1]).toBe('48');
   }, 60_000);
+
+  it.each([
+    ['light', 32, '04'],
+    ['medium', 48, '06'],
+    ['strong', 64, '08'],
+  ] as const)(
+    'encodes %s interpolation as %i silent frames with the expected duration',
+    async (interpolation, frameCount, durationSeconds) => {
+      const interpolatedOutputPath = join(
+        directory,
+        `sequence-${interpolation}.mp4`,
+      );
+      await runContactSheetFfmpeg(
+        configuredFfmpegPath as string,
+        buildContactSheetFfmpegArgs(
+          join(directory, 'frame-%06d.png'),
+          16,
+          8,
+          interpolatedOutputPath,
+          interpolation,
+        ),
+        new AbortController().signal,
+      );
+
+      const stderr = await runWithStderr(configuredFfmpegPath as string, [
+        '-hide_banner',
+        '-i', interpolatedOutputPath,
+        '-map', '0:v:0',
+        '-f', 'null',
+        'NUL',
+      ]);
+      expect(stderr).toMatch(/Video: h264/);
+      expect(stderr).toMatch(/yuv420p/);
+      expect(stderr).not.toMatch(/Audio:/);
+      expect(stderr).toMatch(
+        new RegExp(`Duration: 00:00:${durationSeconds}\\.00`),
+      );
+      const decodedFrameCounts = [...stderr.matchAll(/frame=\s*(\d+)/g)];
+      expect(decodedFrameCounts.at(-1)?.[1]).toBe(String(frameCount));
+    },
+    60_000,
+  );
 });

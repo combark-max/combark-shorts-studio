@@ -36,6 +36,84 @@ function selectedSheets(count: number) {
 }
 
 describe('ContactSheetVideoDialog', () => {
+  it('keeps interpolation off by default and omits it from the create request', async () => {
+    const user = userEvent.setup();
+    const sheets = selectedSheets(1);
+    desktopApi.openContactSheetImages.mockResolvedValue(sheets);
+    desktopApi.analyzeContactSheets.mockResolvedValue([
+      { id: sheets[0].id, status: 'recognized', frameCount: 16 },
+    ]);
+    render(
+      <ContactSheetVideoDialog
+        generalExportInProgress={false}
+        onClose={vi.fn()}
+        onBusyChange={vi.fn()}
+      />,
+    );
+
+    const checkbox = screen.getByRole('checkbox', {
+      name: '부드러운 미세 동작',
+    });
+    expect(checkbox).not.toBeChecked();
+    expect(screen.getByRole('combobox', { name: '강도' })).toBeDisabled();
+
+    await user.click(screen.getByRole('button', { name: 'Contact sheet 이미지 추가' }));
+    await screen.findByText('16프레임 인식');
+    expect(screen.getByText('원본 16프레임 → 출력 16프레임 / 예상 2.0초'))
+      .toBeInTheDocument();
+
+    await user.click(checkbox);
+    expect(screen.getByRole('combobox', { name: '강도' })).toHaveValue('medium');
+    await user.click(checkbox);
+
+    await user.click(screen.getByRole('button', { name: '영상 만들기' }));
+    expect(desktopApi.createContactSheetVideo).toHaveBeenCalledWith({
+      sheets,
+      fps: 8,
+    });
+  });
+
+  it.each([
+    ['light', '약하게', 32, '4.0'],
+    ['medium', '보통', 48, '6.0'],
+    ['strong', '많이', 64, '8.0'],
+  ] as const)(
+    'shows %s interpolation output and duration',
+    async (interpolation, label, outputFrames, duration) => {
+      const user = userEvent.setup();
+      const sheets = selectedSheets(1);
+      desktopApi.openContactSheetImages.mockResolvedValue(sheets);
+      desktopApi.analyzeContactSheets.mockResolvedValue([
+        { id: sheets[0].id, status: 'recognized', frameCount: 16 },
+      ]);
+      render(
+        <ContactSheetVideoDialog
+          generalExportInProgress={false}
+          onClose={vi.fn()}
+          onBusyChange={vi.fn()}
+        />,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Contact sheet 이미지 추가' }));
+      await screen.findByText('16프레임 인식');
+      await user.click(screen.getByRole('checkbox', { name: '부드러운 미세 동작' }));
+      const strength = screen.getByRole('combobox', { name: '강도' });
+      expect(strength).toHaveValue('medium');
+      await user.selectOptions(strength, interpolation);
+      expect(screen.getByRole('option', { name: label })).toBeInTheDocument();
+      expect(screen.getByText(
+        `원본 16프레임 → 출력 ${outputFrames}프레임 / 예상 ${duration}초`,
+      )).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: '영상 만들기' }));
+      expect(desktopApi.createContactSheetVideo).toHaveBeenCalledWith({
+        sheets,
+        fps: 8,
+        interpolation,
+      });
+    },
+  );
+
   it('analyzes added sheets, shows a 48-frame 8fps summary, and changes order', async () => {
     const user = userEvent.setup();
     const sheets = selectedSheets(3);
@@ -58,8 +136,8 @@ describe('ContactSheetVideoDialog', () => {
     await user.click(screen.getByRole('button', { name: 'Contact sheet 이미지 추가' }));
 
     expect(await screen.findByText('이미지 3장')).toBeInTheDocument();
-    expect(screen.getByText('총 48프레임')).toBeInTheDocument();
-    expect(screen.getByText('예상 영상 길이 6.0초')).toBeInTheDocument();
+    expect(screen.getByText('원본 48프레임 → 출력 48프레임 / 예상 6.0초'))
+      .toBeInTheDocument();
     expect(screen.getAllByText('16프레임 인식')).toHaveLength(3);
     const items = screen.getAllByRole('listitem');
     expect(within(items[0]).getByText('sheet-1.png')).toBeInTheDocument();
@@ -71,7 +149,8 @@ describe('ContactSheetVideoDialog', () => {
       .toBeInTheDocument();
 
     await user.selectOptions(screen.getByRole('combobox', { name: 'FPS' }), '16');
-    expect(screen.getByText('예상 영상 길이 3.0초')).toBeInTheDocument();
+    expect(screen.getByText('원본 48프레임 → 출력 48프레임 / 예상 3.0초'))
+      .toBeInTheDocument();
   });
 
   it('keeps video creation disabled when any sheet analysis fails', async () => {
@@ -124,9 +203,13 @@ describe('ContactSheetVideoDialog', () => {
     );
     await user.click(screen.getByRole('button', { name: 'Contact sheet 이미지 추가' }));
     await screen.findByText('16프레임 인식');
+    await user.click(screen.getByRole('checkbox', { name: '부드러운 미세 동작' }));
 
     await user.click(screen.getByRole('button', { name: '영상 만들기' }));
     expect(onBusyChange).toHaveBeenLastCalledWith(true);
+    expect(screen.getByRole('checkbox', { name: '부드러운 미세 동작' }))
+      .toBeDisabled();
+    expect(screen.getByRole('combobox', { name: '강도' })).toBeDisabled();
     act(() => progressListener?.({ stage: 'encoding' }));
     expect(screen.getByRole('status')).toHaveTextContent('MP4 인코딩 중');
 

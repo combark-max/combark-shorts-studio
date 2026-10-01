@@ -1,6 +1,22 @@
 export const CONTACT_SHEET_FPS_VALUES = [8, 10, 12, 16] as const;
+export const CONTACT_SHEET_INTERPOLATION_VALUES = [
+  'light',
+  'medium',
+  'strong',
+] as const;
 
 export type ContactSheetFps = (typeof CONTACT_SHEET_FPS_VALUES)[number];
+export type ContactSheetInterpolation =
+  (typeof CONTACT_SHEET_INTERPOLATION_VALUES)[number];
+
+export const CONTACT_SHEET_INTERPOLATION_MULTIPLIERS: Record<
+  ContactSheetInterpolation,
+  number
+> = {
+  light: 2,
+  medium: 3,
+  strong: 4,
+};
 
 export interface ContactSheetSource {
   id: string;
@@ -11,6 +27,7 @@ export interface ContactSheetSource {
 export interface CreateContactSheetVideoRequest {
   sheets: ContactSheetSource[];
   fps: ContactSheetFps;
+  interpolation?: ContactSheetInterpolation;
 }
 
 export type ContactSheetAnalysisResult =
@@ -27,4 +44,3 @@ export type ContactSheetVideoProgress =
 export type CreateContactSheetVideoResult =
   | { status: 'canceled' }
   | { status: 'success'; filePath: string };
-

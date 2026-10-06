@@ -66,6 +66,8 @@ function renderTimeline(
     onDeleteScene: vi.fn(),
     onDuplicateScene: vi.fn(),
     onMoveScene: vi.fn(),
+    onMoveSceneTo: vi.fn(),
+    onUpdateSceneDuration: vi.fn(),
     ...overrides,
   };
   return { ...render(<MultiTrackTimeline {...props} />), props };
@@ -87,11 +89,11 @@ describe('MultiTrackTimeline', () => {
   it('renders proportional scene and subtitle blocks with the preview playhead', () => {
     renderTimeline();
 
-    expect(screen.getByRole('button', { name: '1번 장면 image.png' })).toHaveStyle({
+    expect(screen.getByRole('button', { name: '1번 장면 image.png' }).closest('.timeline-clip')).toHaveStyle({
       left: '0px',
       width: '180px',
     });
-    expect(screen.getByRole('button', { name: '2번 장면 video.mp4' })).toHaveStyle({
+    expect(screen.getByRole('button', { name: '2번 장면 video.mp4' }).closest('.timeline-clip')).toHaveStyle({
       left: '180px',
       width: '240px',
     });
@@ -156,6 +158,11 @@ describe('MultiTrackTimeline', () => {
       'true',
     );
     expect(screen.getAllByText('향후 지원')).toHaveLength(2);
+    expect(screen.getByLabelText('사진/영상 트랙')).toBeInTheDocument();
+    expect(screen.getByLabelText('자막 트랙')).toBeInTheDocument();
+    expect(screen.getByLabelText('나레이션 트랙')).toBeInTheDocument();
+    expect(screen.getByLabelText('효과음 트랙')).toBeInTheDocument();
+    expect(screen.getByLabelText('음악 트랙')).toBeInTheDocument();
   });
 
   it('shows a loading state instead of partial geometry before metadata is ready', () => {
@@ -262,5 +269,133 @@ describe('MultiTrackTimeline', () => {
     );
 
     expect(scroll.scrollLeft).toBe(175);
+  });
+
+  it('reorders a scene across multiple indexes and suppresses the following click', () => {
+    const fourMedia: MediaAsset[] = Array.from({ length: 4 }, (_, index) => ({
+      id: `image-${index}`,
+      kind: 'image' as const,
+      sourcePath: `C:\\media\\image-${index}.png`,
+      fileName: `image-${index}.png`,
+    }));
+    const fourScenes: Scene[] = fourMedia.map((asset) => ({
+      mediaId: asset.id,
+      durationMs: 1000,
+      subtitle: '',
+      subtitlePosition: 'bottom',
+      subtitleSize: 'medium',
+    }));
+    const onMoveSceneTo = vi.fn();
+    const onSelectScene = vi.fn();
+    const { container } = renderTimeline({
+      media: fourMedia,
+      scenes: fourScenes,
+      selectedSceneIndex: 2,
+      playback: {
+        ...playback,
+        currentTimeMs: 0,
+        totalDurationMs: 4000,
+        sceneTimings: fourScenes.map((_, sceneIndex) => ({
+          sceneIndex,
+          startMs: sceneIndex * 1000,
+          endMs: (sceneIndex + 1) * 1000,
+          durationMs: 1000,
+        })),
+      },
+      onMoveSceneTo,
+      onSelectScene,
+    });
+    const scroll = container.querySelector('.timeline-scroll') as HTMLElement;
+    vi.spyOn(scroll, 'getBoundingClientRect').mockReturnValue({
+      left: 0, right: 400, top: 0, bottom: 200,
+      width: 400, height: 200, x: 0, y: 0, toJSON: () => ({}),
+    });
+    const clip = screen.getByRole('button', { name: '3번 장면 image-2.png' });
+
+    fireEvent.pointerDown(clip, { pointerId: 1, clientX: 150 });
+    fireEvent.pointerMove(clip, { pointerId: 1, clientX: 70 });
+    expect(container.querySelector('.timeline-drop-indicator')).toHaveStyle({
+      left: '60px',
+    });
+    fireEvent.pointerUp(clip, { pointerId: 1, clientX: 70 });
+    fireEvent.click(clip);
+
+    expect(onMoveSceneTo).toHaveBeenCalledWith(2, 1);
+    expect(onSelectScene).toHaveBeenCalledTimes(1);
+    expect(onSelectScene).toHaveBeenCalledWith(2);
+  });
+
+  it('cancels reorder on Escape or pointer cancellation', () => {
+    const onMoveSceneTo = vi.fn();
+    renderTimeline({ onMoveSceneTo });
+    const clip = screen.getByRole('button', { name: '1번 장면 image.png' });
+
+    fireEvent.pointerDown(clip, { pointerId: 1, clientX: 20 });
+    fireEvent.pointerMove(clip, { pointerId: 1, clientX: 100 });
+    fireEvent.keyDown(window, { key: 'Escape' });
+    fireEvent.pointerDown(clip, { pointerId: 2, clientX: 20 });
+    fireEvent.pointerMove(clip, { pointerId: 2, clientX: 100 });
+    fireEvent.pointerCancel(clip, { pointerId: 2 });
+
+    expect(onMoveSceneTo).not.toHaveBeenCalled();
+  });
+
+  it('drafts image resizing, snaps and clamps it, then commits once', () => {
+    const onUpdateSceneDuration = vi.fn();
+    const { container } = renderTimeline({ onUpdateSceneDuration });
+    const handle = screen.getByRole('button', { name: '1번 장면 길이 조절' });
+    const imageClip = screen.getByRole('button', {
+      name: '1번 장면 image.png',
+    }).closest('.timeline-clip') as HTMLElement;
+    const videoClip = screen.getByRole('button', {
+      name: '2번 장면 video.mp4',
+    }).closest('.timeline-clip') as HTMLElement;
+
+    fireEvent.pointerDown(handle, { pointerId: 3, clientX: 180 });
+    fireEvent.pointerMove(handle, { pointerId: 3, clientX: -320 });
+    expect(imageClip).toHaveStyle({ width: '30px' });
+    expect(videoClip).toHaveStyle({ left: '30px' });
+    expect(container.querySelector('.timeline-resize-duration')).toHaveTextContent('0.5초');
+    expect(onUpdateSceneDuration).not.toHaveBeenCalled();
+    fireEvent.pointerUp(handle, { pointerId: 3, clientX: -320 });
+
+    expect(onUpdateSceneDuration).toHaveBeenCalledOnce();
+    expect(onUpdateSceneDuration).toHaveBeenCalledWith(0, 500);
+  });
+
+  it('cancels an image resize on Escape and never offers video resize', () => {
+    const onUpdateSceneDuration = vi.fn();
+    renderTimeline({ onUpdateSceneDuration });
+    const handle = screen.getByRole('button', { name: '1번 장면 길이 조절' });
+
+    fireEvent.pointerDown(handle, { pointerId: 4, clientX: 180 });
+    fireEvent.pointerMove(handle, { pointerId: 4, clientX: 240 });
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    expect(onUpdateSceneDuration).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: '2번 장면 길이 조절' })).toBeNull();
+  });
+
+  it('suspends auto-follow during interaction and resumes on the next playback update', () => {
+    const { container, props, rerender } = renderTimeline();
+    const scroll = container.querySelector('.timeline-scroll') as HTMLElement;
+    setScrollGeometry(scroll, { clientWidth: 400, scrollWidth: 720 });
+    vi.spyOn(scroll, 'getBoundingClientRect').mockReturnValue({
+      left: 0, right: 400, top: 0, bottom: 200,
+      width: 400, height: 200, x: 0, y: 0, toJSON: () => ({}),
+    });
+    const clip = screen.getByRole('button', { name: '1번 장면 image.png' });
+
+    fireEvent.pointerDown(clip, { pointerId: 5, clientX: 20 });
+    fireEvent.pointerMove(clip, { pointerId: 5, clientX: 80 });
+    rerender(
+      <MultiTrackTimeline {...props} playback={{ ...playback, currentTimeMs: 6000 }} />,
+    );
+    expect(scroll.scrollLeft).toBe(0);
+    fireEvent.pointerUp(clip, { pointerId: 5, clientX: 80 });
+    rerender(
+      <MultiTrackTimeline {...props} playback={{ ...playback, currentTimeMs: 6100 }} />,
+    );
+    expect(scroll.scrollLeft).toBeGreaterThan(0);
   });
 });

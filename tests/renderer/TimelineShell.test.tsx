@@ -62,6 +62,7 @@ function renderTimelineShell(
     onSelectScene: vi.fn(),
     onAddMedia: vi.fn(),
     onMoveScene: vi.fn(),
+    onMoveSceneTo: vi.fn(),
     onDeleteScene: vi.fn(),
     onDuplicateScene: vi.fn(),
     onUpdateSceneDuration: vi.fn(),

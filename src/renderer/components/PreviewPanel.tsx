@@ -741,7 +741,8 @@ export function PreviewPanel({
   return (
     <section className="panel preview-panel" aria-labelledby="preview-heading">
       <h2 id="preview-heading">미리보기</h2>
-      <div className="preview-frame">
+      <div className="preview-stage">
+        <div className="preview-frame">
         {!currentScene || !currentAsset ? (
           <p className="preview-empty">
             {scenes.length === 0
@@ -802,6 +803,37 @@ export function PreviewPanel({
             {currentScene.subtitle}
           </p>
         ) : null}
+        </div>
+        <div className="preview-controls">
+          <button
+            type="button"
+            disabled={scenes.length === 0}
+            onClick={restartPlayback}
+          >
+            처음부터
+          </button>
+          <button
+            type="button"
+            disabled={currentIndex <= 0}
+            onClick={() => selectScene(currentIndex - 1)}
+          >
+            이전
+          </button>
+          <button
+            type="button"
+            disabled={!currentScene || !currentAsset || mediaError !== null}
+            onClick={togglePlayback}
+          >
+            {isPlaying ? '일시정지' : '재생'}
+          </button>
+          <button
+            type="button"
+            disabled={currentIndex < 0 || currentIndex >= scenes.length - 1}
+            onClick={() => selectScene(currentIndex + 1)}
+          >
+            다음
+          </button>
+        </div>
       </div>
       <div className="preview-seek">
         <span className="preview-time">
@@ -871,36 +903,6 @@ export function PreviewPanel({
             : '내레이션을 불러오지 못했습니다.'}
         </p>
       ) : null}
-      <div className="preview-controls">
-        <button
-          type="button"
-          disabled={scenes.length === 0}
-          onClick={restartPlayback}
-        >
-          처음부터
-        </button>
-        <button
-          type="button"
-          disabled={currentIndex <= 0}
-          onClick={() => selectScene(currentIndex - 1)}
-        >
-          이전
-        </button>
-        <button
-          type="button"
-          disabled={!currentScene || !currentAsset || mediaError !== null}
-          onClick={togglePlayback}
-        >
-          {isPlaying ? '일시정지' : '재생'}
-        </button>
-        <button
-          type="button"
-          disabled={currentIndex < 0 || currentIndex >= scenes.length - 1}
-          onClick={() => selectScene(currentIndex + 1)}
-        >
-          다음
-        </button>
-      </div>
     </section>
   );
 }

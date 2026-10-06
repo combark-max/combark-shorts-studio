@@ -23,7 +23,8 @@ button {
   color: inherit;
   cursor: pointer;
   font: inherit;
-  padding: 8px 12px;
+  font-size: 14px;
+  padding: 6px 10px;
 }
 
 button:hover {
@@ -32,7 +33,7 @@ button:hover {
 
 .app-shell {
   display: grid;
-  grid-template-rows: auto auto auto minmax(250px, 36vh) minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto minmax(270px, 38vh) minmax(0, 1fr) auto;
   height: 100vh;
   min-height: 720px;
   overflow: hidden;
@@ -42,22 +43,22 @@ button:hover {
   align-items: center;
   border-bottom: 1px solid #303641;
   display: flex;
-  gap: 24px;
+  gap: 16px;
   justify-content: space-between;
-  padding: 16px 20px;
+  padding: 10px 16px;
 }
 
 .app-header h1,
 .panel h2,
 .timeline-shell h2 {
-  font-size: 16px;
+  font-size: 15px;
   margin: 0;
 }
 
 .header-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
   justify-content: flex-end;
 }
 
@@ -91,7 +92,7 @@ button:hover {
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  padding: 8px 20px;
+  padding: 6px 16px;
   position: relative;
 }
 
@@ -121,9 +122,17 @@ button:hover {
   align-items: center;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   min-height: 0;
-  padding: 12px;
+  padding: 10px;
+}
+
+.preview-stage {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  max-width: 100%;
 }
 
 .preview-frame {
@@ -133,13 +142,14 @@ button:hover {
   border: 1px solid #3a414d;
   display: flex;
   justify-content: center;
-  flex: 1 1 auto;
-  max-height: min(18vh, 150px);
+  flex: 0 1 auto;
+  height: clamp(170px, 24vh, 190px);
+  max-height: 190px;
   max-width: 100%;
-  min-height: 96px;
+  min-height: 170px;
   overflow: hidden;
   position: relative;
-  width: min(360px, 100%);
+  width: auto;
   container-type: inline-size;
 }
 
@@ -153,7 +163,7 @@ button:hover {
 .preview-error {
   color: #aab2c0;
   margin: 0;
-  padding: 16px;
+  padding: 12px;
   text-align: center;
 }
 
@@ -173,7 +183,8 @@ button:hover {
   font-weight: 600;
   line-height: 1.4;
   margin: 0;
-  padding: 8px 12px;
+  font-size: 14px;
+  padding: 6px 10px;
   position: absolute;
   text-align: center;
   white-space: pre-wrap;
@@ -184,12 +195,13 @@ button:hover {
   display: grid;
   gap: 6px;
   max-width: 100%;
-  width: min(360px, 100%);
+  width: min(300px, 100%);
 }
 
 .preview-time {
   color: #c9d0dc;
   font-variant-numeric: tabular-nums;
+  font-size: 13px;
   text-align: center;
 }
 
@@ -213,9 +225,14 @@ button:hover {
 }
 
 .preview-controls {
-  display: flex;
-  gap: 8px;
+  display: grid;
+  flex: 0 0 88px;
+  gap: 6px;
   justify-content: center;
+}
+
+.preview-controls button {
+  min-width: 88px;
 }
 
 .preview-controls button:disabled {
@@ -234,10 +251,10 @@ button:hover {
 }
 
 .timeline-shell {
-  margin: 0 20px 8px;
+  margin: 0 16px 6px;
   min-height: 0;
   overflow-y: auto;
-  padding: 12px;
+  padding: 10px;
 }
 
 .scene-empty {
@@ -353,14 +370,15 @@ button:hover {
 
 .multi-track-timeline {
   display: grid;
-  gap: 8px;
-  margin-top: 8px;
+  gap: 6px;
+  margin-top: 6px;
 }
 
 .timeline-toolbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
+  min-height: 32px;
 }
 
 .timeline-toolbar button:disabled {
@@ -395,7 +413,7 @@ button:hover {
 
 .timeline-grid {
   display: grid;
-  grid-template-columns: 104px minmax(0, 1fr);
+  grid-template-columns: 92px minmax(0, 1fr);
   min-width: 0;
 }
 
@@ -404,7 +422,7 @@ button:hover {
   border: 1px solid #303641;
   border-right: 0;
   display: grid;
-  grid-template-rows: 32px repeat(5, 44px);
+  grid-template-rows: 26px repeat(5, 38px);
 }
 
 .timeline-track-labels span {
@@ -412,8 +430,8 @@ button:hover {
   border-bottom: 1px solid #303641;
   color: #c9d0dc;
   display: flex;
-  font-size: 12px;
-  padding: 0 10px;
+  font-size: 11px;
+  padding: 0 8px;
 }
 
 .timeline-track-labels span:last-child {
@@ -431,13 +449,13 @@ button:hover {
 }
 
 .timeline-canvas {
-  min-height: 252px;
+  min-height: 216px;
   position: relative;
 }
 
 .timeline-ruler {
   background: #111318;
-  height: 32px;
+  height: 26px;
   position: relative;
 }
 
@@ -446,7 +464,7 @@ button:hover {
   color: #8e98a8;
   font-size: 11px;
   height: 100%;
-  padding: 8px 0 0 5px;
+  padding: 5px 0 0 5px;
   position: absolute;
   top: 0;
   white-space: nowrap;
@@ -460,7 +478,7 @@ button:hover {
   );
   background-size: 300px 100%;
   border-top: 1px solid #303641;
-  height: 44px;
+  height: 38px;
   position: relative;
 }
 
@@ -470,7 +488,8 @@ button:hover {
   border: 1px solid #536173;
   border-radius: 3px;
   display: flex;
-  height: 34px;
+  font-size: 11px;
+  height: 30px;
   min-width: 2px;
   overflow: hidden;
   position: absolute;
@@ -481,9 +500,32 @@ button:hover {
 
 .timeline-clip {
   background: #29384a;
+  padding: 0;
+  text-align: left;
+  touch-action: none;
+  user-select: none;
+}
+
+.timeline-clip-select {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: inherit;
+  cursor: grab;
+  display: flex;
+  font-size: inherit;
   gap: 6px;
+  height: 100%;
+  min-width: 0;
+  overflow: hidden;
   padding: 0 6px;
   text-align: left;
+  width: 100%;
+}
+
+.timeline-clip-select:hover {
+  background: transparent;
 }
 
 .timeline-clip img {
@@ -493,9 +535,64 @@ button:hover {
   width: 42px;
 }
 
-.timeline-clip > span:last-child {
+.timeline-clip-name {
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.timeline-clip-dragging {
+  opacity: 0.45;
+}
+
+.timeline-clip-dragging .timeline-clip-select {
+  cursor: grabbing;
+}
+
+.timeline-resize-handle {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  bottom: 0;
+  cursor: ew-resize;
+  position: absolute;
+  padding: 0;
+  right: 0;
+  top: 0;
+  width: 8px;
+  z-index: 3;
+}
+
+.timeline-resize-handle:hover {
+  background: transparent;
+}
+
+.timeline-resize-handle::after {
+  background: rgba(190, 224, 255, 0.7);
+  bottom: 5px;
+  content: '';
+  opacity: 0;
+  position: absolute;
+  right: 2px;
+  top: 5px;
+  transition: opacity 120ms ease;
+  width: 2px;
+}
+
+.timeline-resize-handle:hover::after,
+.timeline-resize-handle:active::after {
+  opacity: 1;
+}
+
+.timeline-resize-duration {
+  background: rgba(5, 6, 8, 0.82);
+  border-radius: 2px;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  padding: 2px 5px;
+  position: absolute;
+  right: 8px;
+  top: 4px;
+  z-index: 2;
 }
 
 .timeline-video-badge {
@@ -508,6 +605,8 @@ button:hover {
 .timeline-subtitle-clip {
   background: #4b3857;
   border-color: #745885;
+  cursor: pointer;
+  padding: 0 6px;
 }
 
 .timeline-clip-selected {
@@ -528,7 +627,7 @@ button:hover {
   font-size: 12px;
   left: 8px;
   position: absolute;
-  top: 13px;
+  top: 10px;
 }
 
 .timeline-track-disabled {
@@ -556,14 +655,25 @@ button:hover {
   width: 10px;
 }
 
+.timeline-drop-indicator {
+  background: #8bcbff;
+  bottom: 0;
+  box-shadow: 0 0 0 1px rgba(16, 28, 40, 0.8);
+  pointer-events: none;
+  position: absolute;
+  top: 26px;
+  width: 2px;
+  z-index: 5;
+}
+
 .selected-scene-detail {
   border-top: 1px solid #303641;
-  margin-top: 8px;
-  padding-top: 8px;
+  margin-top: 6px;
+  padding-top: 6px;
 }
 
 .selected-scene-detail h3 {
-  font-size: 14px;
+  font-size: 13px;
   margin: 0;
 }
 
@@ -580,9 +690,9 @@ button:hover {
 .selected-scene-editor {
   align-items: start;
   display: grid;
-  gap: 16px;
+  gap: 10px;
   grid-template-columns: minmax(180px, 0.5fr) minmax(360px, 1.5fr);
-  margin-top: 12px;
+  margin-top: 8px;
 }
 
 .selected-scene-summary {
@@ -629,7 +739,7 @@ button:hover {
 .selected-scene-fields {
   align-items: end;
   display: grid;
-  gap: 10px;
+  gap: 8px;
   grid-template-columns: minmax(120px, auto) minmax(240px, 1fr) auto auto;
 }
 
@@ -655,7 +765,8 @@ button:hover {
 
 .app-footer {
   color: #8e98a8;
-  padding: 0 20px 12px;
+  font-size: 12px;
+  padding: 0 16px 8px;
   text-align: right;
 }
 
@@ -716,7 +827,7 @@ button:hover {
 
 .media-list {
   display: grid;
-  gap: 8px;
+  gap: 6px;
   list-style: none;
   margin: 12px 0 0;
   padding: 0;
@@ -728,7 +839,7 @@ button:hover {
   display: grid;
   gap: 4px;
   min-width: 0;
-  padding: 10px 12px;
+  padding: 8px 10px;
 }
 
 .media-list li.media-missing {
@@ -748,7 +859,7 @@ button:hover {
 
 .media-import-controls {
   display: grid;
-  gap: 12px;
+  gap: 8px;
 }
 
 .media-import-control,
@@ -757,8 +868,8 @@ button:hover {
   border: 1px solid #303641;
   border-radius: 4px;
   display: grid;
-  gap: 8px;
-  padding: 12px;
+  gap: 6px;
+  padding: 10px;
 }
 
 .media-import-label {
@@ -972,14 +1083,14 @@ button:hover {
 }
 
 .recent-projects {
-  margin: 8px 20px 0;
-  padding: 8px 12px;
+  margin: 6px 16px 0;
+  padding: 6px 10px;
 }
 
 .recent-projects-header {
   align-items: center;
   display: flex;
-  gap: 10px;
+  gap: 8px;
 }
 
 .recent-projects-header button {

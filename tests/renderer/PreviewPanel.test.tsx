@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -104,6 +104,25 @@ afterEach(() => {
 });
 
 describe('PreviewPanel', () => {
+  it('places compact playback controls beside the frame and project seek below them', () => {
+    const { container } = render(
+      <StatefulPreview mediaList={[media[0]]} sceneList={[scenes[0]]} />,
+    );
+    const stage = container.querySelector('.preview-stage') as HTMLElement;
+    const frame = container.querySelector('.preview-frame') as HTMLElement;
+    const controls = container.querySelector('.preview-controls') as HTMLElement;
+    const seek = container.querySelector('.preview-seek') as HTMLElement;
+
+    expect(stage).toContainElement(frame);
+    expect(stage).toContainElement(controls);
+    expect(stage).not.toContainElement(seek);
+    expect(stage.nextElementSibling).toBe(seek);
+    expect(
+      within(controls).getByRole('button', { name: '처음부터' }),
+    ).toBeInTheDocument();
+    expect(within(controls).getAllByRole('button')).toHaveLength(4);
+  });
+
   it('reports its project clock as a read-only timeline snapshot', async () => {
     vi.useFakeTimers();
     const onPlaybackSnapshotChange = vi.fn();

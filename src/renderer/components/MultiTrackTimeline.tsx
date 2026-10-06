@@ -1,4 +1,10 @@
-import { useLayoutEffect, useRef } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from 'react';
 
 import { createMediaUrl } from '../../shared/mediaProtocol';
 import type {
@@ -12,6 +18,12 @@ import {
   TIMELINE_PIXELS_PER_SECOND,
   type TimelinePlaybackSnapshot,
 } from '../project/timelineLayout';
+import {
+  buildDraftTimelineBlocks,
+  getSceneInsertionIndex,
+  getSceneMoveTargetIndex,
+  getSnappedImageDurationMs,
+} from '../project/timelineInteraction';
 
 interface MultiTrackTimelineProps {
   media: MediaAsset[];
@@ -24,7 +36,29 @@ interface MultiTrackTimelineProps {
   onDeleteScene: (sceneIndex: number) => void;
   onDuplicateScene: (sceneIndex: number) => void;
   onMoveScene: (sceneIndex: number, direction: 'up' | 'down') => void;
+  onMoveSceneTo: (fromIndex: number, toIndex: number) => void;
+  onUpdateSceneDuration: (sceneIndex: number, durationMs: number) => void;
 }
+
+type TimelineInteraction =
+  | {
+      kind: 'reorder';
+      pointerId: number;
+      sceneIndex: number;
+      startClientX: number;
+      insertionIndex: number;
+      started: boolean;
+    }
+  | {
+      kind: 'resize';
+      pointerId: number;
+      sceneIndex: number;
+      startClientX: number;
+      originalDurationMs: number;
+      draftDurationMs: number;
+    };
+
+const REORDER_DRAG_THRESHOLD_PX = 5;
 
 function formatTimelineTime(timeMs: number): string {
   const totalSeconds = Math.floor(timeMs / 1000);
@@ -44,6 +78,8 @@ export function MultiTrackTimeline({
   onDeleteScene,
   onDuplicateScene,
   onMoveScene,
+  onMoveSceneTo,
+  onUpdateSceneDuration,
 }: MultiTrackTimelineProps) {
   const hasSelection =
     selectedSceneIndex !== null &&
@@ -54,10 +90,26 @@ export function MultiTrackTimeline({
     playback.totalDurationMs,
   );
   const mediaById = new Map(media.map((asset) => [asset.id, asset]));
+  const [interaction, setInteraction] = useState<TimelineInteraction | null>(null);
+  const interactionRef = useRef<TimelineInteraction | null>(null);
+  const suppressClickRef = useRef(false);
+  const autoFollowResumeTimeRef = useRef<number | null>(null);
+  const resizeInteraction = interaction?.kind === 'resize' ? interaction : null;
+  const displayBlocks = resizeInteraction
+    ? buildDraftTimelineBlocks(
+        layout.blocks,
+        resizeInteraction.sceneIndex,
+        resizeInteraction.draftDurationMs,
+      )
+    : layout.blocks;
   const blockBySceneIndex = new Map(
-    layout.blocks.map((block) => [block.sceneIndex, block]),
+    displayBlocks.map((block) => [block.sceneIndex, block]),
   );
-  const canvasWidthPx = Math.max(layout.canvasWidthPx, 720);
+  const lastDisplayBlock = displayBlocks.at(-1);
+  const draftCanvasWidthPx = lastDisplayBlock
+    ? lastDisplayBlock.leftPx + lastDisplayBlock.widthPx
+    : 0;
+  const canvasWidthPx = Math.max(draftCanvasWidthPx, 720);
   const playheadLeftPx = getPlayheadLeftPx(
     playback.currentTimeMs,
     playback.totalDurationMs,
@@ -73,11 +125,182 @@ export function MultiTrackTimeline({
         TIMELINE_PIXELS_PER_SECOND
       : null;
 
-  useLayoutEffect(() => {
-    const scroll = scrollRef.current;
-    if (!scroll || !playback.ready || scroll.clientWidth <= 0) {
+  const updateInteraction = (nextInteraction: TimelineInteraction | null) => {
+    interactionRef.current = nextInteraction;
+    setInteraction(nextInteraction);
+  };
+
+  const finishInteraction = () => {
+    if (interactionRef.current) {
+      autoFollowResumeTimeRef.current = playback.currentTimeMs;
+    }
+    interactionRef.current = null;
+    setInteraction(null);
+  };
+
+  const suppressNextClipClick = () => {
+    suppressClickRef.current = true;
+    window.setTimeout(() => {
+      suppressClickRef.current = false;
+    }, 0);
+  };
+
+  const handleReorderPointerDown = (
+    event: ReactPointerEvent<HTMLButtonElement>,
+    sceneIndex: number,
+  ) => {
+    if (event.button !== 0 || interactionRef.current) {
       return;
     }
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    updateInteraction({
+      kind: 'reorder',
+      pointerId: event.pointerId,
+      sceneIndex,
+      startClientX: event.clientX,
+      insertionIndex: sceneIndex,
+      started: false,
+    });
+  };
+
+  const handleReorderPointerMove = (
+    event: ReactPointerEvent<HTMLButtonElement>,
+  ) => {
+    const current = interactionRef.current;
+    if (current?.kind !== 'reorder' || current.pointerId !== event.pointerId) {
+      return;
+    }
+    const started =
+      current.started ||
+      Math.abs(event.clientX - current.startClientX) >= REORDER_DRAG_THRESHOLD_PX;
+    if (!started) {
+      return;
+    }
+    if (!current.started) {
+      onSelectScene(current.sceneIndex);
+    }
+    const scroll = scrollRef.current;
+    const canvasX = scroll
+      ? event.clientX - scroll.getBoundingClientRect().left + scroll.scrollLeft
+      : event.clientX;
+    updateInteraction({
+      ...current,
+      started: true,
+      insertionIndex: getSceneInsertionIndex(canvasX, layout.blocks),
+    });
+  };
+
+  const handleReorderPointerUp = (
+    event: ReactPointerEvent<HTMLButtonElement>,
+  ) => {
+    const current = interactionRef.current;
+    if (current?.kind !== 'reorder' || current.pointerId !== event.pointerId) {
+      return;
+    }
+    if (current.started) {
+      const targetIndex = getSceneMoveTargetIndex(
+        current.sceneIndex,
+        current.insertionIndex,
+        scenes.length,
+      );
+      if (targetIndex !== current.sceneIndex) {
+        onMoveSceneTo(current.sceneIndex, targetIndex);
+      }
+      suppressNextClipClick();
+    }
+    finishInteraction();
+  };
+
+  const handleResizePointerDown = (
+    event: ReactPointerEvent<HTMLButtonElement>,
+    sceneIndex: number,
+    durationMs: number,
+  ) => {
+    if (event.button !== 0 || interactionRef.current) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    onSelectScene(sceneIndex);
+    updateInteraction({
+      kind: 'resize',
+      pointerId: event.pointerId,
+      sceneIndex,
+      startClientX: event.clientX,
+      originalDurationMs: durationMs,
+      draftDurationMs: durationMs,
+    });
+  };
+
+  const handleResizePointerMove = (
+    event: ReactPointerEvent<HTMLButtonElement>,
+  ) => {
+    const current = interactionRef.current;
+    if (current?.kind !== 'resize' || current.pointerId !== event.pointerId) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    updateInteraction({
+      ...current,
+      draftDurationMs: getSnappedImageDurationMs(
+        current.originalDurationMs,
+        event.clientX - current.startClientX,
+      ),
+    });
+  };
+
+  const handleResizePointerUp = (
+    event: ReactPointerEvent<HTMLButtonElement>,
+  ) => {
+    const current = interactionRef.current;
+    if (current?.kind !== 'resize' || current.pointerId !== event.pointerId) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    if (current.draftDurationMs !== current.originalDurationMs) {
+      onUpdateSceneDuration(current.sceneIndex, current.draftDurationMs);
+    }
+    finishInteraction();
+  };
+
+  const cancelPointerInteraction = () => {
+    if (interactionRef.current?.kind === 'reorder' && interactionRef.current.started) {
+      suppressNextClipClick();
+    }
+    finishInteraction();
+  };
+
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && interactionRef.current) {
+        if (interactionRef.current.kind === 'reorder') {
+          suppressNextClipClick();
+        }
+        finishInteraction();
+      }
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  });
+
+  useLayoutEffect(() => {
+    const scroll = scrollRef.current;
+    if (
+      !scroll ||
+      !playback.ready ||
+      scroll.clientWidth <= 0 ||
+      interaction !== null
+    ) {
+      return;
+    }
+
+    if (autoFollowResumeTimeRef.current === playback.currentTimeMs) {
+      return;
+    }
+    autoFollowResumeTimeRef.current = null;
 
     const viewportLeft = scroll.scrollLeft;
     const viewportWidth = scroll.clientWidth;
@@ -96,7 +319,7 @@ export function MultiTrackTimeline({
     if (nextScrollLeft !== viewportLeft) {
       scroll.scrollLeft = nextScrollLeft;
     }
-  }, [playback.ready, playheadLeftPx]);
+  }, [interaction, playback.currentTimeMs, playback.ready, playheadLeftPx]);
 
   return (
     <div className="multi-track-timeline">
@@ -226,29 +449,78 @@ export function MultiTrackTimeline({
                     return null;
                   }
                   return (
-                    <button
-                      aria-label={`${sceneIndex + 1}번 장면 ${asset.fileName}`}
-                      aria-pressed={sceneIndex === selectedSceneIndex}
-                      className={
+                    <div
+                      className={`${
                         sceneIndex === selectedSceneIndex
                           ? 'timeline-clip timeline-clip-selected'
                           : 'timeline-clip'
-                      }
+                      }${
+                        interaction?.kind === 'reorder' &&
+                        interaction.sceneIndex === sceneIndex &&
+                        interaction.started
+                          ? ' timeline-clip-dragging'
+                          : ''
+                      }`}
                       key={`${scene.mediaId}-${sceneIndex}`}
                       style={{
                         left: `${block.leftPx}px`,
                         width: `${block.widthPx}px`,
                       }}
-                      type="button"
-                      onClick={() => onSelectScene(sceneIndex)}
                     >
-                      {asset.kind === 'image' ? (
-                        <img alt="" src={createMediaUrl(asset.sourcePath)} />
-                      ) : (
-                        <span className="timeline-video-badge">영상</span>
-                      )}
-                      <span>{asset.fileName}</span>
-                    </button>
+                      <button
+                        aria-label={`${sceneIndex + 1}번 장면 ${asset.fileName}`}
+                        aria-pressed={sceneIndex === selectedSceneIndex}
+                        className="timeline-clip-select"
+                        type="button"
+                        onClick={() => {
+                          if (suppressClickRef.current) {
+                            suppressClickRef.current = false;
+                            return;
+                          }
+                          onSelectScene(sceneIndex);
+                        }}
+                        onLostPointerCapture={cancelPointerInteraction}
+                        onPointerCancel={cancelPointerInteraction}
+                        onPointerDown={(event) =>
+                          handleReorderPointerDown(event, sceneIndex)
+                        }
+                        onPointerMove={handleReorderPointerMove}
+                        onPointerUp={handleReorderPointerUp}
+                      >
+                        {asset.kind === 'image' ? (
+                          <img alt="" src={createMediaUrl(asset.sourcePath)} />
+                        ) : (
+                          <span className="timeline-video-badge">영상</span>
+                        )}
+                        <span className="timeline-clip-name">
+                          {asset.fileName}
+                        </span>
+                      </button>
+                      {asset.kind === 'image' && scene.durationMs !== null ? (
+                        <button
+                          aria-label={`${sceneIndex + 1}번 장면 길이 조절`}
+                          className="timeline-resize-handle"
+                          type="button"
+                          onClick={(event) => event.stopPropagation()}
+                          onLostPointerCapture={cancelPointerInteraction}
+                          onPointerCancel={cancelPointerInteraction}
+                          onPointerDown={(event) =>
+                            handleResizePointerDown(
+                              event,
+                              sceneIndex,
+                              scene.durationMs as number,
+                            )
+                          }
+                          onPointerMove={handleResizePointerMove}
+                          onPointerUp={handleResizePointerUp}
+                        />
+                      ) : null}
+                      {resizeInteraction?.sceneIndex === sceneIndex ? (
+                        <span className="timeline-resize-duration">
+                          {(resizeInteraction.draftDurationMs / 1000).toFixed(1)}초
+                        </span>
+                      ) : null}
+                    </div>
                   );
                 })}
               </div>
@@ -325,6 +597,24 @@ export function MultiTrackTimeline({
                   left: `${playheadLeftPx}px`,
                 }}
               />
+              {interaction?.kind === 'reorder' && interaction.started ? (
+                <div
+                  aria-hidden="true"
+                  className="timeline-drop-indicator"
+                  style={{
+                    left: `${
+                      interaction.insertionIndex >= layout.blocks.length
+                        ? (() => {
+                            const lastBlock = layout.blocks.at(-1);
+                            return lastBlock
+                              ? lastBlock.leftPx + lastBlock.widthPx
+                              : 0;
+                          })()
+                        : (layout.blocks[interaction.insertionIndex]?.leftPx ?? 0)
+                    }px`,
+                  }}
+                />
+              ) : null}
             </div>
           </div>
         </div>

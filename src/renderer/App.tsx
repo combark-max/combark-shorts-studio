@@ -8,6 +8,7 @@ import { PreviewPanel } from './components/PreviewPanel';
 import { RecoveryPrompt } from './components/RecoveryPrompt';
 import { RecentProjects } from './components/RecentProjects';
 import { TimelineShell } from './components/TimelineShell';
+import { getSelectedSceneIndexAfterMove } from './project/timelineInteraction';
 import {
   EMPTY_TIMELINE_PLAYBACK_SNAPSHOT,
   type TimelinePlaybackSnapshot,
@@ -144,6 +145,37 @@ export function App() {
 
       return currentIndex;
     });
+  };
+
+  const handleMoveSceneTo = (fromIndex: number, toIndex: number): void => {
+    if (
+      fromIndex < 0 ||
+      toIndex < 0 ||
+      fromIndex >= state.project.scenes.length ||
+      toIndex >= state.project.scenes.length ||
+      fromIndex === toIndex
+    ) {
+      return;
+    }
+
+    let movingIndex = fromIndex;
+    let nextSelectedSceneIndex = selectedSceneIndex;
+    const direction = toIndex < fromIndex ? 'up' : 'down';
+
+    while (movingIndex !== toIndex) {
+      const nextIndex = direction === 'up' ? movingIndex - 1 : movingIndex + 1;
+      if (!moveScene(movingIndex, direction)) {
+        break;
+      }
+      nextSelectedSceneIndex = getSelectedSceneIndexAfterMove(
+        nextSelectedSceneIndex,
+        movingIndex,
+        nextIndex,
+      );
+      movingIndex = nextIndex;
+    }
+
+    setSelectedSceneIndex(nextSelectedSceneIndex);
   };
 
   const handleDuplicateScene = (sceneIndex: number): void => {
@@ -355,6 +387,7 @@ export function App() {
         onSelectScene={setSelectedSceneIndex}
         onAddMedia={importMedia}
         onMoveScene={handleMoveScene}
+        onMoveSceneTo={handleMoveSceneTo}
         onDuplicateScene={handleDuplicateScene}
         onDeleteScene={handleDeleteScene}
         onUpdateSceneDuration={updateSceneDuration}

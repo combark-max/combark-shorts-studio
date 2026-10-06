@@ -747,6 +747,67 @@ describe('App', () => {
     expect(screen.getByLabelText('clip.mp4 미리보기')).toBeInTheDocument();
   });
 
+  it('keeps the dragged scene selected after moving it across multiple indexes', async () => {
+    const user = userEvent.setup();
+    desktopApi.openMediaDialog.mockResolvedValue(
+      ['a', 'b', 'c'].map((name) => ({
+        id: `photo-${name}`,
+        kind: 'image' as const,
+        sourcePath: `C:\\media\\${name}.png`,
+        fileName: `${name}.png`,
+      })),
+    );
+    const { container } = render(<App />);
+    await screen.findByText('Combark Shorts Studio');
+    openMediaDrawer();
+    await user.click(screen.getByRole('button', { name: '파일 추가' }));
+    const scroll = container.querySelector('.timeline-scroll') as HTMLElement;
+    vi.spyOn(scroll, 'getBoundingClientRect').mockReturnValue({
+      left: 0, right: 800, top: 0, bottom: 200,
+      width: 800, height: 200, x: 0, y: 0, toJSON: () => ({}),
+    });
+    const draggedClip = await screen.findByRole('button', {
+      name: '3번 장면 c.png',
+    });
+
+    fireEvent.pointerDown(draggedClip, { pointerId: 11, clientX: 400 });
+    fireEvent.pointerMove(draggedClip, { pointerId: 11, clientX: 10 });
+    fireEvent.pointerUp(draggedClip, { pointerId: 11, clientX: 10 });
+
+    expect(
+      await screen.findByRole('button', { name: '1번 장면 c.png' }),
+    ).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('img', { name: 'c.png' })).toBeInTheDocument();
+  });
+
+  it('applies a timeline image resize to the project preview duration', async () => {
+    const user = userEvent.setup();
+    desktopApi.openMediaDialog.mockResolvedValue([
+      {
+        id: 'photo-id',
+        kind: 'image',
+        sourcePath: 'C:\\media\\photo.jpg',
+        fileName: 'photo.jpg',
+      },
+    ]);
+    render(<App />);
+    await screen.findByText('Combark Shorts Studio');
+    openMediaDrawer();
+    await user.click(screen.getByRole('button', { name: '파일 추가' }));
+    const handle = await screen.findByRole('button', {
+      name: '1번 장면 길이 조절',
+    });
+
+    fireEvent.pointerDown(handle, { pointerId: 12, clientX: 180 });
+    fireEvent.pointerMove(handle, { pointerId: 12, clientX: 240 });
+    fireEvent.pointerUp(handle, { pointerId: 12, clientX: 240 });
+
+    expect(
+      screen.getByRole('slider', { name: '전체 프로젝트 재생 위치' }),
+    ).toHaveAttribute('max', '4000');
+    expect(screen.getByText('저장 필요')).toBeInTheDocument();
+  });
+
   it('falls back to the first remaining scene when the selection is deleted', async () => {
     const user = userEvent.setup();
     desktopApi.openMediaDialog.mockResolvedValue([

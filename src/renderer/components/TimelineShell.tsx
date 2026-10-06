@@ -20,6 +20,7 @@ interface TimelineShellProps {
   onSelectScene: (sceneIndex: number) => void;
   onAddMedia: () => void | Promise<void>;
   onMoveScene: (sceneIndex: number, direction: 'up' | 'down') => void;
+  onMoveSceneTo: (fromIndex: number, toIndex: number) => void;
   onDeleteScene: (sceneIndex: number) => void;
   onDuplicateScene: (sceneIndex: number) => void;
   onUpdateSceneDuration: (sceneIndex: number, durationMs: number) => void;
@@ -50,6 +51,7 @@ export function TimelineShell({
   onSelectScene,
   onAddMedia,
   onMoveScene,
+  onMoveSceneTo,
   onDeleteScene,
   onDuplicateScene,
   onUpdateSceneDuration,
@@ -83,7 +85,9 @@ export function TimelineShell({
         onDeleteScene={onDeleteScene}
         onDuplicateScene={onDuplicateScene}
         onMoveScene={onMoveScene}
+        onMoveSceneTo={onMoveSceneTo}
         onSelectScene={onSelectScene}
+        onUpdateSceneDuration={onUpdateSceneDuration}
         playback={playback}
         scenes={scenes}
         selectedSceneIndex={selectedSceneIndex}

@@ -1,4 +1,11 @@
-import { act, cleanup, render, screen, within } from '@testing-library/react';
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../src/renderer/App';
@@ -443,13 +450,21 @@ describe('App', () => {
     };
     desktopApi.openProjectDialog.mockResolvedValue('C:\\projects\\select.cssproj');
     desktopApi.readProject.mockResolvedValue(project);
-    render(<App />);
+    const { container } = render(<App />);
     await screen.findByText('Combark Shorts Studio');
 
     await user.click(screen.getByRole('button', { name: '열기' }));
     expect(
       await screen.findByRole('button', { name: '1번 장면 선택' }),
     ).toHaveAttribute('aria-pressed', 'true');
+    const metadataVideo = container.querySelector(
+      'video[data-preview-metadata-id="video-id"]',
+    ) as HTMLVideoElement;
+    Object.defineProperty(metadataVideo, 'duration', {
+      configurable: true,
+      value: 4,
+    });
+    fireEvent.loadedMetadata(metadataVideo);
 
     await user.click(
       screen.getByRole('button', { name: '2번 장면 선택' }),
@@ -458,6 +473,9 @@ describe('App', () => {
     expect(screen.getByLabelText('clip.mp4 미리보기')).toBeInTheDocument();
     expect(screen.getByText('영상 자막')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '재생' })).toBeEnabled();
+    expect(
+      screen.getByRole('slider', { name: '전체 프로젝트 재생 위치' }),
+    ).toHaveValue('3000');
 
     await user.selectOptions(
       screen.getByRole('combobox', { name: '2번 장면 자막 위치' }),
@@ -507,6 +525,9 @@ describe('App', () => {
     expect(sceneButtons).toHaveLength(2);
     expect(sceneButtons[0]).toHaveAttribute('aria-pressed', 'false');
     expect(sceneButtons[1]).toHaveAttribute('aria-pressed', 'true');
+    expect(
+      screen.getByRole('slider', { name: '전체 프로젝트 재생 위치' }),
+    ).toHaveValue('3000');
 
     const subtitleInputs = screen.getAllByRole('textbox', { name: /번 장면 자막/ });
     await user.clear(subtitleInputs[1]);
@@ -522,6 +543,9 @@ describe('App', () => {
     sceneButtons = screen.getAllByRole('button', { name: /번 장면 선택/ });
     expect(sceneButtons[0]).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByText('복제 자막')).toBeInTheDocument();
+    expect(
+      screen.getByRole('slider', { name: '전체 프로젝트 재생 위치' }),
+    ).toHaveValue('0');
 
     const itemBeforeDelete = sceneButtons[0].closest('li');
     expect(itemBeforeDelete).not.toBeNull();
@@ -534,6 +558,9 @@ describe('App', () => {
     expect(sceneButtons).toHaveLength(1);
     expect(sceneButtons[0]).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByText('원본 자막')).toBeInTheDocument();
+    expect(
+      screen.getByRole('slider', { name: '전체 프로젝트 재생 위치' }),
+    ).toHaveValue('0');
 
     await user.click(screen.getByRole('button', { name: '파일 제거' }));
     expect(screen.queryByRole('button', { name: /번 장면 선택/ })).not.toBeInTheDocument();

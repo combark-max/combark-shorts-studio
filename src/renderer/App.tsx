@@ -5,7 +5,6 @@ import { AutoShortsDialog } from './components/AutoShortsDialog';
 import { ContactSheetVideoDialog } from './components/ContactSheetVideoDialog';
 import { MediaSidebar } from './components/MediaSidebar';
 import { PreviewPanel } from './components/PreviewPanel';
-import { PropertiesPanel } from './components/PropertiesPanel';
 import { RecoveryPrompt } from './components/RecoveryPrompt';
 import { RecentProjects } from './components/RecentProjects';
 import { TimelineShell } from './components/TimelineShell';
@@ -48,7 +47,7 @@ export function App() {
   );
   const [timelinePlayback, setTimelinePlayback] =
     useState<TimelinePlaybackSnapshot>(EMPTY_TIMELINE_PLAYBACK_SNAPSHOT);
-  const [mediaSidebarCollapsed, setMediaSidebarCollapsed] = useState(false);
+  const [mediaSidebarCollapsed, setMediaSidebarCollapsed] = useState(true);
   const {
     state,
     newProject,
@@ -254,63 +253,66 @@ export function App() {
           }}
         />
       ) : null}
-      <div className="save-status-slot">
-        <div
-          aria-label="저장 상태"
-          className={
-            projectSaveStatus === 'saving'
-              ? 'save-status'
-              : projectSaveStatus === 'success'
-                ? 'save-status save-status-success'
-                : undefined
-          }
-          role="status"
-        >
-          {projectSaveStatus === 'saving' ? '저장 중...' : null}
-          {projectSaveStatus === 'success' ? '저장 완료' : null}
-        </div>
-        {projectSaveStatus === 'error' ? (
+      <div className="app-status-area">
+        <div className="save-status-slot">
           <div
             aria-label="저장 상태"
-            className="save-status save-status-error"
-            role="alert"
-          >
-            프로젝트를 저장하지 못했습니다. 다시 시도해 주세요.
-          </div>
-        ) : null}
-      </div>
-      {projectTransitionError ? (
-        <div className="save-status-slot">
-          <div className="save-status save-status-error" role="alert">
-            변경 사항을 안전하게 정리하지 못했습니다. 다시 시도해 주세요.
-          </div>
-        </div>
-      ) : null}
-      <div className="save-status-slot">
-        {exportStatus === 'exporting' || exportStatus === 'success' ? (
-          <div
-            aria-label="내보내기 상태"
             className={
-              exportStatus === 'success'
-                ? 'save-status save-status-success'
-                : 'save-status'
+              projectSaveStatus === 'saving'
+                ? 'save-status'
+                : projectSaveStatus === 'success'
+                  ? 'save-status save-status-success'
+                  : undefined
             }
             role="status"
           >
-            {getExportProgressMessage(exportProgress)}
+            {projectSaveStatus === 'saving' ? '저장 중...' : null}
+            {projectSaveStatus === 'success' ? '저장 완료' : null}
+          </div>
+          {projectSaveStatus === 'error' ? (
+            <div
+              aria-label="저장 상태"
+              className="save-status save-status-error"
+              role="alert"
+            >
+              프로젝트를 저장하지 못했습니다. 다시 시도해 주세요.
+            </div>
+          ) : null}
+        </div>
+        {projectTransitionError ? (
+          <div className="save-status-slot">
+            <div className="save-status save-status-error" role="alert">
+              변경 사항을 안전하게 정리하지 못했습니다. 다시 시도해 주세요.
+            </div>
           </div>
         ) : null}
-        {exportStatus === 'error' ? (
-          <div
-            aria-label="내보내기 상태"
-            className="save-status save-status-error"
-            role="alert"
-          >
-            MP4 파일을 내보내지 못했습니다. 원본 파일과 설정을 확인해 주세요.
-          </div>
-        ) : null}
+        <div className="save-status-slot">
+          {exportStatus === 'exporting' || exportStatus === 'success' ? (
+            <div
+              aria-label="내보내기 상태"
+              className={
+                exportStatus === 'success'
+                  ? 'save-status save-status-success'
+                  : 'save-status'
+              }
+              role="status"
+            >
+              {getExportProgressMessage(exportProgress)}
+            </div>
+          ) : null}
+          {exportStatus === 'error' ? (
+            <div
+              aria-label="내보내기 상태"
+              className="save-status save-status-error"
+              role="alert"
+            >
+              MP4 파일을 내보내지 못했습니다. 원본 파일과 설정을 확인해 주세요.
+            </div>
+          ) : null}
+        </div>
       </div>
       <RecentProjects
+        defaultCompact
         projects={recentProjects}
         loading={recentProjectsLoading}
         listFailed={recentProjectsListFailed}
@@ -320,13 +322,7 @@ export function App() {
         onRemove={removeRecentProject}
         removeError={recentProjectRemoveError}
       />
-      <main
-        className={
-          mediaSidebarCollapsed
-            ? 'workspace workspace-media-collapsed'
-            : 'workspace'
-        }
-      >
+      <main className="workspace">
         <MediaSidebar
           media={state.project.media}
           narration={state.project.narration}
@@ -349,7 +345,6 @@ export function App() {
           onSelectScene={setSelectedSceneIndex}
           onPlaybackSnapshotChange={setTimelinePlayback}
         />
-        <PropertiesPanel />
       </main>
       <TimelineShell
         media={state.project.media}

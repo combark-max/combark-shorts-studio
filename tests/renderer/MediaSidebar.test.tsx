@@ -38,30 +38,29 @@ function renderSidebar(
 afterEach(cleanup);
 
 describe('MediaSidebar', () => {
-  it('keeps add and missing-source access visible in the collapsed rail', () => {
+  it('shows a media launcher and source-attention badge while the drawer is closed', () => {
     const { props } = renderSidebar({ collapsed: true });
 
     expect(
-      screen.getByRole('button', { name: '미디어 패널 펼치기' }),
+      screen.getByRole('button', { name: '미디어 열기' }),
     ).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveAccessibleName(
       '원본 파일 확인 필요',
     );
 
-    fireEvent.click(screen.getByRole('button', { name: '미디어 추가' }));
-    fireEvent.click(
-      screen.getByRole('button', { name: '미디어 패널 펼치기' }),
-    );
+    expect(screen.queryByRole('complementary', { name: '미디어' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '미디어 열기' }));
 
-    expect(props.onAddMedia).toHaveBeenCalledOnce();
     expect(props.onToggleCollapsed).toHaveBeenCalledWith(false);
   });
 
   it('restores all existing media and narration controls when expanded', () => {
     const { props } = renderSidebar();
 
+    expect(screen.getByRole('complementary', { name: '미디어' })).toBeInTheDocument();
+
     fireEvent.click(
-      screen.getByRole('button', { name: '미디어 패널 접기' }),
+      screen.getByRole('button', { name: '미디어 닫기' }),
     );
     fireEvent.click(
       screen.getByRole('button', { name: 'missing.jpg 파일 다시 찾기' }),

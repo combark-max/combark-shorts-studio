@@ -30,6 +30,39 @@ const defaultProps = {
 };
 
 describe('RecentProjects', () => {
+  it('starts compact and expands the complete recent-project list on request', async () => {
+    const user = userEvent.setup();
+    const project = createRecentProject(
+      '최근 프로젝트',
+      'C:\\projects\\recent.cssproj',
+    );
+    render(
+      <RecentProjects
+        {...defaultProps}
+        defaultCompact
+        projects={[project]}
+      />,
+    );
+
+    expect(screen.queryByText('recent.cssproj')).not.toBeInTheDocument();
+    const toggle = screen.getByRole('button', { name: '최근 프로젝트 펼치기' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+
+    await user.click(toggle);
+
+    expect(screen.getByText('recent.cssproj')).toBeInTheDocument();
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('does not hide recent-project errors in compact mode', () => {
+    render(<RecentProjects {...defaultProps} defaultCompact listFailed />);
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '최근 프로젝트를 불러오지 못했습니다.',
+    );
+    expect(screen.getByRole('button', { name: '다시 시도' })).toBeInTheDocument();
+  });
+
   it('shows an empty recent-project state', () => {
     render(<RecentProjects {...defaultProps} />);
 

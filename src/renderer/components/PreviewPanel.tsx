@@ -39,6 +39,9 @@ interface PendingSeek {
   sourcePath: string;
 }
 
+const NARRATION_SEEK_TOLERANCE_MS = 100;
+const MAX_NARRATION_SEEK_RETRIES = 1;
+
 function readMediaDurationMs(element: HTMLMediaElement): number | null {
   return Number.isFinite(element.duration) && element.duration > 0
     ? Math.round(element.duration * 1000)
@@ -79,6 +82,7 @@ export function PreviewPanel({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const pendingSeekRef = useRef<PendingSeek | null>(null);
   const pendingNarrationSeekMsRef = useRef<number | null>(null);
+  const narrationSeekRetryCountRef = useRef(0);
   const automaticSceneChangeRef = useRef(false);
   const activeVideoMetadataReadyRef = useRef(false);
   const readyVideoElementRef = useRef<HTMLVideoElement | null>(null);
@@ -181,37 +185,44 @@ export function PreviewPanel({
 
   useEffect(() => {
     if (isPlaying && pendingNarrationSeekMsRef.current !== null) {
-      pendingNarrationSeekMsRef.current = globalCurrentTimeMs;
+      pendingNarrationSeekMsRef.current =
+        typeof narrationDurationMs === 'number'
+          ? Math.min(globalCurrentTimeMs, narrationDurationMs)
+          : globalCurrentTimeMs;
     }
-  }, [globalCurrentTimeMs, isPlaying]);
+  }, [globalCurrentTimeMs, isPlaying, narrationDurationMs]);
 
   const applyNarrationSeek = (
     globalTimeMs: number,
     knownDurationMs = narrationDurationMs,
+    resetRetryCount = true,
   ): boolean => {
+    if (resetRetryCount) {
+      narrationSeekRetryCountRef.current = 0;
+    }
     if (!narration || !audioRef.current) {
       pendingNarrationSeekMsRef.current = null;
       return false;
     }
 
-    pendingNarrationSeekMsRef.current = globalTimeMs;
+    const requestedTimeMs = Math.max(globalTimeMs, 0);
+    const targetTimeMs =
+      typeof knownDurationMs === 'number'
+        ? Math.min(requestedTimeMs, knownDurationMs)
+        : requestedTimeMs;
+    pendingNarrationSeekMsRef.current = targetTimeMs;
+    if (isPlaying) {
+      audioRef.current.pause();
+    }
     if (typeof knownDurationMs !== 'number') {
-      if (isPlaying) {
-        audioRef.current.pause();
-      }
       return false;
     }
 
-    const audioTimeMs = Math.min(Math.max(globalTimeMs, 0), knownDurationMs);
     try {
-      audioRef.current.currentTime = audioTimeMs / 1000;
-      pendingNarrationSeekMsRef.current = null;
-      setNarrationEnded(globalTimeMs >= knownDurationMs);
+      audioRef.current.currentTime = targetTimeMs / 1000;
+      setNarrationEnded(requestedTimeMs >= knownDurationMs);
       return true;
     } catch {
-      if (isPlaying) {
-        audioRef.current.pause();
-      }
       return false;
     }
   };
@@ -220,12 +231,40 @@ export function PreviewPanel({
     knownDurationMs = narrationDurationMs,
   ): void => {
     const pendingTimeMs = pendingNarrationSeekMsRef.current;
-    if (
-      pendingTimeMs !== null &&
-      applyNarrationSeek(pendingTimeMs, knownDurationMs)
-    ) {
-      setSeekRevision((revision) => revision + 1);
+    if (pendingTimeMs !== null) {
+      applyNarrationSeek(pendingTimeMs, knownDurationMs, false);
     }
+  };
+
+  const completePendingNarrationSeek = (
+    audio: HTMLAudioElement,
+  ): void => {
+    const pendingTimeMs = pendingNarrationSeekMsRef.current;
+    if (pendingTimeMs === null) {
+      return;
+    }
+
+    const actualTimeMs = Math.round(audio.currentTime * 1000);
+    if (
+      Math.abs(actualTimeMs - pendingTimeMs) >
+      NARRATION_SEEK_TOLERANCE_MS
+    ) {
+      if (
+        narrationSeekRetryCountRef.current >=
+        MAX_NARRATION_SEEK_RETRIES
+      ) {
+        pendingNarrationSeekMsRef.current = null;
+        narrationSeekRetryCountRef.current = 0;
+        return;
+      }
+      narrationSeekRetryCountRef.current += 1;
+      retryPendingNarrationSeek();
+      return;
+    }
+
+    pendingNarrationSeekMsRef.current = null;
+    narrationSeekRetryCountRef.current = 0;
+    setSeekRevision((revision) => revision + 1);
   };
 
   const applyPendingVideoSeek = (video: HTMLVideoElement): boolean => {
@@ -375,6 +414,7 @@ export function PreviewPanel({
     setNarrationError(null);
     setNarrationEnded(false);
     setNarrationDurationMs(undefined);
+    narrationSeekRetryCountRef.current = 0;
     const initialNarrationTimeMs = pendingSeekRef.current?.globalTimeMs ??
       Math.max(globalCurrentTimeMs, currentSceneStartMs ?? 0);
     pendingNarrationSeekMsRef.current =
@@ -688,6 +728,7 @@ export function PreviewPanel({
     imageTimerResetRef.current = true;
     pendingSeekRef.current = null;
     pendingNarrationSeekMsRef.current = null;
+    narrationSeekRetryCountRef.current = 0;
     setGlobalCurrentTimeMs(0);
     setMediaError(null);
     setNarrationError(null);
@@ -817,6 +858,7 @@ export function PreviewPanel({
               retryPendingNarrationSeek(durationMs);
             }
           }}
+          onSeeked={(event) => completePendingNarrationSeek(event.currentTarget)}
           preload="metadata"
           ref={audioRef}
           src={createMediaUrl(narration.sourcePath)}

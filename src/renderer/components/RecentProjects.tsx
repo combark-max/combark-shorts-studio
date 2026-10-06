@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 import type { RecentProject } from '../../shared/project/types';
 
 interface RecentProjectsProps {
@@ -9,6 +11,7 @@ interface RecentProjectsProps {
   onOpen: (filePath: string) => void | Promise<void>;
   onRemove: (filePath: string) => void | Promise<void>;
   removeError: boolean;
+  defaultCompact?: boolean;
 }
 
 function getFileName(filePath: string): string {
@@ -24,15 +27,44 @@ export function RecentProjects({
   onOpen,
   onRemove,
   removeError,
+  defaultCompact = false,
 }: RecentProjectsProps) {
+  const [compact, setCompact] = useState(defaultCompact);
+  const hasVisibleError =
+    listFailed || removeError || openError !== null;
+  const expanded = !compact || hasVisibleError;
+
   return (
     <section
-      className="panel recent-projects"
+      className={
+        expanded
+          ? 'panel recent-projects'
+          : 'panel recent-projects recent-projects-compact'
+      }
       aria-labelledby="recent-projects-heading"
     >
-      <h2 id="recent-projects-heading">최근 프로젝트</h2>
-      {loading ? <p>최근 프로젝트를 불러오는 중...</p> : null}
-      {!loading && listFailed ? (
+      <div className="recent-projects-header">
+        <h2 id="recent-projects-heading">최근 프로젝트</h2>
+        {!expanded ? (
+          <span className="recent-projects-summary">
+            {loading ? '불러오는 중' : `${projects.length}개`}
+          </span>
+        ) : null}
+        {!hasVisibleError ? (
+          <button
+            aria-expanded={expanded}
+            aria-label={
+              expanded ? '최근 프로젝트 접기' : '최근 프로젝트 펼치기'
+            }
+            type="button"
+            onClick={() => setCompact(expanded)}
+          >
+            {expanded ? '접기' : '펼치기'}
+          </button>
+        ) : null}
+      </div>
+      {expanded && loading ? <p>최근 프로젝트를 불러오는 중...</p> : null}
+      {expanded && !loading && listFailed ? (
         <div role="alert">
           <span>최근 프로젝트를 불러오지 못했습니다.</span>
           <button
@@ -45,10 +77,10 @@ export function RecentProjects({
           </button>
         </div>
       ) : null}
-      {!loading && !listFailed && projects.length === 0 ? (
+      {expanded && !loading && !listFailed && projects.length === 0 ? (
         <p>최근 프로젝트가 없습니다.</p>
       ) : null}
-      {!loading && !listFailed && projects.length > 0 ? (
+      {expanded && !loading && !listFailed && projects.length > 0 ? (
         <ul className="recent-project-list">
           {projects.map((project) => (
             <li key={project.projectId}>
@@ -75,13 +107,13 @@ export function RecentProjects({
           ))}
         </ul>
       ) : null}
-      {removeError ? (
+      {expanded && removeError ? (
         <p role="alert">최근 프로젝트를 목록에서 제거하지 못했습니다.</p>
       ) : null}
-      {openError === 'missing' ? (
+      {expanded && openError === 'missing' ? (
         <p role="alert">파일을 찾을 수 없어 최근 목록에서 제거했습니다.</p>
       ) : null}
-      {openError === 'open' ? (
+      {expanded && openError === 'open' ? (
         <p role="alert">최근 프로젝트를 열지 못했습니다.</p>
       ) : null}
     </section>

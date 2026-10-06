@@ -36,29 +36,17 @@ export function MediaSidebar({
   const needsSourceAttention =
     missingMediaIds.length > 0 || narrationMissing || sourceCheckFailed;
 
-  if (collapsed) {
-    return (
-      <aside
-        className="panel media-sidebar media-sidebar-collapsed"
-        aria-label="미디어"
-      >
+  return (
+    <>
+      <div className="media-drawer-launcher">
         <button
-          aria-label="미디어 패널 펼치기"
-          className="media-sidebar-rail-button"
+          aria-controls="media-drawer"
+          aria-expanded={!collapsed}
+          aria-label="미디어 열기"
           type="button"
           onClick={() => onToggleCollapsed(false)}
         >
           미디어
-        </button>
-        <button
-          aria-label="미디어 추가"
-          className="media-sidebar-rail-button"
-          type="button"
-          onClick={() => {
-            void onAddMedia();
-          }}
-        >
-          +
         </button>
         {needsSourceAttention ? (
           <span
@@ -69,14 +57,23 @@ export function MediaSidebar({
             !
           </span>
         ) : null}
-      </aside>
-    );
-  }
-
-  return (
-    <aside className="panel media-sidebar" aria-label="미디어">
+      </div>
+      {!collapsed ? (
+        <div
+          className="media-drawer-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              onToggleCollapsed(true);
+            }
+          }}
+        >
+          <aside
+            className="panel media-sidebar media-drawer"
+            id="media-drawer"
+            aria-label="미디어"
+          >
       <button
-        aria-label="미디어 패널 접기"
+        aria-label="미디어 닫기"
         className="media-sidebar-toggle"
         type="button"
         onClick={() => onToggleCollapsed(true)}
@@ -183,6 +180,9 @@ export function MediaSidebar({
           <li>AI 음성</li>
         </ul>
       </nav>
-    </aside>
+          </aside>
+        </div>
+      ) : null}
+    </>
   );
 }

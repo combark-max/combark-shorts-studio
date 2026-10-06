@@ -1,4 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { fetchFile, handlers, registerSchemesAsPrivileged } = vi.hoisted(() => ({
   fetchFile: vi.fn(),
@@ -31,10 +35,30 @@ import {
 } from '../../../src/shared/mediaProtocol';
 
 describe('registerMediaProtocol', () => {
-  beforeEach(() => {
+  let temporaryDirectory: string;
+  let fixtureBytes: Uint8Array;
+  let imagePath: string;
+  let audioPath: string;
+  let videoPath: string;
+
+  beforeEach(async () => {
     handlers.clear();
     fetchFile.mockReset();
     registerSchemesAsPrivileged.mockReset();
+    temporaryDirectory = await mkdtemp(join(tmpdir(), 'combark-media-range-'));
+    fixtureBytes = Uint8Array.from({ length: 256 }, (_, index) => index);
+    imagePath = join(temporaryDirectory, 'image.png');
+    audioPath = join(temporaryDirectory, 'voice.mp3');
+    videoPath = join(temporaryDirectory, 'clip.mp4');
+    await Promise.all([
+      writeFile(imagePath, fixtureBytes),
+      writeFile(audioPath, fixtureBytes),
+      writeFile(videoPath, fixtureBytes),
+    ]);
+  });
+
+  afterEach(async () => {
+    await rm(temporaryDirectory, { force: true, recursive: true });
   });
 
   it('registers a secure streaming scheme without bypassing CSP', () => {
@@ -52,21 +76,108 @@ describe('registerMediaProtocol', () => {
     ]);
   });
 
-  it('serves a supported absolute Windows media path through net.fetch', async () => {
-    const response = new Response('media');
+  it('serves a complete image through net.fetch with byte-range discovery', async () => {
+    const response = new Response(fixtureBytes.buffer as ArrayBuffer, {
+      headers: { 'Content-Type': 'image/png' },
+    });
     fetchFile.mockResolvedValue(response);
     registerMediaProtocol();
     const handler = handlers.get(MEDIA_PROTOCOL_SCHEME);
 
     const result = await handler?.(
-      new Request(createMediaUrl('C:\\media folder\\clip.mp4')),
+      new Request(createMediaUrl(imagePath)),
     );
 
-    expect(result).toBe(response);
+    expect(result?.status).toBe(200);
+    expect(result?.headers.get('Accept-Ranges')).toBe('bytes');
+    expect(result?.headers.get('Content-Type')).toBe('image/png');
+    expect(new Uint8Array(await result?.arrayBuffer())).toEqual(fixtureBytes);
     expect(fetchFile).toHaveBeenCalledWith(
-      'file:///C:/media%20folder/clip.mp4',
+      expect.stringMatching(/image\.png$/),
       expect.objectContaining({ headers: expect.any(Headers) }),
     );
+  });
+
+  it('returns exactly bytes 0-99 with partial-content headers', async () => {
+    registerMediaProtocol();
+    const handler = handlers.get(MEDIA_PROTOCOL_SCHEME);
+
+    const result = await handler?.(
+      new Request(createMediaUrl(audioPath), {
+        headers: { Range: 'bytes=0-99' },
+      }),
+    );
+
+    expect(result?.status).toBe(206);
+    expect(result?.headers.get('Accept-Ranges')).toBe('bytes');
+    expect(result?.headers.get('Content-Range')).toBe('bytes 0-99/256');
+    expect(result?.headers.get('Content-Length')).toBe('100');
+    expect(result?.headers.get('Content-Type')).toBe('audio/mpeg');
+    expect(new Uint8Array(await result?.arrayBuffer())).toEqual(
+      fixtureBytes.slice(0, 100),
+    );
+  });
+
+  it('returns an open-ended range from its start through the file end', async () => {
+    registerMediaProtocol();
+    const handler = handlers.get(MEDIA_PROTOCOL_SCHEME);
+
+    const result = await handler?.(
+      new Request(createMediaUrl(videoPath), {
+        headers: { Range: 'bytes=100-' },
+      }),
+    );
+
+    expect(result?.status).toBe(206);
+    expect(result?.headers.get('Content-Range')).toBe('bytes 100-255/256');
+    expect(result?.headers.get('Content-Length')).toBe('156');
+    expect(result?.headers.get('Content-Type')).toBe('video/mp4');
+    expect(new Uint8Array(await result?.arrayBuffer())).toEqual(
+      fixtureBytes.slice(100),
+    );
+  });
+
+  it('returns a suffix range from the end of the file', async () => {
+    registerMediaProtocol();
+    const handler = handlers.get(MEDIA_PROTOCOL_SCHEME);
+
+    const result = await handler?.(
+      new Request(createMediaUrl(audioPath), {
+        headers: { Range: 'bytes=-100' },
+      }),
+    );
+
+    expect(result?.status).toBe(206);
+    expect(result?.headers.get('Content-Range')).toBe('bytes 156-255/256');
+    expect(result?.headers.get('Content-Length')).toBe('100');
+    expect(new Uint8Array(await result?.arrayBuffer())).toEqual(
+      fixtureBytes.slice(156),
+    );
+  });
+
+  it.each([
+    ['a start beyond the file', 'bytes=256-'],
+    ['reversed bounds', 'bytes=100-99'],
+    ['an empty suffix', 'bytes=-0'],
+    ['invalid syntax', 'items=0-99'],
+    ['multiple ranges', 'bytes=0-99,200-255'],
+  ])('rejects %s with a range-not-satisfiable response', async (_label, range) => {
+    registerMediaProtocol();
+    const handler = handlers.get(MEDIA_PROTOCOL_SCHEME);
+
+    const result = await handler?.(
+      new Request(createMediaUrl(audioPath), {
+        headers: { Range: range },
+      }),
+    );
+
+    expect(result?.status).toBe(416);
+    expect(result?.headers.get('Accept-Ranges')).toBe('bytes');
+    expect(result?.headers.get('Content-Range')).toBe('bytes */256');
+    if (!result) {
+      throw new Error('Expected a protocol response.');
+    }
+    expect((await result.arrayBuffer()).byteLength).toBe(0);
   });
 
   it.each(['mp3', 'wav'])('serves a supported %s narration path', async (extension) => {
@@ -79,7 +190,9 @@ describe('registerMediaProtocol', () => {
       new Request(createMediaUrl(`C:\\audio\\voice.${extension}`)),
     );
 
-    expect(result).toBe(response);
+    expect(result?.status).toBe(200);
+    expect(result?.headers.get('Accept-Ranges')).toBe('bytes');
+    expect(await result?.text()).toBe('narration');
     expect(fetchFile).toHaveBeenCalledOnce();
   });
 

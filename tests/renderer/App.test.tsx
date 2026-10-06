@@ -56,6 +56,30 @@ function loadPreviewVideoDuration(
   fireEvent.loadedMetadata(metadataVideo);
 }
 
+function openMediaDrawer(): void {
+  if (!screen.queryByRole('complementary', { name: '미디어' })) {
+    fireEvent.click(screen.getByRole('button', { name: '미디어 열기' }));
+  }
+}
+
+function expandSelectedSceneDetail(): void {
+  const toggle = screen.queryByRole('button', {
+    name: '선택 장면 상세 펼치기',
+  });
+  if (toggle) {
+    fireEvent.click(toggle);
+  }
+}
+
+function expandRecentProjects(): void {
+  const toggle = screen.queryByRole('button', {
+    name: '최근 프로젝트 펼치기',
+  });
+  if (toggle) {
+    fireEvent.click(toggle);
+  }
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(
@@ -254,7 +278,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '저장' }));
     const savingStatus = screen.getByRole('status', { name: '저장 상태' });
     expect(within(savingStatus).getByText('저장 중...')).toBeInTheDocument();
-    expect(savingStatus.parentElement).toBe(
+    expect(savingStatus.parentElement?.parentElement).toBe(
       screen.getByRole('banner').nextElementSibling,
     );
     expect(
@@ -330,6 +354,7 @@ describe('App', () => {
     ]);
     const { container } = render(<App />);
     await screen.findByText('Combark Shorts Studio');
+    openMediaDrawer();
 
     await user.click(screen.getByRole('button', { name: '파일 추가' }));
 
@@ -353,6 +378,7 @@ describe('App', () => {
     expect(
       screen.getByRole('button', { name: '2번 장면 clip.mp4' }),
     ).toBeInTheDocument();
+    expandSelectedSceneDetail();
 
     await user.type(
       screen.getByRole('textbox', { name: '선택 장면 자막' }),
@@ -374,6 +400,7 @@ describe('App', () => {
     ]);
     render(<App />);
     await screen.findByText('Combark Shorts Studio');
+    openMediaDrawer();
     await user.click(screen.getByRole('button', { name: '파일 추가' }));
     await screen.findByRole('button', { name: '1번 장면 photo.jpg' });
 
@@ -405,6 +432,7 @@ describe('App', () => {
       });
     render(<App />);
     await screen.findByText('Combark Shorts Studio');
+    openMediaDrawer();
 
     expect(
       screen.getByRole('button', { name: '파일 추가' }),
@@ -531,6 +559,7 @@ describe('App', () => {
     await user.click(
       screen.getByRole('button', { name: '2번 장면 clip.mp4' }),
     );
+    expandSelectedSceneDetail();
 
     expect(screen.getByLabelText('clip.mp4 미리보기')).toBeInTheDocument();
     expect(container.querySelector('.preview-subtitle')).toHaveTextContent(
@@ -583,6 +612,7 @@ describe('App', () => {
     render(<App />);
     await screen.findByText('Combark Shorts Studio');
     await user.click(screen.getByRole('button', { name: '열기' }));
+    expandSelectedSceneDetail();
 
     await user.click(screen.getByRole('button', { name: '선택 장면 복제' }));
     let sceneButtons = screen.getAllByRole('button', {
@@ -700,6 +730,7 @@ describe('App', () => {
     ]);
     const { container } = render(<App />);
     await screen.findByText('Combark Shorts Studio');
+    openMediaDrawer();
     await user.click(screen.getByRole('button', { name: '파일 추가' }));
     loadPreviewVideoDuration(container, 'video-id', 4);
     await user.click(
@@ -734,6 +765,7 @@ describe('App', () => {
     ]);
     const { container } = render(<App />);
     await screen.findByText('Combark Shorts Studio');
+    openMediaDrawer();
     await user.click(screen.getByRole('button', { name: '파일 추가' }));
     loadPreviewVideoDuration(container, 'video-id', 4);
     await user.click(
@@ -763,6 +795,7 @@ describe('App', () => {
     ]);
     render(<App />);
     await screen.findByText('Combark Shorts Studio');
+    openMediaDrawer();
     await user.click(screen.getByRole('button', { name: '파일 추가' }));
     await user.click(await screen.findByRole('button', { name: '재생' }));
     expect(screen.getByRole('button', { name: '일시정지' })).toBeEnabled();
@@ -811,9 +844,9 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: '쇼츠 자동 만들기' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'MP4 내보내기' })).toBeInTheDocument();
 
-    expect(screen.getByText('미디어')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '미디어 열기' })).toBeInTheDocument();
     expect(screen.getByText('미리보기')).toBeInTheDocument();
-    expect(screen.getByText('속성')).toBeInTheDocument();
+    expect(screen.queryByText('속성')).not.toBeInTheDocument();
 
     expect(screen.getByRole('region', { name: '타임라인' })).toBeInTheDocument();
     expect(await screen.findByText('장면이 없습니다.')).toBeInTheDocument();
@@ -824,21 +857,15 @@ describe('App', () => {
     expect(await screen.findByText('v0.1.0')).toBeInTheDocument();
   });
 
-  it('collapses and expands the media sidebar workspace column', async () => {
-    const { container } = render(<App />);
+  it('opens and closes media as an overlay drawer', async () => {
+    render(<App />);
     await screen.findByText('Combark Shorts Studio');
-    const workspace = container.querySelector('.workspace');
 
-    expect(workspace).not.toHaveClass('workspace-media-collapsed');
-    fireEvent.click(
-      screen.getByRole('button', { name: '미디어 패널 접기' }),
-    );
-
-    expect(workspace).toHaveClass('workspace-media-collapsed');
-    fireEvent.click(
-      screen.getByRole('button', { name: '미디어 패널 펼치기' }),
-    );
-    expect(workspace).not.toHaveClass('workspace-media-collapsed');
+    expect(screen.queryByRole('complementary', { name: '미디어' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '미디어 열기' }));
+    expect(screen.getByRole('complementary', { name: '미디어' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '미디어 닫기' }));
+    expect(screen.queryByRole('complementary', { name: '미디어' })).toBeNull();
   });
 
   it('opens auto shorts from the header and applies subtitles and image duration to the existing scene', async () => {
@@ -884,6 +911,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '자동 구성 적용' }));
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expandSelectedSceneDetail();
     expect(screen.getByRole('textbox', { name: '선택 장면 자막' })).toHaveValue(
       '자동 생성 자막',
     );
@@ -993,6 +1021,7 @@ describe('App', () => {
     expect(screen.queryByText('최근 프로젝트 항목')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '복구' }));
+    expandRecentProjects();
 
     expect(await screen.findByText('recent.cssproj')).toBeInTheDocument();
   });
@@ -1018,6 +1047,8 @@ describe('App', () => {
     desktopApi.removeRecentProject.mockResolvedValue([secondProject]);
     render(<App />);
 
+    expect(await screen.findByText('Combark Shorts Studio')).toBeInTheDocument();
+    expandRecentProjects();
     expect(await screen.findByText('first.cssproj')).toBeInTheDocument();
     await user.click(
       screen.getByRole('button', { name: 'first.cssproj 목록에서 제거' }),
@@ -1062,6 +1093,7 @@ describe('App', () => {
     desktopApi.deleteRecovery.mockRejectedValue(new Error('cleanup failed'));
     render(<App />);
     await screen.findByText('Combark Shorts Studio');
+    openMediaDrawer();
 
     await user.click(screen.getByRole('button', { name: '파일 추가' }));
     await screen.findAllByText('dirty.jpg');
@@ -1096,6 +1128,7 @@ describe('App', () => {
     });
     render(<App />);
     await screen.findByText('Combark Shorts Studio');
+    openMediaDrawer();
 
     await user.click(screen.getByRole('button', { name: '파일 추가' }));
     expect(await screen.findByText('원본 파일 없음')).toBeInTheDocument();
@@ -1125,6 +1158,7 @@ describe('App', () => {
       .mockResolvedValueOnce({ missingMediaIds: [], narrationMissing: true });
     render(<App />);
     await screen.findByText('Combark Shorts Studio');
+    openMediaDrawer();
 
     await user.click(
       screen.getByRole('button', { name: 'MP3/WAV 내레이션 선택' }),

@@ -76,13 +76,19 @@ function renderTimelineShell(
 afterEach(cleanup);
 
 describe('TimelineShell', () => {
-  it('renders the multitrack timeline and only the selected scene detail', () => {
+  it('keeps the selected scene detail collapsed until requested', () => {
     renderTimelineShell();
 
     expect(screen.getByRole('region', { name: '타임라인' })).toBeInTheDocument();
+    const toggle = screen.getByRole('button', { name: '선택 장면 상세 펼치기' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
     expect(
-      screen.getByRole('heading', { name: '선택 장면 상세' }),
-    ).toBeInTheDocument();
+      screen.queryByRole('spinbutton', { name: '이미지 표시시간 (초)' }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(toggle);
+
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByText('photo.jpg')).toBeInTheDocument();
     expect(
       screen.getByRole('spinbutton', { name: '이미지 표시시간 (초)' }),
@@ -105,6 +111,9 @@ describe('TimelineShell', () => {
       onUpdateSceneSubtitlePosition,
       onUpdateSceneSubtitleSize,
     });
+    fireEvent.click(
+      screen.getByRole('button', { name: '선택 장면 상세 펼치기' }),
+    );
 
     fireEvent.change(
       screen.getByRole('spinbutton', { name: '이미지 표시시간 (초)' }),
@@ -130,6 +139,9 @@ describe('TimelineShell', () => {
 
   it('uses preview timing for selected video information without loading metadata again', () => {
     const { container } = renderTimelineShell({ selectedSceneIndex: 1 });
+    fireEvent.click(
+      screen.getByRole('button', { name: '선택 장면 상세 펼치기' }),
+    );
 
     expect(screen.getByText('clip.mp4')).toBeInTheDocument();
     expect(screen.getByText('장면 길이 00:04')).toBeInTheDocument();
@@ -150,6 +162,9 @@ describe('TimelineShell', () => {
         narrationDurationMs: undefined,
       },
     });
+    fireEvent.click(
+      screen.getByRole('button', { name: '선택 장면 상세 펼치기' }),
+    );
 
     expect(screen.getByText('선택된 장면이 없습니다.')).toBeInTheDocument();
   });

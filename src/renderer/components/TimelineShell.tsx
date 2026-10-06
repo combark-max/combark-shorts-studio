@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 import { createMediaUrl } from '../../shared/mediaProtocol';
 import type {
   MediaAsset,
@@ -55,6 +57,7 @@ export function TimelineShell({
   onUpdateSceneSubtitlePosition,
   onUpdateSceneSubtitleSize,
 }: TimelineShellProps) {
+  const [detailExpanded, setDetailExpanded] = useState(false);
   const selectedScene =
     selectedSceneIndex !== null ? scenes[selectedSceneIndex] : undefined;
   const selectedAsset = media.find(
@@ -87,11 +90,28 @@ export function TimelineShell({
       />
 
       <div className="selected-scene-detail">
-        <h3>선택 장면 상세</h3>
-        {!selectedScene || !selectedAsset || selectedSceneIndex === null ? (
-          <p className="scene-empty">선택된 장면이 없습니다.</p>
-        ) : (
-          <div className="selected-scene-editor">
+        <div className="selected-scene-detail-header">
+          <h3>선택 장면 상세</h3>
+          <button
+            aria-controls="selected-scene-detail-content"
+            aria-expanded={detailExpanded}
+            aria-label={
+              detailExpanded
+                ? '선택 장면 상세 접기'
+                : '선택 장면 상세 펼치기'
+            }
+            type="button"
+            onClick={() => setDetailExpanded((expanded) => !expanded)}
+          >
+            {detailExpanded ? '접기' : '펼치기'}
+          </button>
+        </div>
+        {detailExpanded ? (
+          <div id="selected-scene-detail-content">
+            {!selectedScene || !selectedAsset || selectedSceneIndex === null ? (
+              <p className="scene-empty">선택된 장면이 없습니다.</p>
+            ) : (
+              <div className="selected-scene-editor">
             <div className="selected-scene-summary">
               <span className="selected-scene-thumbnail" aria-hidden="true">
                 {selectedAsset.kind === 'image' ? (
@@ -188,8 +208,10 @@ export function TimelineShell({
                 </select>
               </label>
             </div>
+              </div>
+            )}
           </div>
-        )}
+        ) : null}
       </div>
     </section>
   );

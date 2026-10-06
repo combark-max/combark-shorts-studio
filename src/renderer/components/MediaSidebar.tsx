@@ -9,6 +9,8 @@ export interface MediaSidebarProps {
   missingMediaIds: readonly string[];
   narrationMissing: boolean;
   sourceCheckFailed: boolean;
+  collapsed: boolean;
+  onToggleCollapsed(collapsed: boolean): void;
   onAddMedia(): Promise<void>;
   onRelinkMedia(mediaId: string): Promise<void>;
   onRelinkNarration(): Promise<void>;
@@ -22,6 +24,8 @@ export function MediaSidebar({
   missingMediaIds,
   narrationMissing,
   sourceCheckFailed,
+  collapsed,
+  onToggleCollapsed,
   onAddMedia,
   onRelinkMedia,
   onRelinkNarration,
@@ -29,9 +33,56 @@ export function MediaSidebar({
   onSelectNarration,
 }: MediaSidebarProps) {
   const missingMediaIdSet = new Set(missingMediaIds);
+  const needsSourceAttention =
+    missingMediaIds.length > 0 || narrationMissing || sourceCheckFailed;
+
+  if (collapsed) {
+    return (
+      <aside
+        className="panel media-sidebar media-sidebar-collapsed"
+        aria-label="미디어"
+      >
+        <button
+          aria-label="미디어 패널 펼치기"
+          className="media-sidebar-rail-button"
+          type="button"
+          onClick={() => onToggleCollapsed(false)}
+        >
+          미디어
+        </button>
+        <button
+          aria-label="미디어 추가"
+          className="media-sidebar-rail-button"
+          type="button"
+          onClick={() => {
+            void onAddMedia();
+          }}
+        >
+          +
+        </button>
+        {needsSourceAttention ? (
+          <span
+            aria-label="원본 파일 확인 필요"
+            className="media-sidebar-attention"
+            role="status"
+          >
+            !
+          </span>
+        ) : null}
+      </aside>
+    );
+  }
 
   return (
     <aside className="panel media-sidebar" aria-label="미디어">
+      <button
+        aria-label="미디어 패널 접기"
+        className="media-sidebar-toggle"
+        type="button"
+        onClick={() => onToggleCollapsed(true)}
+      >
+        접기
+      </button>
       <div className="media-import-controls">
         <div className="media-import-control">
           <span className="media-import-label">사진/영상</span>

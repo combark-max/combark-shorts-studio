@@ -48,6 +48,7 @@ export function App() {
   );
   const [timelinePlayback, setTimelinePlayback] =
     useState<TimelinePlaybackSnapshot>(EMPTY_TIMELINE_PLAYBACK_SNAPSHOT);
+  const [mediaSidebarCollapsed, setMediaSidebarCollapsed] = useState(false);
   const {
     state,
     newProject,
@@ -319,13 +320,21 @@ export function App() {
         onRemove={removeRecentProject}
         removeError={recentProjectRemoveError}
       />
-      <main className="workspace">
+      <main
+        className={
+          mediaSidebarCollapsed
+            ? 'workspace workspace-media-collapsed'
+            : 'workspace'
+        }
+      >
         <MediaSidebar
           media={state.project.media}
           narration={state.project.narration}
           missingMediaIds={missingMediaIds}
           narrationMissing={narrationMissing}
           sourceCheckFailed={sourceCheckFailed}
+          collapsed={mediaSidebarCollapsed}
+          onToggleCollapsed={setMediaSidebarCollapsed}
           onAddMedia={importMedia}
           onRelinkMedia={relinkMedia}
           onRelinkNarration={relinkNarration}

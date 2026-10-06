@@ -179,27 +179,52 @@ export function PreviewPanel({
     videoDurationUnavailable,
   ]);
 
+  useEffect(() => {
+    if (isPlaying && pendingNarrationSeekMsRef.current !== null) {
+      pendingNarrationSeekMsRef.current = globalCurrentTimeMs;
+    }
+  }, [globalCurrentTimeMs, isPlaying]);
+
   const applyNarrationSeek = (
     globalTimeMs: number,
     knownDurationMs = narrationDurationMs,
-  ): void => {
+  ): boolean => {
     if (!narration || !audioRef.current) {
       pendingNarrationSeekMsRef.current = null;
-      return;
+      return false;
     }
 
+    pendingNarrationSeekMsRef.current = globalTimeMs;
     if (typeof knownDurationMs !== 'number') {
-      pendingNarrationSeekMsRef.current = globalTimeMs;
-      return;
+      if (isPlaying) {
+        audioRef.current.pause();
+      }
+      return false;
     }
 
-    const audioTimeMs = Math.min(globalTimeMs, knownDurationMs);
+    const audioTimeMs = Math.min(Math.max(globalTimeMs, 0), knownDurationMs);
     try {
       audioRef.current.currentTime = audioTimeMs / 1000;
       pendingNarrationSeekMsRef.current = null;
       setNarrationEnded(globalTimeMs >= knownDurationMs);
+      return true;
     } catch {
-      pendingNarrationSeekMsRef.current = globalTimeMs;
+      if (isPlaying) {
+        audioRef.current.pause();
+      }
+      return false;
+    }
+  };
+
+  const retryPendingNarrationSeek = (
+    knownDurationMs = narrationDurationMs,
+  ): void => {
+    const pendingTimeMs = pendingNarrationSeekMsRef.current;
+    if (
+      pendingTimeMs !== null &&
+      applyNarrationSeek(pendingTimeMs, knownDurationMs)
+    ) {
+      setSeekRevision((revision) => revision + 1);
     }
   };
 
@@ -350,10 +375,12 @@ export function PreviewPanel({
     setNarrationError(null);
     setNarrationEnded(false);
     setNarrationDurationMs(undefined);
-    pendingNarrationSeekMsRef.current = narration
-      ? (pendingSeekRef.current?.globalTimeMs ??
-        Math.max(globalCurrentTimeMs, currentSceneStartMs ?? 0))
-      : null;
+    const initialNarrationTimeMs = pendingSeekRef.current?.globalTimeMs ??
+      Math.max(globalCurrentTimeMs, currentSceneStartMs ?? 0);
+    pendingNarrationSeekMsRef.current =
+      narration && initialNarrationTimeMs > 0
+        ? initialNarrationTimeMs
+        : null;
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
@@ -492,6 +519,7 @@ export function PreviewPanel({
       narrationError ||
       narrationEnded ||
       !audioRef.current ||
+      pendingNarrationSeekMsRef.current !== null ||
       pendingAsset?.kind === 'video'
     ) {
       return;
@@ -776,6 +804,7 @@ export function PreviewPanel({
         <audio
           aria-label="내레이션"
           onEnded={() => setNarrationEnded(true)}
+          onCanPlay={() => retryPendingNarrationSeek()}
           onError={() => {
             pendingNarrationSeekMsRef.current = null;
             setNarrationDurationMs(null);
@@ -784,9 +813,8 @@ export function PreviewPanel({
           onLoadedMetadata={(event) => {
             const durationMs = readMediaDurationMs(event.currentTarget);
             setNarrationDurationMs(durationMs);
-            const pendingTimeMs = pendingNarrationSeekMsRef.current;
-            if (durationMs !== null && pendingTimeMs !== null) {
-              applyNarrationSeek(pendingTimeMs, durationMs);
+            if (durationMs !== null) {
+              retryPendingNarrationSeek(durationMs);
             }
           }}
           preload="metadata"

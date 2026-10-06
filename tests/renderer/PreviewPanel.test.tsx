@@ -509,6 +509,55 @@ describe('PreviewPanel', () => {
     expect(audio.currentTime).toBe(1.5);
   });
 
+  it('pauses a failed narration seek and catches up on canplay before resuming', async () => {
+    vi.useFakeTimers();
+    render(
+      <StatefulPreview
+        narrationAsset={narration}
+        mediaList={[media[0]]}
+        sceneList={[scenes[0]]}
+      />,
+    );
+    const audio = screen.getByLabelText('내레이션') as HTMLAudioElement;
+    const play = vi.fn().mockResolvedValue(undefined);
+    const pause = vi.fn();
+    audio.play = play;
+    audio.pause = pause;
+    setMediaDuration(audio, 3);
+    fireEvent.loadedMetadata(audio);
+    fireEvent.click(screen.getByRole('button', { name: '재생' }));
+    play.mockClear();
+
+    let currentTime = 0;
+    let attempts = 0;
+    Object.defineProperty(audio, 'currentTime', {
+      configurable: true,
+      get: () => currentTime,
+      set: (value: number) => {
+        attempts += 1;
+        if (attempts === 1) {
+          throw new DOMException('not seekable yet');
+        }
+        currentTime = value;
+      },
+    });
+
+    fireEvent.change(
+      screen.getByRole('slider', { name: '전체 프로젝트 재생 위치' }),
+      { target: { value: '2000' } },
+    );
+
+    expect(play).not.toHaveBeenCalled();
+    expect(pause).toHaveBeenCalledOnce();
+    expect(currentTime).toBe(0);
+
+    await act(async () => vi.advanceTimersByTimeAsync(400));
+    fireEvent.canPlay(audio);
+
+    expect(currentTime).toBe(2.4);
+    expect(play).toHaveBeenCalledOnce();
+  });
+
   it('initializes narration at the start of a nonzero selected image scene', () => {
     render(
       <StatefulPreview

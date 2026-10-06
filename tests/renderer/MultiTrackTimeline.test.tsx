@@ -71,6 +71,16 @@ function renderTimeline(
   return { ...render(<MultiTrackTimeline {...props} />), props };
 }
 
+function setScrollGeometry(
+  element: HTMLElement,
+  { clientWidth, scrollWidth }: { clientWidth: number; scrollWidth: number },
+): void {
+  Object.defineProperties(element, {
+    clientWidth: { configurable: true, value: clientWidth },
+    scrollWidth: { configurable: true, value: scrollWidth },
+  });
+}
+
 afterEach(cleanup);
 
 describe('MultiTrackTimeline', () => {
@@ -192,5 +202,65 @@ describe('MultiTrackTimeline', () => {
 
     expect(screen.getByText('나레이션 길이 확인 불가')).toBeInTheDocument();
     expect(screen.queryByText('나레이션 길이 확인 중...')).toBeNull();
+  });
+
+  it('auto-follows only after the playhead crosses the right safe boundary', () => {
+    const { container, props, rerender } = renderTimeline();
+    const scroll = container.querySelector('.timeline-scroll') as HTMLElement;
+    setScrollGeometry(scroll, { clientWidth: 400, scrollWidth: 720 });
+    scroll.scrollLeft = 0;
+
+    rerender(
+      <MultiTrackTimeline
+        {...props}
+        playback={{ ...playback, currentTimeMs: 3600 }}
+      />,
+    );
+    expect(scroll.scrollLeft).toBe(0);
+
+    rerender(
+      <MultiTrackTimeline
+        {...props}
+        playback={{ ...playback, currentTimeMs: 6000 }}
+      />,
+    );
+    expect(scroll.scrollLeft).toBe(72);
+  });
+
+  it('follows a backward seek and clamps scrolling to the canvas bounds', () => {
+    const { container, props, rerender } = renderTimeline();
+    const scroll = container.querySelector('.timeline-scroll') as HTMLElement;
+    setScrollGeometry(scroll, { clientWidth: 400, scrollWidth: 720 });
+    scroll.scrollLeft = 250;
+
+    rerender(
+      <MultiTrackTimeline
+        {...props}
+        playback={{ ...playback, currentTimeMs: 4000 }}
+      />,
+    );
+    expect(scroll.scrollLeft).toBe(140);
+
+    scroll.scrollLeft = 250;
+    rerender(
+      <MultiTrackTimeline
+        {...props}
+        playback={{ ...playback, currentTimeMs: 0 }}
+      />,
+    );
+    expect(scroll.scrollLeft).toBe(0);
+  });
+
+  it('preserves paused manual scrolling while the project time is unchanged', () => {
+    const { container, props, rerender } = renderTimeline();
+    const scroll = container.querySelector('.timeline-scroll') as HTMLElement;
+    setScrollGeometry(scroll, { clientWidth: 400, scrollWidth: 720 });
+    scroll.scrollLeft = 175;
+
+    rerender(
+      <MultiTrackTimeline {...props} selectedSceneIndex={0} />,
+    );
+
+    expect(scroll.scrollLeft).toBe(175);
   });
 });

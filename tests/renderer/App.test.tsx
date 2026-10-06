@@ -824,6 +824,23 @@ describe('App', () => {
     expect(await screen.findByText('v0.1.0')).toBeInTheDocument();
   });
 
+  it('collapses and expands the media sidebar workspace column', async () => {
+    const { container } = render(<App />);
+    await screen.findByText('Combark Shorts Studio');
+    const workspace = container.querySelector('.workspace');
+
+    expect(workspace).not.toHaveClass('workspace-media-collapsed');
+    fireEvent.click(
+      screen.getByRole('button', { name: '미디어 패널 접기' }),
+    );
+
+    expect(workspace).toHaveClass('workspace-media-collapsed');
+    fireEvent.click(
+      screen.getByRole('button', { name: '미디어 패널 펼치기' }),
+    );
+    expect(workspace).not.toHaveClass('workspace-media-collapsed');
+  });
+
   it('opens auto shorts from the header and applies subtitles and image duration to the existing scene', async () => {
     const user = userEvent.setup();
     const project = {

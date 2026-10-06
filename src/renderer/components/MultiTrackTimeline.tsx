@@ -1,3 +1,5 @@
+import { useLayoutEffect, useRef } from 'react';
+
 import { createMediaUrl } from '../../shared/mediaProtocol';
 import type {
   MediaAsset,
@@ -56,6 +58,11 @@ export function MultiTrackTimeline({
     layout.blocks.map((block) => [block.sceneIndex, block]),
   );
   const canvasWidthPx = Math.max(layout.canvasWidthPx, 720);
+  const playheadLeftPx = getPlayheadLeftPx(
+    playback.currentTimeMs,
+    playback.totalDurationMs,
+  );
+  const scrollRef = useRef<HTMLDivElement | null>(null);
   const narrationWidthPx =
     narration && typeof playback.narrationDurationMs === 'number'
       ? (Math.min(
@@ -65,6 +72,31 @@ export function MultiTrackTimeline({
           1000) *
         TIMELINE_PIXELS_PER_SECOND
       : null;
+
+  useLayoutEffect(() => {
+    const scroll = scrollRef.current;
+    if (!scroll || !playback.ready || scroll.clientWidth <= 0) {
+      return;
+    }
+
+    const viewportLeft = scroll.scrollLeft;
+    const viewportWidth = scroll.clientWidth;
+    const safeLeft = viewportLeft + viewportWidth * 0.2;
+    const safeRight = viewportLeft + viewportWidth * 0.8;
+    let nextScrollLeft = viewportLeft;
+
+    if (playheadLeftPx < safeLeft) {
+      nextScrollLeft = playheadLeftPx - viewportWidth * 0.25;
+    } else if (playheadLeftPx > safeRight) {
+      nextScrollLeft = playheadLeftPx - viewportWidth * 0.72;
+    }
+
+    const maxScrollLeft = Math.max(0, scroll.scrollWidth - viewportWidth);
+    nextScrollLeft = Math.min(Math.max(nextScrollLeft, 0), maxScrollLeft);
+    if (nextScrollLeft !== viewportLeft) {
+      scroll.scrollLeft = nextScrollLeft;
+    }
+  }, [playback.ready, playheadLeftPx]);
 
   return (
     <div className="multi-track-timeline">
@@ -170,7 +202,7 @@ export function MultiTrackTimeline({
             <span>효과음</span>
             <span>음악</span>
           </div>
-          <div className="timeline-scroll">
+          <div className="timeline-scroll" ref={scrollRef}>
             <div
               className="timeline-canvas"
               style={{ width: `${canvasWidthPx}px` }}
@@ -290,10 +322,7 @@ export function MultiTrackTimeline({
                 aria-label="재생 위치선"
                 className="timeline-playhead"
                 style={{
-                  left: `${getPlayheadLeftPx(
-                    playback.currentTimeMs,
-                    playback.totalDurationMs,
-                  )}px`,
+                  left: `${playheadLeftPx}px`,
                 }}
               />
             </div>

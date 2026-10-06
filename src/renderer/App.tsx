@@ -9,6 +9,10 @@ import { PropertiesPanel } from './components/PropertiesPanel';
 import { RecoveryPrompt } from './components/RecoveryPrompt';
 import { RecentProjects } from './components/RecentProjects';
 import { TimelineShell } from './components/TimelineShell';
+import {
+  EMPTY_TIMELINE_PLAYBACK_SNAPSHOT,
+  type TimelinePlaybackSnapshot,
+} from './project/timelineLayout';
 import { useProjectController } from './project/useProjectController';
 import type { ProjectDocument } from '../shared/project/types';
 
@@ -42,6 +46,8 @@ export function App() {
   const [selectedSceneIndex, setSelectedSceneIndex] = useState<number | null>(
     null,
   );
+  const [timelinePlayback, setTimelinePlayback] =
+    useState<TimelinePlaybackSnapshot>(EMPTY_TIMELINE_PLAYBACK_SNAPSHOT);
   const {
     state,
     newProject,
@@ -332,14 +338,18 @@ export function App() {
           scenes={state.project.scenes}
           selectedSceneIndex={selectedSceneIndex}
           onSelectScene={setSelectedSceneIndex}
+          onPlaybackSnapshotChange={setTimelinePlayback}
         />
         <PropertiesPanel />
       </main>
       <TimelineShell
         media={state.project.media}
+        narration={state.project.narration}
         scenes={state.project.scenes}
         selectedSceneIndex={selectedSceneIndex}
+        playback={timelinePlayback}
         onSelectScene={setSelectedSceneIndex}
+        onAddMedia={importMedia}
         onMoveScene={handleMoveScene}
         onDuplicateScene={handleDuplicateScene}
         onDeleteScene={handleDeleteScene}

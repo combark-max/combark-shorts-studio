@@ -1,41 +1,52 @@
-import { useState } from 'react';
-
 import { createMediaUrl } from '../../shared/mediaProtocol';
 import type {
   MediaAsset,
+  NarrationAsset,
   Scene,
   SubtitlePosition,
   SubtitleSize,
 } from '../../shared/project/types';
+import type { TimelinePlaybackSnapshot } from '../project/timelineLayout';
+import { MultiTrackTimeline } from './MultiTrackTimeline';
 
 interface TimelineShellProps {
   media: MediaAsset[];
+  narration: NarrationAsset | null;
   scenes: Scene[];
   selectedSceneIndex: number | null;
+  playback: TimelinePlaybackSnapshot;
   onSelectScene: (sceneIndex: number) => void;
+  onAddMedia: () => void | Promise<void>;
   onMoveScene: (sceneIndex: number, direction: 'up' | 'down') => void;
   onDeleteScene: (sceneIndex: number) => void;
   onDuplicateScene: (sceneIndex: number) => void;
   onUpdateSceneDuration: (sceneIndex: number, durationMs: number) => void;
   onUpdateSceneSubtitle: (sceneIndex: number, subtitle: string) => void;
-  onUpdateSceneSubtitlePosition: (sceneIndex: number, position: SubtitlePosition) => void;
-  onUpdateSceneSubtitleSize: (sceneIndex: number, size: SubtitleSize) => void;
+  onUpdateSceneSubtitlePosition: (
+    sceneIndex: number,
+    position: SubtitlePosition,
+  ) => void;
+  onUpdateSceneSubtitleSize: (
+    sceneIndex: number,
+    size: SubtitleSize,
+  ) => void;
 }
 
-type VideoDurations = Record<string, number | null>;
-
-function formatDuration(durationSeconds: number): string {
-  const minutes = Math.floor(durationSeconds / 60);
-  const seconds = durationSeconds % 60;
-
+function formatDuration(durationMs: number): string {
+  const totalSeconds = Math.floor(durationMs / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
 export function TimelineShell({
   media,
+  narration,
   scenes,
   selectedSceneIndex,
+  playback,
   onSelectScene,
+  onAddMedia,
   onMoveScene,
   onDeleteScene,
   onDuplicateScene,
@@ -44,206 +55,142 @@ export function TimelineShell({
   onUpdateSceneSubtitlePosition,
   onUpdateSceneSubtitleSize,
 }: TimelineShellProps) {
-  const [videoDurations, setVideoDurations] = useState<VideoDurations>({});
-
-  const updateVideoDuration = (mediaId: string, duration: number): void => {
-    const durationSeconds =
-      Number.isFinite(duration) && duration > 0 ? Math.floor(duration) : null;
-    setVideoDurations((currentDurations) => ({
-      ...currentDurations,
-      [mediaId]: durationSeconds,
-    }));
-  };
-
-  const markVideoDurationUnavailable = (mediaId: string): void => {
-    setVideoDurations((currentDurations) =>
-      Object.prototype.hasOwnProperty.call(currentDurations, mediaId)
-        ? currentDurations
-        : { ...currentDurations, [mediaId]: null },
-    );
-  };
+  const selectedScene =
+    selectedSceneIndex !== null ? scenes[selectedSceneIndex] : undefined;
+  const selectedAsset = media.find(
+    (asset) => asset.id === selectedScene?.mediaId,
+  );
+  const selectedTiming =
+    selectedSceneIndex !== null
+      ? playback.sceneTimings.find(
+          (timing) => timing.sceneIndex === selectedSceneIndex,
+        )
+      : undefined;
 
   return (
-    <section className="timeline-shell" aria-labelledby="timeline-heading">
-      <h2 id="timeline-heading">장면 목록</h2>
-      {scenes.length === 0 ? (
-        <p className="scene-empty">장면이 없습니다.</p>
-      ) : (
-        <ol className="scene-list">
-          {scenes.map((scene, index) => {
-            const asset = media.find(({ id }) => id === scene.mediaId);
+    <section
+      aria-labelledby="timeline-heading"
+      className="timeline-shell"
+    >
+      <h2 id="timeline-heading">타임라인</h2>
+      <MultiTrackTimeline
+        media={media}
+        narration={narration}
+        onAddMedia={onAddMedia}
+        onDeleteScene={onDeleteScene}
+        onDuplicateScene={onDuplicateScene}
+        onMoveScene={onMoveScene}
+        onSelectScene={onSelectScene}
+        playback={playback}
+        scenes={scenes}
+        selectedSceneIndex={selectedSceneIndex}
+      />
 
-            if (!asset) {
-              return null;
-            }
+      <div className="selected-scene-detail">
+        <h3>선택 장면 상세</h3>
+        {!selectedScene || !selectedAsset || selectedSceneIndex === null ? (
+          <p className="scene-empty">선택된 장면이 없습니다.</p>
+        ) : (
+          <div className="selected-scene-editor">
+            <div className="selected-scene-summary">
+              <span className="selected-scene-thumbnail" aria-hidden="true">
+                {selectedAsset.kind === 'image' ? (
+                  <img alt="" src={createMediaUrl(selectedAsset.sourcePath)} />
+                ) : (
+                  <span>영상</span>
+                )}
+              </span>
+              <div>
+                <strong>
+                  {selectedSceneIndex + 1}번 장면 · {selectedAsset.fileName}
+                </strong>
+                <span>
+                  {selectedAsset.kind === 'image' ? '이미지' : '영상'}
+                </span>
+                {selectedAsset.kind === 'video' && selectedTiming ? (
+                  <span>
+                    장면 길이 {formatDuration(selectedTiming.durationMs)}
+                  </span>
+                ) : null}
+              </div>
+            </div>
 
-            return (
-              <li
-                className={
-                  index === selectedSceneIndex
-                    ? 'scene-item scene-item-selected'
-                    : 'scene-item'
-                }
-                key={`${scene.mediaId}-${index}`}
-              >
-                <button
-                  aria-label={`${index + 1}번 장면 선택`}
-                  aria-pressed={index === selectedSceneIndex}
-                  className="scene-select"
-                  type="button"
-                  onClick={() => onSelectScene(index)}
+            <div className="selected-scene-fields">
+              {selectedAsset.kind === 'image' ? (
+                <label>
+                  이미지 표시시간 (초)
+                  <input
+                    aria-label="이미지 표시시간 (초)"
+                    min="0.001"
+                    step="0.001"
+                    type="number"
+                    value={(selectedScene.durationMs ?? 3000) / 1000}
+                    onChange={(event) => {
+                      const durationMs = Math.round(
+                        Number(event.currentTarget.value) * 1000,
+                      );
+                      if (durationMs > 0) {
+                        onUpdateSceneDuration(
+                          selectedSceneIndex,
+                          durationMs,
+                        );
+                      }
+                    }}
+                  />
+                </label>
+              ) : null}
+              <label className="selected-scene-subtitle">
+                자막 내용
+                <input
+                  aria-label="선택 장면 자막"
+                  type="text"
+                  value={selectedScene.subtitle}
+                  onChange={(event) =>
+                    onUpdateSceneSubtitle(
+                      selectedSceneIndex,
+                      event.currentTarget.value,
+                    )
+                  }
+                />
+              </label>
+              <label>
+                자막 위치
+                <select
+                  aria-label="선택 장면 자막 위치"
+                  value={selectedScene.subtitlePosition}
+                  onChange={(event) =>
+                    onUpdateSceneSubtitlePosition(
+                      selectedSceneIndex,
+                      event.currentTarget.value as SubtitlePosition,
+                    )
+                  }
                 >
-                  <span className="scene-thumbnail" aria-hidden="true">
-                    {asset.kind === 'image' ? (
-                      <img
-                        alt=""
-                        src={createMediaUrl(asset.sourcePath)}
-                      />
-                    ) : (
-                      <video
-                        muted
-                        playsInline
-                        preload="metadata"
-                        src={createMediaUrl(asset.sourcePath)}
-                        onError={() => markVideoDurationUnavailable(asset.id)}
-                        onLoadedMetadata={(event) => {
-                          const { duration } = event.currentTarget;
-                          updateVideoDuration(asset.id, duration);
-
-                          if (Number.isFinite(duration) && duration > 0) {
-                            try {
-                              event.currentTarget.currentTime = Math.min(
-                                0.01,
-                                duration / 2,
-                              );
-                            } catch {
-                              // Duration remains usable when thumbnail seeking fails.
-                            }
-                          }
-                        }}
-                      />
-                    )}
-                  </span>
-                  <span className="scene-number">{index + 1}</span>
-                  <span className="scene-name">{asset.fileName}</span>
-                  <span className="scene-kind">
-                    {asset.kind === 'image' ? '이미지' : '영상'}
-                  </span>
-                </button>
-                <div className="scene-duration">
-                  {asset.kind === 'image' ? (
-                    <label>
-                      표시시간 (초)
-                      <input
-                        type="number"
-                        min="0.001"
-                        step="0.001"
-                        value={(scene.durationMs ?? 3000) / 1000}
-                        onChange={(event) => {
-                          const durationMs = Math.round(
-                            Number(event.currentTarget.value) * 1000,
-                          );
-                          if (durationMs > 0) {
-                            onUpdateSceneDuration(index, durationMs);
-                          }
-                        }}
-                      />
-                    </label>
-                  ) : (
-                    <span>
-                      {!Object.prototype.hasOwnProperty.call(
-                        videoDurations,
-                        asset.id,
-                      )
-                        ? '길이 확인 중...'
-                        : videoDurations[asset.id] === null
-                          ? '길이 확인 불가'
-                          : formatDuration(videoDurations[asset.id])}
-                    </span>
-                  )}
-                </div>
-                <div className="scene-subtitle">
-                  <label className="scene-subtitle-text">
-                    <span>{index + 1}번 장면 자막</span>
-                    <input
-                      type="text"
-                      value={scene.subtitle}
-                      onChange={(event) =>
-                        onUpdateSceneSubtitle(
-                          index,
-                          event.currentTarget.value,
-                        )
-                      }
-                    />
-                  </label>
-                  <label>
-                    <span>위치</span>
-                    <select
-                      aria-label={`${index + 1}번 장면 자막 위치`}
-                      value={scene.subtitlePosition}
-                      onChange={(event) =>
-                        onUpdateSceneSubtitlePosition(
-                          index,
-                          event.currentTarget.value as SubtitlePosition,
-                        )
-                      }
-                    >
-                      <option value="top">상단</option>
-                      <option value="center">중앙</option>
-                      <option value="bottom">하단</option>
-                    </select>
-                  </label>
-                  <label>
-                    <span>크기</span>
-                    <select
-                      aria-label={`${index + 1}번 장면 자막 크기`}
-                      value={scene.subtitleSize}
-                      onChange={(event) =>
-                        onUpdateSceneSubtitleSize(
-                          index,
-                          event.currentTarget.value as SubtitleSize,
-                        )
-                      }
-                    >
-                      <option value="small">작게</option>
-                      <option value="medium">보통</option>
-                      <option value="large">크게</option>
-                    </select>
-                  </label>
-                </div>
-                <div className="scene-actions">
-                  <button
-                    type="button"
-                    disabled={index === 0}
-                    onClick={() => onMoveScene(index, 'up')}
-                  >
-                    위
-                  </button>
-                  <button
-                    type="button"
-                    disabled={index === scenes.length - 1}
-                    onClick={() => onMoveScene(index, 'down')}
-                  >
-                    아래
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onDuplicateScene(index)}
-                  >
-                    복제
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onDeleteScene(index)}
-                  >
-                    파일 제거
-                  </button>
-                </div>
-              </li>
-            );
-          })}
-        </ol>
-      )}
+                  <option value="top">상단</option>
+                  <option value="center">중앙</option>
+                  <option value="bottom">하단</option>
+                </select>
+              </label>
+              <label>
+                자막 크기
+                <select
+                  aria-label="선택 장면 자막 크기"
+                  value={selectedScene.subtitleSize}
+                  onChange={(event) =>
+                    onUpdateSceneSubtitleSize(
+                      selectedSceneIndex,
+                      event.currentTarget.value as SubtitleSize,
+                    )
+                  }
+                >
+                  <option value="small">작게</option>
+                  <option value="medium">보통</option>
+                  <option value="large">크게</option>
+                </select>
+              </label>
+            </div>
+          </div>
+        )}
+      </div>
     </section>
   );
 }

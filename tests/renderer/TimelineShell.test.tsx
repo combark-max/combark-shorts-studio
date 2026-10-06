@@ -1,8 +1,10 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ComponentProps } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { TimelineShell } from '../../src/renderer/components/TimelineShell';
+import type { TimelinePlaybackSnapshot } from '../../src/renderer/project/timelineLayout';
 import type { MediaAsset, Scene } from '../../src/shared/project/types';
 
 const media: MediaAsset[] = [
@@ -21,321 +23,134 @@ const media: MediaAsset[] = [
 ];
 
 const scenes: Scene[] = [
-  { mediaId: 'photo-id', durationMs: 3000, subtitle: '사진 자막', subtitlePosition: 'bottom', subtitleSize: 'medium' },
-  { mediaId: 'video-id', durationMs: null, subtitle: '', subtitlePosition: 'bottom', subtitleSize: 'medium' },
+  {
+    mediaId: 'photo-id',
+    durationMs: 3000,
+    subtitle: '사진 자막',
+    subtitlePosition: 'bottom',
+    subtitleSize: 'medium',
+  },
+  {
+    mediaId: 'video-id',
+    durationMs: null,
+    subtitle: '',
+    subtitlePosition: 'bottom',
+    subtitleSize: 'medium',
+  },
 ];
 
-afterEach(() => {
-  cleanup();
-});
+const playback: TimelinePlaybackSnapshot = {
+  currentTimeMs: 0,
+  totalDurationMs: 7000,
+  ready: true,
+  sceneTimings: [
+    { sceneIndex: 0, startMs: 0, endMs: 3000, durationMs: 3000 },
+    { sceneIndex: 1, startMs: 3000, endMs: 7000, durationMs: 4000 },
+  ],
+  narrationDurationMs: undefined,
+};
+
+function renderTimelineShell(
+  overrides: Partial<ComponentProps<typeof TimelineShell>> = {},
+) {
+  const props: ComponentProps<typeof TimelineShell> = {
+    media,
+    narration: null,
+    scenes,
+    selectedSceneIndex: 0,
+    playback,
+    onSelectScene: vi.fn(),
+    onAddMedia: vi.fn(),
+    onMoveScene: vi.fn(),
+    onDeleteScene: vi.fn(),
+    onDuplicateScene: vi.fn(),
+    onUpdateSceneDuration: vi.fn(),
+    onUpdateSceneSubtitle: vi.fn(),
+    onUpdateSceneSubtitlePosition: vi.fn(),
+    onUpdateSceneSubtitleSize: vi.fn(),
+    ...overrides,
+  };
+  return { ...render(<TimelineShell {...props} />), props };
+}
+
+afterEach(cleanup);
 
 describe('TimelineShell', () => {
-  it('renders ordered scenes with boundary controls and kind-specific duration UI', () => {
-    render(
-      <TimelineShell
-        media={media}
-        scenes={scenes}
-        selectedSceneIndex={0}
-        onSelectScene={vi.fn()}
-        onMoveScene={vi.fn()}
-        onDeleteScene={vi.fn()}
-        onDuplicateScene={vi.fn()}
-        onUpdateSceneDuration={vi.fn()}
-        onUpdateSceneSubtitle={vi.fn()}
-        onUpdateSceneSubtitlePosition={vi.fn()}
-        onUpdateSceneSubtitleSize={vi.fn()}
-      />,
-    );
+  it('renders the multitrack timeline and only the selected scene detail', () => {
+    renderTimelineShell();
 
-    const region = screen.getByRole('region', { name: '장면 목록' });
-    const items = within(region).getAllByRole('listitem');
-
-    expect(within(items[0]).getByText('1')).toBeInTheDocument();
-    expect(within(items[0]).getByText('photo.jpg')).toBeInTheDocument();
-    expect(within(items[0]).getByText('이미지')).toBeInTheDocument();
-    expect(within(items[0]).getByRole('spinbutton')).toHaveValue(3);
-    expect(within(items[0]).getByRole('spinbutton')).toHaveAttribute(
-      'step',
-      '0.001',
-    );
+    expect(screen.getByRole('region', { name: '타임라인' })).toBeInTheDocument();
     expect(
-      within(items[0]).getByRole('textbox', { name: '1번 장면 자막' }),
-    ).toHaveValue('사진 자막');
-    expect(within(items[0]).getByRole('button', { name: '위' })).toBeDisabled();
-    expect(within(items[0]).getByRole('button', { name: '아래' })).toBeEnabled();
-
-    expect(within(items[1]).getByText('2')).toBeInTheDocument();
-    expect(within(items[1]).getByText('clip.mp4')).toBeInTheDocument();
-    expect(within(items[1]).getByText('영상')).toBeInTheDocument();
-    expect(within(items[1]).getByText('길이 확인 중...')).toBeInTheDocument();
-    expect(within(items[1]).queryByRole('spinbutton')).not.toBeInTheDocument();
-    expect(within(items[1]).getByRole('button', { name: '아래' })).toBeDisabled();
+      screen.getByRole('heading', { name: '선택 장면 상세' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('photo.jpg')).toBeInTheDocument();
+    expect(
+      screen.getByRole('spinbutton', { name: '이미지 표시시간 (초)' }),
+    ).toHaveValue(3);
+    expect(screen.getByRole('textbox', { name: '선택 장면 자막' })).toHaveValue(
+      '사진 자막',
+    );
+    expect(screen.queryByRole('list')).toBeNull();
   });
 
-  it('renders image and video thumbnails from combark-media URLs', () => {
-    const { container } = render(
-      <TimelineShell
-        media={media}
-        scenes={scenes}
-        selectedSceneIndex={0}
-        onSelectScene={vi.fn()}
-        onMoveScene={vi.fn()}
-        onDeleteScene={vi.fn()}
-        onDuplicateScene={vi.fn()}
-        onUpdateSceneDuration={vi.fn()}
-        onUpdateSceneSubtitle={vi.fn()}
-        onUpdateSceneSubtitlePosition={vi.fn()}
-        onUpdateSceneSubtitleSize={vi.fn()}
-      />,
-    );
-
-    const image = container.querySelector('img');
-    const video = container.querySelector('video');
-
-    expect(image).toHaveAttribute(
-      'src',
-      'combark-media://local/?path=C%3A%5Cmedia%5Cphoto.jpg',
-    );
-    expect(video).toHaveAttribute(
-      'src',
-      'combark-media://local/?path=C%3A%5Cmedia%5Cclip.mp4',
-    );
-    expect(video).toHaveAttribute('preload', 'metadata');
-    expect(video).not.toHaveAttribute('controls');
-    expect(video).not.toHaveAttribute('autoplay');
-    expect(video).toHaveProperty('muted', true);
-    expect(video).toHaveProperty('playsInline', true);
-  });
-
-  it.each([
-    [23, '00:23'],
-    [72, '01:12'],
-  ])('shows a %s second video duration as %s', (duration, expected) => {
-    const { container } = render(
-      <TimelineShell
-        media={media}
-        scenes={scenes}
-        selectedSceneIndex={1}
-        onSelectScene={vi.fn()}
-        onMoveScene={vi.fn()}
-        onDeleteScene={vi.fn()}
-        onDuplicateScene={vi.fn()}
-        onUpdateSceneDuration={vi.fn()}
-        onUpdateSceneSubtitle={vi.fn()}
-        onUpdateSceneSubtitlePosition={vi.fn()}
-        onUpdateSceneSubtitleSize={vi.fn()}
-      />,
-    );
-    const video = container.querySelector('video') as HTMLVideoElement;
-    Object.defineProperty(video, 'duration', { configurable: true, value: duration });
-
-    fireEvent.loadedMetadata(video);
-
-    expect(screen.getByText(expected)).toBeInTheDocument();
-  });
-
-  it.each([0, Number.POSITIVE_INFINITY, Number.NaN])(
-    'shows an unavailable duration for invalid metadata duration %s',
-    (duration) => {
-      const { container } = render(
-        <TimelineShell
-          media={media}
-          scenes={scenes}
-          selectedSceneIndex={1}
-          onSelectScene={vi.fn()}
-          onMoveScene={vi.fn()}
-          onDeleteScene={vi.fn()}
-          onDuplicateScene={vi.fn()}
-        onUpdateSceneDuration={vi.fn()}
-        onUpdateSceneSubtitle={vi.fn()}
-        onUpdateSceneSubtitlePosition={vi.fn()}
-        onUpdateSceneSubtitleSize={vi.fn()}
-      />,
-      );
-      const video = container.querySelector('video') as HTMLVideoElement;
-      Object.defineProperty(video, 'duration', { configurable: true, value: duration });
-
-      fireEvent.loadedMetadata(video);
-
-      expect(screen.getByText('길이 확인 불가')).toBeInTheDocument();
-    },
-  );
-
-  it('shows an unavailable duration when video metadata loading fails', () => {
-    const { container } = render(
-      <TimelineShell
-        media={media}
-        scenes={scenes}
-        selectedSceneIndex={1}
-        onSelectScene={vi.fn()}
-        onMoveScene={vi.fn()}
-        onDeleteScene={vi.fn()}
-        onDuplicateScene={vi.fn()}
-        onUpdateSceneDuration={vi.fn()}
-        onUpdateSceneSubtitle={vi.fn()}
-        onUpdateSceneSubtitlePosition={vi.fn()}
-        onUpdateSceneSubtitleSize={vi.fn()}
-      />,
-    );
-
-    fireEvent.error(container.querySelector('video') as HTMLVideoElement);
-
-    expect(screen.getByText('길이 확인 불가')).toBeInTheDocument();
-  });
-
-  it('keeps a valid duration when seeking the thumbnail frame fails', () => {
-    const { container } = render(
-      <TimelineShell
-        media={media}
-        scenes={scenes}
-        selectedSceneIndex={1}
-        onSelectScene={vi.fn()}
-        onMoveScene={vi.fn()}
-        onDeleteScene={vi.fn()}
-        onDuplicateScene={vi.fn()}
-        onUpdateSceneDuration={vi.fn()}
-        onUpdateSceneSubtitle={vi.fn()}
-        onUpdateSceneSubtitlePosition={vi.fn()}
-        onUpdateSceneSubtitleSize={vi.fn()}
-      />,
-    );
-    const video = container.querySelector('video') as HTMLVideoElement;
-    Object.defineProperty(video, 'duration', { configurable: true, value: 23 });
-    Object.defineProperty(video, 'currentTime', {
-      configurable: true,
-      set: () => {
-        throw new Error('seek failed');
-      },
-    });
-
-    fireEvent.loadedMetadata(video);
-
-    expect(screen.getByText('00:23')).toBeInTheDocument();
-  });
-
-  it('forwards index-based move, duplicate, file removal, duration, and subtitle changes', async () => {
+  it('edits the selected image duration and existing subtitle fields', async () => {
     const user = userEvent.setup();
-    const onMoveScene = vi.fn();
-    const onDeleteScene = vi.fn();
-    const onDuplicateScene = vi.fn();
     const onUpdateSceneDuration = vi.fn();
     const onUpdateSceneSubtitle = vi.fn();
     const onUpdateSceneSubtitlePosition = vi.fn();
     const onUpdateSceneSubtitleSize = vi.fn();
-    render(
-      <TimelineShell
-        media={media}
-        scenes={scenes}
-        selectedSceneIndex={0}
-        onSelectScene={vi.fn()}
-        onMoveScene={onMoveScene}
-        onDeleteScene={onDeleteScene}
-        onDuplicateScene={onDuplicateScene}
-        onUpdateSceneDuration={onUpdateSceneDuration}
-        onUpdateSceneSubtitle={onUpdateSceneSubtitle}
-        onUpdateSceneSubtitlePosition={onUpdateSceneSubtitlePosition}
-        onUpdateSceneSubtitleSize={onUpdateSceneSubtitleSize}
-      />,
-    );
-
-    const items = screen.getAllByRole('listitem');
-    await user.click(within(items[1]).getByRole('button', { name: '위' }));
-    await user.click(
-      within(items[0]).getByRole('button', { name: '파일 제거' }),
-    );
-    await user.click(within(items[0]).getByRole('button', { name: '복제' }));
-    fireEvent.change(within(items[0]).getByRole('spinbutton'), {
-      target: { value: '4.5' },
+    renderTimelineShell({
+      onUpdateSceneDuration,
+      onUpdateSceneSubtitle,
+      onUpdateSceneSubtitlePosition,
+      onUpdateSceneSubtitleSize,
     });
+
     fireEvent.change(
-      within(items[0]).getByRole('textbox', { name: '1번 장면 자막' }),
-      { target: { value: '변경 자막' } },
+      screen.getByRole('spinbutton', { name: '이미지 표시시간 (초)' }),
+      { target: { value: '4.5' } },
     );
+    fireEvent.change(screen.getByRole('textbox', { name: '선택 장면 자막' }), {
+      target: { value: '변경 자막' },
+    });
     await user.selectOptions(
-      within(items[0]).getByRole('combobox', { name: '1번 장면 자막 위치' }),
+      screen.getByRole('combobox', { name: '선택 장면 자막 위치' }),
       'top',
     );
     await user.selectOptions(
-      within(items[0]).getByRole('combobox', { name: '1번 장면 자막 크기' }),
+      screen.getByRole('combobox', { name: '선택 장면 자막 크기' }),
       'large',
     );
 
-    expect(onMoveScene).toHaveBeenCalledWith(1, 'up');
-    expect(onDeleteScene).toHaveBeenCalledWith(0);
-    expect(onDuplicateScene).toHaveBeenCalledWith(0);
     expect(onUpdateSceneDuration).toHaveBeenCalledWith(0, 4500);
-    expect(onUpdateSceneSubtitle).toHaveBeenLastCalledWith(
-      0,
-      '변경 자막',
-    );
-    expect(onUpdateSceneSubtitlePosition).toHaveBeenCalledWith(
-      0,
-      'top',
-    );
-    expect(onUpdateSceneSubtitleSize).toHaveBeenCalledWith(
-      0,
-      'large',
-    );
+    expect(onUpdateSceneSubtitle).toHaveBeenCalledWith(0, '변경 자막');
+    expect(onUpdateSceneSubtitlePosition).toHaveBeenCalledWith(0, 'top');
+    expect(onUpdateSceneSubtitleSize).toHaveBeenCalledWith(0, 'large');
   });
 
-  it('marks the selected scene and forwards scene selection clicks', async () => {
-    const user = userEvent.setup();
-    const onSelectScene = vi.fn();
-    render(
-      <TimelineShell
-        media={media}
-        scenes={scenes}
-        selectedSceneIndex={0}
-        onSelectScene={onSelectScene}
-        onMoveScene={vi.fn()}
-        onDeleteScene={vi.fn()}
-        onDuplicateScene={vi.fn()}
-        onUpdateSceneDuration={vi.fn()}
-        onUpdateSceneSubtitle={vi.fn()}
-        onUpdateSceneSubtitlePosition={vi.fn()}
-        onUpdateSceneSubtitleSize={vi.fn()}
-      />,
-    );
+  it('uses preview timing for selected video information without loading metadata again', () => {
+    const { container } = renderTimelineShell({ selectedSceneIndex: 1 });
 
-    expect(
-      screen.getByRole('button', { name: '1번 장면 선택' }),
-    ).toHaveAttribute('aria-pressed', 'true');
-
-    await user.click(
-      screen.getByRole('button', { name: '2번 장면 선택' }),
-    );
-
-    expect(onSelectScene).toHaveBeenCalledWith(1);
+    expect(screen.getByText('clip.mp4')).toBeInTheDocument();
+    expect(screen.getByText('장면 길이 00:04')).toBeInTheDocument();
+    expect(screen.queryByRole('spinbutton')).toBeNull();
+    expect(container.querySelector('video')).toBeNull();
   });
 
-  it('selects two scenes with the same media independently by index', async () => {
-    const user = userEvent.setup();
-    const onSelectScene = vi.fn();
-    const duplicateScenes: Scene[] = [
-      scenes[0],
-      { ...scenes[0], subtitle: '복제 자막' },
-    ];
-    render(
-      <TimelineShell
-        media={media}
-        scenes={duplicateScenes}
-        selectedSceneIndex={1}
-        onSelectScene={onSelectScene}
-        onMoveScene={vi.fn()}
-        onDeleteScene={vi.fn()}
-        onDuplicateScene={vi.fn()}
-        onUpdateSceneDuration={vi.fn()}
-        onUpdateSceneSubtitle={vi.fn()}
-        onUpdateSceneSubtitlePosition={vi.fn()}
-        onUpdateSceneSubtitleSize={vi.fn()}
-      />,
-    );
+  it('shows no detail when the project has no selected scene', () => {
+    renderTimelineShell({
+      media: [],
+      scenes: [],
+      selectedSceneIndex: null,
+      playback: {
+        currentTimeMs: 0,
+        totalDurationMs: 0,
+        ready: true,
+        sceneTimings: [],
+        narrationDurationMs: undefined,
+      },
+    });
 
-    const sceneButtons = screen.getAllByRole('button', { name: /번 장면 선택/ });
-    expect(sceneButtons[0]).toHaveAttribute('aria-pressed', 'false');
-    expect(sceneButtons[1]).toHaveAttribute('aria-pressed', 'true');
-
-    await user.click(sceneButtons[0]);
-    expect(onSelectScene).toHaveBeenCalledWith(0);
+    expect(screen.getByText('선택된 장면이 없습니다.')).toBeInTheDocument();
   });
 });

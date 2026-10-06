@@ -4,6 +4,7 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
   within,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -38,6 +39,22 @@ const desktopApi = {
   onWindowCloseRequested: vi.fn(),
   respondToWindowClose: vi.fn(),
 };
+
+function loadPreviewVideoDuration(
+  container: HTMLElement,
+  mediaId: string,
+  duration: number,
+): void {
+  const metadataVideo = container.querySelector(
+    `video[data-preview-metadata-id="${mediaId}"]`,
+  ) as HTMLVideoElement;
+  expect(metadataVideo).not.toBeNull();
+  Object.defineProperty(metadataVideo, 'duration', {
+    configurable: true,
+    value: duration,
+  });
+  fireEvent.loadedMetadata(metadataVideo);
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -311,25 +328,68 @@ describe('App', () => {
         fileName: 'clip.mp4',
       },
     ]);
-    render(<App />);
+    const { container } = render(<App />);
     await screen.findByText('Combark Shorts Studio');
 
     await user.click(screen.getByRole('button', { name: '파일 추가' }));
 
-    expect(screen.getAllByText('photo.jpg')).toHaveLength(2);
-    expect(screen.getAllByText('이미지')).toHaveLength(2);
-    expect(screen.getAllByText('clip.mp4')).toHaveLength(2);
-    expect(screen.getAllByText('영상')).toHaveLength(2);
+    expect(screen.getByText('photo.jpg')).toBeInTheDocument();
+    expect(screen.getByText('clip.mp4')).toBeInTheDocument();
     expect(
       await screen.findByRole('img', { name: 'photo.jpg' }),
     ).toBeInTheDocument();
 
+    const metadataVideo = container.querySelector(
+      'video[data-preview-metadata-id="video-id"]',
+    ) as HTMLVideoElement;
+    Object.defineProperty(metadataVideo, 'duration', {
+      configurable: true,
+      value: 4,
+    });
+    fireEvent.loadedMetadata(metadataVideo);
+    expect(
+      await screen.findByRole('button', { name: '1번 장면 photo.jpg' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: '2번 장면 clip.mp4' }),
+    ).toBeInTheDocument();
+
     await user.type(
-      screen.getByRole('textbox', { name: '1번 장면 자막' }),
+      screen.getByRole('textbox', { name: '선택 장면 자막' }),
       '여행 시작',
     );
-    expect(screen.getByText('여행 시작')).toBeInTheDocument();
+    expect(screen.getAllByText('여행 시작').length).toBeGreaterThan(0);
     expect(screen.getByText('저장 필요')).toBeInTheDocument();
+  });
+
+  it('keeps the multitrack playhead synchronized with preview seeking', async () => {
+    const user = userEvent.setup();
+    desktopApi.openMediaDialog.mockResolvedValue([
+      {
+        id: 'photo-id',
+        kind: 'image',
+        sourcePath: 'C:\\media\\photo.jpg',
+        fileName: 'photo.jpg',
+      },
+    ]);
+    render(<App />);
+    await screen.findByText('Combark Shorts Studio');
+    await user.click(screen.getByRole('button', { name: '파일 추가' }));
+    await screen.findByRole('button', { name: '1번 장면 photo.jpg' });
+
+    const previewSeek = screen.getByRole('slider', {
+      name: '전체 프로젝트 재생 위치',
+    });
+    expect(previewSeek).toBeEnabled();
+    fireEvent.input(
+      previewSeek,
+      { target: { value: '1500' } },
+    );
+
+    expect(previewSeek).toHaveValue('1500');
+    await waitFor(() =>
+      expect(screen.getByLabelText('재생 위치선')).toHaveStyle({ left: '90px' }),
+    );
   });
 
   it('separates media and narration pickers while allowing narration replacement', async () => {
@@ -419,9 +479,11 @@ describe('App', () => {
 
     await user.click(screen.getByRole('button', { name: '열기' }));
 
-    expect(await screen.findAllByText('restored.webp')).toHaveLength(2);
+    expect(
+      await screen.findByRole('button', { name: '1번 장면 restored.webp' }),
+    ).toBeInTheDocument();
     expect(screen.getByRole('img', { name: 'restored.webp' })).toBeInTheDocument();
-    expect(screen.getByText('복원된 자막')).toBeInTheDocument();
+    expect(screen.getAllByText('복원된 자막').length).toBeGreaterThan(0);
     expect(screen.getByText('저장됨')).toBeInTheDocument();
   });
 
@@ -454,9 +516,6 @@ describe('App', () => {
     await screen.findByText('Combark Shorts Studio');
 
     await user.click(screen.getByRole('button', { name: '열기' }));
-    expect(
-      await screen.findByRole('button', { name: '1번 장면 선택' }),
-    ).toHaveAttribute('aria-pressed', 'true');
     const metadataVideo = container.querySelector(
       'video[data-preview-metadata-id="video-id"]',
     ) as HTMLVideoElement;
@@ -465,28 +524,33 @@ describe('App', () => {
       value: 4,
     });
     fireEvent.loadedMetadata(metadataVideo);
+    expect(
+      await screen.findByRole('button', { name: '1번 장면 photo.jpg' }),
+    ).toHaveAttribute('aria-pressed', 'true');
 
     await user.click(
-      screen.getByRole('button', { name: '2번 장면 선택' }),
+      screen.getByRole('button', { name: '2번 장면 clip.mp4' }),
     );
 
     expect(screen.getByLabelText('clip.mp4 미리보기')).toBeInTheDocument();
-    expect(screen.getByText('영상 자막')).toBeInTheDocument();
+    expect(container.querySelector('.preview-subtitle')).toHaveTextContent(
+      '영상 자막',
+    );
     expect(screen.getByRole('button', { name: '재생' })).toBeEnabled();
     expect(
       screen.getByRole('slider', { name: '전체 프로젝트 재생 위치' }),
     ).toHaveValue('3000');
 
     await user.selectOptions(
-      screen.getByRole('combobox', { name: '2번 장면 자막 위치' }),
+      screen.getByRole('combobox', { name: '선택 장면 자막 위치' }),
       'top',
     );
     await user.selectOptions(
-      screen.getByRole('combobox', { name: '2번 장면 자막 크기' }),
+      screen.getByRole('combobox', { name: '선택 장면 자막 크기' }),
       'large',
     );
 
-    const subtitle = screen.getByText('영상 자막');
+    const subtitle = container.querySelector('.preview-subtitle') as HTMLElement;
     expect(subtitle.style.top).toBe(`${(150 / 1920) * 100}%`);
     expect(subtitle.style.fontSize).toBe(`${(80 / 1080) * 100}cqw`);
     expect(screen.getByText('저장 필요')).toBeInTheDocument();
@@ -520,8 +584,10 @@ describe('App', () => {
     await screen.findByText('Combark Shorts Studio');
     await user.click(screen.getByRole('button', { name: '열기' }));
 
-    await user.click(screen.getByRole('button', { name: '복제' }));
-    let sceneButtons = screen.getAllByRole('button', { name: /번 장면 선택/ });
+    await user.click(screen.getByRole('button', { name: '선택 장면 복제' }));
+    let sceneButtons = screen.getAllByRole('button', {
+      name: /^\d+번 장면 photo\.jpg$/,
+    });
     expect(sceneButtons).toHaveLength(2);
     expect(sceneButtons[0]).toHaveAttribute('aria-pressed', 'false');
     expect(sceneButtons[1]).toHaveAttribute('aria-pressed', 'true');
@@ -529,41 +595,45 @@ describe('App', () => {
       screen.getByRole('slider', { name: '전체 프로젝트 재생 위치' }),
     ).toHaveValue('3000');
 
-    const subtitleInputs = screen.getAllByRole('textbox', { name: /번 장면 자막/ });
-    await user.clear(subtitleInputs[1]);
-    await user.type(subtitleInputs[1], '복제 자막');
-    expect(subtitleInputs[0]).toHaveValue('원본 자막');
-    expect(screen.getByText('복제 자막')).toBeInTheDocument();
+    const subtitleInput = screen.getByRole('textbox', {
+      name: '선택 장면 자막',
+    });
+    await user.clear(subtitleInput);
+    await user.type(subtitleInput, '복제 자막');
+    expect(subtitleInput).toHaveValue('복제 자막');
+    expect(screen.getAllByText('복제 자막').length).toBeGreaterThan(0);
 
-    const itemBeforeMove = sceneButtons[1].closest('li');
-    expect(itemBeforeMove).not.toBeNull();
     await user.click(
-      within(itemBeforeMove as HTMLLIElement).getByRole('button', { name: '위' }),
+      screen.getByRole('button', { name: '선택 장면 이전으로 이동' }),
     );
-    sceneButtons = screen.getAllByRole('button', { name: /번 장면 선택/ });
+    sceneButtons = screen.getAllByRole('button', {
+      name: /^\d+번 장면 photo\.jpg$/,
+    });
     expect(sceneButtons[0]).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByText('복제 자막')).toBeInTheDocument();
+    expect(screen.getAllByText('복제 자막').length).toBeGreaterThan(0);
     expect(
       screen.getByRole('slider', { name: '전체 프로젝트 재생 위치' }),
     ).toHaveValue('0');
 
-    const itemBeforeDelete = sceneButtons[0].closest('li');
-    expect(itemBeforeDelete).not.toBeNull();
     await user.click(
-      within(itemBeforeDelete as HTMLLIElement).getByRole('button', {
-        name: '파일 제거',
-      }),
+      screen.getByRole('button', { name: '선택 장면 삭제' }),
     );
-    sceneButtons = screen.getAllByRole('button', { name: /번 장면 선택/ });
+    sceneButtons = screen.getAllByRole('button', {
+      name: /^\d+번 장면 photo\.jpg$/,
+    });
     expect(sceneButtons).toHaveLength(1);
     expect(sceneButtons[0]).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByText('원본 자막')).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: '선택 장면 자막' })).toHaveValue(
+      '원본 자막',
+    );
     expect(
       screen.getByRole('slider', { name: '전체 프로젝트 재생 위치' }),
     ).toHaveValue('0');
 
-    await user.click(screen.getByRole('button', { name: '파일 제거' }));
-    expect(screen.queryByRole('button', { name: /번 장면 선택/ })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '선택 장면 삭제' }));
+    expect(
+      screen.queryByRole('button', { name: /^\d+번 장면 photo\.jpg$/ }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '재생' })).toBeDisabled();
   });
 
@@ -592,21 +662,22 @@ describe('App', () => {
     };
     desktopApi.openProjectDialog.mockResolvedValue('C:\\projects\\reopen.cssproj');
     desktopApi.readProject.mockImplementation(async () => structuredClone(project));
-    render(<App />);
+    const { container } = render(<App />);
     await screen.findByText('Combark Shorts Studio');
 
     await user.click(screen.getByRole('button', { name: '열기' }));
+    loadPreviewVideoDuration(container, 'video-id', 4);
     await user.click(
-      await screen.findByRole('button', { name: '2번 장면 선택' }),
+      await screen.findByRole('button', { name: '2번 장면 clip.mp4' }),
     );
     expect(
-      screen.getByRole('button', { name: '2번 장면 선택' }),
+      screen.getByRole('button', { name: '2번 장면 clip.mp4' }),
     ).toHaveAttribute('aria-pressed', 'true');
 
     await user.click(screen.getByRole('button', { name: '열기' }));
 
     expect(
-      await screen.findByRole('button', { name: '1번 장면 선택' }),
+      await screen.findByRole('button', { name: '1번 장면 photo.jpg' }),
     ).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('img', { name: 'photo.jpg' })).toBeInTheDocument();
   });
@@ -627,22 +698,20 @@ describe('App', () => {
         fileName: 'clip.mp4',
       },
     ]);
-    render(<App />);
+    const { container } = render(<App />);
     await screen.findByText('Combark Shorts Studio');
     await user.click(screen.getByRole('button', { name: '파일 추가' }));
+    loadPreviewVideoDuration(container, 'video-id', 4);
     await user.click(
-      await screen.findByRole('button', { name: '2번 장면 선택' }),
+      await screen.findByRole('button', { name: '2번 장면 clip.mp4' }),
     );
 
-    const selectedItem = screen
-      .getByRole('button', { name: '2번 장면 선택' })
-      .closest('li');
     await user.click(
-      within(selectedItem as HTMLElement).getByRole('button', { name: '위' }),
+      screen.getByRole('button', { name: '선택 장면 이전으로 이동' }),
     );
 
     expect(
-      screen.getByRole('button', { name: '1번 장면 선택' }),
+      screen.getByRole('button', { name: '1번 장면 clip.mp4' }),
     ).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByLabelText('clip.mp4 미리보기')).toBeInTheDocument();
   });
@@ -663,24 +732,20 @@ describe('App', () => {
         fileName: 'clip.mp4',
       },
     ]);
-    render(<App />);
+    const { container } = render(<App />);
     await screen.findByText('Combark Shorts Studio');
     await user.click(screen.getByRole('button', { name: '파일 추가' }));
+    loadPreviewVideoDuration(container, 'video-id', 4);
     await user.click(
-      await screen.findByRole('button', { name: '2번 장면 선택' }),
+      await screen.findByRole('button', { name: '2번 장면 clip.mp4' }),
     );
 
-    const selectedItem = screen
-      .getByRole('button', { name: '2번 장면 선택' })
-      .closest('li');
     await user.click(
-      within(selectedItem as HTMLElement).getByRole('button', {
-        name: '파일 제거',
-      }),
+      screen.getByRole('button', { name: '선택 장면 삭제' }),
     );
 
     expect(
-      await screen.findByRole('button', { name: '1번 장면 선택' }),
+      await screen.findByRole('button', { name: '1번 장면 photo.jpg' }),
     ).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('img', { name: 'photo.jpg' })).toBeInTheDocument();
     expect(screen.queryByText('clip.mp4')).not.toBeInTheDocument();
@@ -702,13 +767,8 @@ describe('App', () => {
     await user.click(await screen.findByRole('button', { name: '재생' }));
     expect(screen.getByRole('button', { name: '일시정지' })).toBeEnabled();
 
-    const selectedItem = screen
-      .getByRole('button', { name: '1번 장면 선택' })
-      .closest('li');
     await user.click(
-      within(selectedItem as HTMLElement).getByRole('button', {
-        name: '파일 제거',
-      }),
+      screen.getByRole('button', { name: '선택 장면 삭제' }),
     );
 
     expect(await screen.findByRole('button', { name: '재생' })).toBeDisabled();
@@ -755,8 +815,8 @@ describe('App', () => {
     expect(screen.getByText('미리보기')).toBeInTheDocument();
     expect(screen.getByText('속성')).toBeInTheDocument();
 
-    expect(screen.getByRole('region', { name: '장면 목록' })).toBeInTheDocument();
-    expect(screen.getByText('장면이 없습니다.')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '타임라인' })).toBeInTheDocument();
+    expect(await screen.findByText('장면이 없습니다.')).toBeInTheDocument();
     expect(
       screen.getByRole('region', { name: '최근 프로젝트' }),
     ).toBeInTheDocument();
@@ -807,10 +867,18 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '자동 구성 적용' }));
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(screen.getByText('자동 생성 자막')).toBeInTheDocument();
-    expect(screen.getByRole('spinbutton', { name: '표시시간 (초)' })).toHaveValue(3);
-    expect(screen.getByRole('combobox', { name: '1번 장면 자막 위치' })).toHaveValue('top');
-    expect(screen.getByRole('combobox', { name: '1번 장면 자막 크기' })).toHaveValue('large');
+    expect(screen.getByRole('textbox', { name: '선택 장면 자막' })).toHaveValue(
+      '자동 생성 자막',
+    );
+    expect(
+      screen.getByRole('spinbutton', { name: '이미지 표시시간 (초)' }),
+    ).toHaveValue(3);
+    expect(
+      screen.getByRole('combobox', { name: '선택 장면 자막 위치' }),
+    ).toHaveValue('top');
+    expect(
+      screen.getByRole('combobox', { name: '선택 장면 자막 크기' }),
+    ).toHaveValue('large');
     expect(within(screen.getByRole('contentinfo')).getByText('저장 필요')).toBeInTheDocument();
   });
 

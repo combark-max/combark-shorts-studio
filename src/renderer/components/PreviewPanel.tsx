@@ -12,6 +12,7 @@ import {
   buildPreviewTimeline,
   locatePreviewTime,
 } from '../project/previewTimeline';
+import type { TimelinePlaybackSnapshot } from '../project/timelineLayout';
 
 interface PreviewPanelProps {
   media: MediaAsset[];
@@ -19,6 +20,7 @@ interface PreviewPanelProps {
   scenes: Scene[];
   selectedSceneIndex: number | null;
   onSelectScene: (sceneIndex: number) => void;
+  onPlaybackSnapshotChange?: (snapshot: TimelinePlaybackSnapshot) => void;
 }
 
 type MediaError = 'load' | 'play' | null;
@@ -56,6 +58,7 @@ export function PreviewPanel({
   scenes,
   selectedSceneIndex,
   onSelectScene,
+  onPlaybackSnapshotChange,
 }: PreviewPanelProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [mediaError, setMediaError] = useState<MediaError>(null);
@@ -111,6 +114,16 @@ export function PreviewPanel({
       ),
     [videoAssets, videoDurationEntries],
   );
+  const videoDurationUnavailable = useMemo(
+    () =>
+      videoAssets.some((asset) => {
+        const entry = videoDurationEntries[asset.id];
+        return (
+          entry?.sourcePath === asset.sourcePath && entry.durationMs === null
+        );
+      }),
+    [videoAssets, videoDurationEntries],
+  );
   const previewTimeline = useMemo(
     () =>
       buildPreviewTimeline(scenes, media, videoDurationMsByMediaId),
@@ -145,6 +158,26 @@ export function PreviewPanel({
 
   const currentSceneTiming = previewTimeline?.scenes[currentIndex] ?? null;
   const currentSceneStartMs = currentSceneTiming?.startMs ?? null;
+
+  useEffect(() => {
+    if (!onPlaybackSnapshotChange) {
+      return;
+    }
+    onPlaybackSnapshotChange({
+      currentTimeMs: previewTimeline ? globalCurrentTimeMs : 0,
+      totalDurationMs: previewTimeline?.totalDurationMs ?? 0,
+      ready: previewTimeline !== null,
+      durationUnavailable: videoDurationUnavailable,
+      sceneTimings: previewTimeline?.scenes ?? [],
+      narrationDurationMs,
+    });
+  }, [
+    globalCurrentTimeMs,
+    narrationDurationMs,
+    onPlaybackSnapshotChange,
+    previewTimeline,
+    videoDurationUnavailable,
+  ]);
 
   const applyNarrationSeek = (
     globalTimeMs: number,

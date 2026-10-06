@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PreviewPanel } from '../../src/renderer/components/PreviewPanel';
+import type { TimelinePlaybackSnapshot } from '../../src/renderer/project/timelineLayout';
 import { createMediaUrl } from '../../src/shared/mediaProtocol';
 import type {
   MediaAsset,
@@ -47,11 +48,13 @@ function StatefulPreview({
   initialSceneIndex = 0,
   mediaList = media,
   sceneList = scenes,
+  onPlaybackSnapshotChange,
 }: {
   narrationAsset?: NarrationAsset | null;
   initialSceneIndex?: number;
   mediaList?: MediaAsset[];
   sceneList?: Scene[];
+  onPlaybackSnapshotChange?: (snapshot: TimelinePlaybackSnapshot) => void;
 }) {
   const [selectedSceneIndex, setSelectedSceneIndex] = useState(initialSceneIndex);
 
@@ -62,6 +65,7 @@ function StatefulPreview({
       scenes={sceneList}
       selectedSceneIndex={selectedSceneIndex}
       onSelectScene={setSelectedSceneIndex}
+      onPlaybackSnapshotChange={onPlaybackSnapshotChange}
     />
   );
 }
@@ -100,6 +104,62 @@ afterEach(() => {
 });
 
 describe('PreviewPanel', () => {
+  it('reports its project clock as a read-only timeline snapshot', async () => {
+    vi.useFakeTimers();
+    const onPlaybackSnapshotChange = vi.fn();
+    render(
+      <StatefulPreview
+        mediaList={[media[0]]}
+        sceneList={[scenes[0]]}
+        onPlaybackSnapshotChange={onPlaybackSnapshotChange}
+      />,
+    );
+
+    expect(onPlaybackSnapshotChange).toHaveBeenLastCalledWith({
+      currentTimeMs: 0,
+      totalDurationMs: 3000,
+      ready: true,
+      durationUnavailable: false,
+      sceneTimings: [
+        { sceneIndex: 0, startMs: 0, endMs: 3000, durationMs: 3000 },
+      ],
+      narrationDurationMs: undefined,
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '재생' }));
+    await act(async () => vi.advanceTimersByTimeAsync(500));
+
+    expect(onPlaybackSnapshotChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ currentTimeMs: 500 }),
+    );
+
+    fireEvent.change(
+      screen.getByRole('slider', { name: '전체 프로젝트 재생 위치' }),
+      { target: { value: '1500' } },
+    );
+    expect(onPlaybackSnapshotChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ currentTimeMs: 1500 }),
+    );
+  });
+
+  it('reports an unready timeline instead of partial video geometry', () => {
+    const onPlaybackSnapshotChange = vi.fn();
+    render(
+      <StatefulPreview
+        onPlaybackSnapshotChange={onPlaybackSnapshotChange}
+      />,
+    );
+
+    expect(onPlaybackSnapshotChange).toHaveBeenLastCalledWith({
+      currentTimeMs: 0,
+      totalDurationMs: 0,
+      ready: false,
+      durationUnavailable: false,
+      sceneTimings: [],
+      narrationDurationMs: undefined,
+    });
+  });
+
   it('enables the project seek bar only after every video duration is ready', () => {
     const { container } = render(<StatefulPreview />);
     const seekBar = screen.getByRole('slider', {
@@ -122,7 +182,12 @@ describe('PreviewPanel', () => {
   });
 
   it('keeps the seek bar disabled when video metadata fails', () => {
-    const { container } = render(<StatefulPreview />);
+    const onPlaybackSnapshotChange = vi.fn();
+    const { container } = render(
+      <StatefulPreview
+        onPlaybackSnapshotChange={onPlaybackSnapshotChange}
+      />,
+    );
     const metadataVideo = container.querySelector(
       'video[data-preview-metadata-id="video"]',
     ) as HTMLVideoElement;
@@ -133,6 +198,12 @@ describe('PreviewPanel', () => {
       screen.getByRole('slider', { name: '전체 프로젝트 재생 위치' }),
     ).toBeDisabled();
     expect(screen.getByText('00:00 / --:--')).toBeInTheDocument();
+    expect(onPlaybackSnapshotChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        ready: false,
+        durationUnavailable: true,
+      }),
+    );
   });
 
   it('loads metadata once for repeated scenes using the same video', () => {

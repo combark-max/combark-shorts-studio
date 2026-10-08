@@ -33,6 +33,7 @@ interface SceneArgsInput {
   kind: MediaAsset['kind'];
   sourcePath: string;
   durationMs: number | null;
+  playbackDurationMs: number | null;
   filter: string;
   outputPath: string;
 }
@@ -119,8 +120,15 @@ function buildVideoFilter(subtitlePath: string | null, fontsDirectory: string): 
 
 export function buildSceneArgs(input: SceneArgsInput): string[] {
   const inputArgs = input.kind === 'image'
-    ? ['-loop', '1', '-i', input.sourcePath, '-t', String((input.durationMs as number) / 1000)]
-    : ['-i', input.sourcePath];
+    ? ['-loop', '1', '-i', input.sourcePath]
+    : input.playbackDurationMs === null
+      ? ['-i', input.sourcePath]
+      : ['-stream_loop', '-1', '-i', input.sourcePath];
+  const outputDurationArgs = input.kind === 'image'
+    ? ['-t', String((input.durationMs as number) / 1000)]
+    : input.playbackDurationMs === null
+      ? []
+      : ['-t', String(input.playbackDurationMs / 1000)];
 
   return [
     '-y',
@@ -128,6 +136,7 @@ export function buildSceneArgs(input: SceneArgsInput): string[] {
     '-map', '0:v:0',
     '-vf', input.filter,
     '-an',
+    ...outputDurationArgs,
     '-c:v', 'libx264',
     '-preset', 'medium',
     '-crf', '18',
@@ -276,6 +285,7 @@ export async function exportProject(
         kind: asset.kind,
         sourcePath: asset.sourcePath,
         durationMs: scene.durationMs,
+        playbackDurationMs: scene.playbackDurationMs,
         filter: buildVideoFilter(subtitlePath, fontsDirectory),
         outputPath: scenePath,
       }));

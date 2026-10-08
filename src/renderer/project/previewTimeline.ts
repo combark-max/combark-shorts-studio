@@ -1,4 +1,5 @@
 import type { MediaAsset, Scene } from '../../shared/project/types';
+import { getEffectiveSceneDurationMs } from '../../shared/project/sceneDuration';
 
 export interface PreviewSceneTiming {
   sceneIndex: number;
@@ -35,12 +36,13 @@ export function buildPreviewTimeline(
 
   for (const [sceneIndex, scene] of scenes.entries()) {
     const asset = mediaById.get(scene.mediaId);
-    const durationMs =
-      asset?.kind === 'image'
-        ? scene.durationMs
-        : asset?.kind === 'video'
-          ? videoDurationMsByMediaId[asset.id]
-          : null;
+    const durationMs = asset
+      ? getEffectiveSceneDurationMs(
+          scene,
+          asset.kind,
+          videoDurationMsByMediaId[asset.id],
+        )
+      : null;
 
     if (
       typeof durationMs !== 'number' ||

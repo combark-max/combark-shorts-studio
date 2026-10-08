@@ -62,6 +62,7 @@ export function App() {
     duplicateScene,
     deleteScene,
     updateSceneDuration,
+    updateVideoPlaybackDuration,
     updateSceneSubtitle,
     updateSceneSubtitlePosition,
     updateSceneSubtitleSize,
@@ -391,6 +392,7 @@ export function App() {
         onDuplicateScene={handleDuplicateScene}
         onDeleteScene={handleDeleteScene}
         onUpdateSceneDuration={updateSceneDuration}
+        onUpdateVideoPlaybackDuration={updateVideoPlaybackDuration}
         onUpdateSceneSubtitle={updateSceneSubtitle}
         onUpdateSceneSubtitlePosition={updateSceneSubtitlePosition}
         onUpdateSceneSubtitleSize={updateSceneSubtitleSize}

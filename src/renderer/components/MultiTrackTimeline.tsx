@@ -38,6 +38,7 @@ interface MultiTrackTimelineProps {
   onMoveScene: (sceneIndex: number, direction: 'up' | 'down') => void;
   onMoveSceneTo: (fromIndex: number, toIndex: number) => void;
   onUpdateSceneDuration: (sceneIndex: number, durationMs: number) => void;
+  onUpdateVideoPlaybackDuration: (sceneIndex: number, durationMs: number) => void;
 }
 
 type TimelineInteraction =
@@ -56,6 +57,7 @@ type TimelineInteraction =
       startClientX: number;
       originalDurationMs: number;
       draftDurationMs: number;
+      mediaKind: MediaAsset['kind'];
     };
 
 const REORDER_DRAG_THRESHOLD_PX = 5;
@@ -80,6 +82,7 @@ export function MultiTrackTimeline({
   onMoveScene,
   onMoveSceneTo,
   onUpdateSceneDuration,
+  onUpdateVideoPlaybackDuration,
 }: MultiTrackTimelineProps) {
   const hasSelection =
     selectedSceneIndex !== null &&
@@ -215,6 +218,7 @@ export function MultiTrackTimeline({
     event: ReactPointerEvent<HTMLButtonElement>,
     sceneIndex: number,
     durationMs: number,
+    mediaKind: MediaAsset['kind'],
   ) => {
     if (event.button !== 0 || interactionRef.current) {
       return;
@@ -230,6 +234,7 @@ export function MultiTrackTimeline({
       startClientX: event.clientX,
       originalDurationMs: durationMs,
       draftDurationMs: durationMs,
+      mediaKind,
     });
   };
 
@@ -261,7 +266,14 @@ export function MultiTrackTimeline({
     event.preventDefault();
     event.stopPropagation();
     if (current.draftDurationMs !== current.originalDurationMs) {
-      onUpdateSceneDuration(current.sceneIndex, current.draftDurationMs);
+      if (current.mediaKind === 'video') {
+        onUpdateVideoPlaybackDuration(
+          current.sceneIndex,
+          current.draftDurationMs,
+        );
+      } else {
+        onUpdateSceneDuration(current.sceneIndex, current.draftDurationMs);
+      }
     }
     finishInteraction();
   };
@@ -420,10 +432,8 @@ export function MultiTrackTimeline({
           <div className="timeline-track-labels" aria-hidden="true">
             <span className="timeline-ruler-label">시간</span>
             <span>사진/영상</span>
-            <span>자막</span>
             <span>나레이션</span>
             <span>효과음</span>
-            <span>음악</span>
           </div>
           <div className="timeline-scroll" ref={scrollRef}>
             <div
@@ -496,7 +506,7 @@ export function MultiTrackTimeline({
                           {asset.fileName}
                         </span>
                       </button>
-                      {asset.kind === 'image' && scene.durationMs !== null ? (
+                      {block.widthPx > 0 ? (
                         <button
                           aria-label={`${sceneIndex + 1}번 장면 길이 조절`}
                           className="timeline-resize-handle"
@@ -508,7 +518,11 @@ export function MultiTrackTimeline({
                             handleResizePointerDown(
                               event,
                               sceneIndex,
-                              scene.durationMs as number,
+                              Math.round(
+                                (block.widthPx / TIMELINE_PIXELS_PER_SECOND) *
+                                  1000,
+                              ),
+                              asset.kind,
                             )
                           }
                           onPointerMove={handleResizePointerMove}
@@ -521,33 +535,6 @@ export function MultiTrackTimeline({
                         </span>
                       ) : null}
                     </div>
-                  );
-                })}
-              </div>
-              <div className="timeline-track" aria-label="자막 트랙">
-                {scenes.map((scene, sceneIndex) => {
-                  const block = blockBySceneIndex.get(sceneIndex);
-                  if (!scene.subtitle || !block) {
-                    return null;
-                  }
-                  return (
-                    <button
-                      aria-label={`${sceneIndex + 1}번 장면 자막`}
-                      className={
-                        sceneIndex === selectedSceneIndex
-                          ? 'timeline-clip timeline-subtitle-clip timeline-clip-selected'
-                          : 'timeline-clip timeline-subtitle-clip'
-                      }
-                      key={`subtitle-${sceneIndex}`}
-                      style={{
-                        left: `${block.leftPx}px`,
-                        width: `${block.widthPx}px`,
-                      }}
-                      type="button"
-                      onClick={() => onSelectScene(sceneIndex)}
-                    >
-                      {scene.subtitle}
-                    </button>
                   );
                 })}
               </div>
@@ -579,13 +566,6 @@ export function MultiTrackTimeline({
               <div
                 aria-disabled="true"
                 aria-label="효과음 트랙"
-                className="timeline-track timeline-track-disabled"
-              >
-                <span>향후 지원</span>
-              </div>
-              <div
-                aria-disabled="true"
-                aria-label="음악 트랙"
                 className="timeline-track timeline-track-disabled"
               >
                 <span>향후 지원</span>

@@ -1,4 +1,5 @@
 import type { ProjectDocument, Scene } from './types';
+import { getEffectiveSceneDurationMs } from './sceneDuration';
 
 export type AutoShortsDurationMode = 'default' | 'narration' | 'fallback';
 
@@ -111,8 +112,12 @@ export function buildAutoShortsPlan(
   );
 
   if (project.narration) {
-    const videoDurations = videoScenes.map(
-      (scene) => metadata.videoDurationMsByMediaId[scene.mediaId],
+    const videoDurations = videoScenes.map((scene) =>
+      getEffectiveSceneDurationMs(
+        scene,
+        'video',
+        metadata.videoDurationMsByMediaId[scene.mediaId],
+      ),
     );
     const videoMetadataReady = videoDurations.every(isPositiveInteger);
     if (videoMetadataReady) {

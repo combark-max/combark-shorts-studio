@@ -24,6 +24,7 @@ interface TimelineShellProps {
   onDeleteScene: (sceneIndex: number) => void;
   onDuplicateScene: (sceneIndex: number) => void;
   onUpdateSceneDuration: (sceneIndex: number, durationMs: number) => void;
+  onUpdateVideoPlaybackDuration: (sceneIndex: number, durationMs: number) => void;
   onUpdateSceneSubtitle: (sceneIndex: number, subtitle: string) => void;
   onUpdateSceneSubtitlePosition: (
     sceneIndex: number,
@@ -55,6 +56,7 @@ export function TimelineShell({
   onDeleteScene,
   onDuplicateScene,
   onUpdateSceneDuration,
+  onUpdateVideoPlaybackDuration,
   onUpdateSceneSubtitle,
   onUpdateSceneSubtitlePosition,
   onUpdateSceneSubtitleSize,
@@ -88,6 +90,7 @@ export function TimelineShell({
         onMoveSceneTo={onMoveSceneTo}
         onSelectScene={onSelectScene}
         onUpdateSceneDuration={onUpdateSceneDuration}
+        onUpdateVideoPlaybackDuration={onUpdateVideoPlaybackDuration}
         playback={playback}
         scenes={scenes}
         selectedSceneIndex={selectedSceneIndex}

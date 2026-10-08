@@ -33,9 +33,9 @@ const media: MediaAsset[] = [
 ];
 
 const scenes: Scene[] = [
-  { mediaId: 'first-image', durationMs: 3000, subtitle: '첫 자막', subtitlePosition: 'top', subtitleSize: 'large' },
-  { mediaId: 'video', durationMs: null, subtitle: '영상 자막', subtitlePosition: 'center', subtitleSize: 'small' },
-  { mediaId: 'last-image', durationMs: 2000, subtitle: '', subtitlePosition: 'bottom', subtitleSize: 'medium' },
+  { mediaId: 'first-image', durationMs: 3000, playbackDurationMs: null, subtitle: '첫 자막', subtitlePosition: 'top', subtitleSize: 'large' },
+  { mediaId: 'video', durationMs: null, playbackDurationMs: null, subtitle: '영상 자막', subtitlePosition: 'center', subtitleSize: 'small' },
+  { mediaId: 'last-image', durationMs: 2000, playbackDurationMs: null, subtitle: '', subtitlePosition: 'bottom', subtitleSize: 'medium' },
 ];
 
 const narration: NarrationAsset = {
@@ -104,7 +104,7 @@ afterEach(() => {
 });
 
 describe('PreviewPanel', () => {
-  it('places compact playback controls beside the frame and project seek below them', () => {
+  it('places controls beside the frame, then seek, then time without a visible heading', () => {
     const { container } = render(
       <StatefulPreview mediaList={[media[0]]} sceneList={[scenes[0]]} />,
     );
@@ -112,15 +112,152 @@ describe('PreviewPanel', () => {
     const frame = container.querySelector('.preview-frame') as HTMLElement;
     const controls = container.querySelector('.preview-controls') as HTMLElement;
     const seek = container.querySelector('.preview-seek') as HTMLElement;
+    const time = container.querySelector('.preview-time') as HTMLElement;
+    const panel = container.querySelector('.preview-panel') as HTMLElement;
 
     expect(stage).toContainElement(frame);
     expect(stage).toContainElement(controls);
     expect(stage).not.toContainElement(seek);
     expect(stage.nextElementSibling).toBe(seek);
+    expect(seek.nextElementSibling).toBe(time);
+    expect(panel).toHaveAttribute('aria-label', '미리보기');
+    expect(screen.queryByRole('heading', { name: '미리보기' })).toBeNull();
     expect(
       within(controls).getByRole('button', { name: '처음부터' }),
     ).toBeInTheDocument();
     expect(within(controls).getAllByRole('button')).toHaveLength(4);
+  });
+
+  it('mutes source audio and seeks an extended video to the modulo source position', () => {
+    const extendedVideo = { ...scenes[1], playbackDurationMs: 25_000 };
+    const { container } = render(
+      <StatefulPreview
+        initialSceneIndex={0}
+        mediaList={[media[1]]}
+        sceneList={[extendedVideo]}
+      />,
+    );
+    loadVideoDuration(container, 'video', 10);
+    const video = screen.getByLabelText('clip.mp4 미리보기') as HTMLVideoElement;
+    setMediaDuration(video, 10);
+    fireEvent.loadedMetadata(video);
+
+    expect(video).toHaveProperty('muted', true);
+    expect(video).toHaveProperty('loop', true);
+    fireEvent.change(
+      screen.getByRole('slider', { name: '전체 프로젝트 재생 위치' }),
+      { target: { value: '23000' } },
+    );
+    expect(video.currentTime).toBe(3);
+  });
+
+  it('ends a shortened video scene from the project clock before source EOF', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+    const shortVideo = { ...scenes[1], playbackDurationMs: 600 };
+    const { container } = render(
+      <StatefulPreview
+        mediaList={[media[1], media[2]]}
+        sceneList={[shortVideo, scenes[2]]}
+      />,
+    );
+    loadVideoDuration(container, 'video', 10);
+    const video = screen.getByLabelText('clip.mp4 미리보기') as HTMLVideoElement;
+    setMediaDuration(video, 10);
+    fireEvent.loadedMetadata(video);
+
+    fireEvent.click(screen.getByRole('button', { name: '재생' }));
+    await act(async () => vi.advanceTimersByTimeAsync(599));
+    expect(screen.getByLabelText('clip.mp4 미리보기')).toBeInTheDocument();
+    await act(async () => vi.advanceTimersByTimeAsync(1));
+    expect(screen.getByRole('img', { name: 'last.png' })).toBeInTheDocument();
+  });
+
+  it('uses a newly shortened duration immediately for the selected video scene', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+    const initialVideo = { ...scenes[1], playbackDurationMs: 1500 };
+    const shortenedVideo = { ...initialVideo, playbackDurationMs: 500 };
+    const { container, rerender } = render(
+      <StatefulPreview
+        mediaList={[media[1], media[2]]}
+        sceneList={[initialVideo, scenes[2]]}
+      />,
+    );
+    loadVideoDuration(container, 'video', 1000);
+    const video = screen.getByLabelText(
+      'clip.mp4 미리보기',
+    ) as HTMLVideoElement;
+    setMediaDuration(video, 1);
+    fireEvent.loadedMetadata(video);
+
+    rerender(
+      <StatefulPreview
+        mediaList={[media[1], media[2]]}
+        sceneList={[shortenedVideo, scenes[2]]}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: '재생' }));
+
+    await act(async () => vi.advanceTimersByTimeAsync(499));
+    expect(screen.getByLabelText('clip.mp4 미리보기')).toBeInTheDocument();
+    await act(async () => vi.advanceTimersByTimeAsync(1));
+    expect(screen.getByRole('img', { name: 'last.png' })).toBeInTheDocument();
+  });
+
+  it('uses a newly extended duration immediately and loops until its new end', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+    const initialVideo = { ...scenes[1], playbackDurationMs: 500 };
+    const extendedVideo = { ...initialVideo, playbackDurationMs: 3500 };
+    const { container, rerender } = render(
+      <StatefulPreview
+        mediaList={[media[1], media[2]]}
+        sceneList={[initialVideo, scenes[2]]}
+      />,
+    );
+    loadVideoDuration(container, 'video', 1000);
+    let video = screen.getByLabelText('clip.mp4 미리보기') as HTMLVideoElement;
+    setMediaDuration(video, 1);
+    fireEvent.loadedMetadata(video);
+
+    rerender(
+      <StatefulPreview
+        mediaList={[media[1], media[2]]}
+        sceneList={[extendedVideo, scenes[2]]}
+      />,
+    );
+    video = screen.getByLabelText('clip.mp4 미리보기') as HTMLVideoElement;
+    expect(video.loop).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: '재생' }));
+
+    await act(async () => vi.advanceTimersByTimeAsync(3499));
+    expect(screen.getByLabelText('clip.mp4 미리보기')).toBeInTheDocument();
+    await act(async () => vi.advanceTimersByTimeAsync(1));
+    expect(screen.getByRole('img', { name: 'last.png' })).toBeInTheDocument();
+  });
+
+  it('uses a newly extended duration for an immediate modulo seek', () => {
+    const initialVideo = { ...scenes[1], playbackDurationMs: 500 };
+    const extendedVideo = { ...initialVideo, playbackDurationMs: 3500 };
+    const { container, rerender } = render(
+      <StatefulPreview mediaList={[media[1]]} sceneList={[initialVideo]} />,
+    );
+    loadVideoDuration(container, 'video', 1000);
+    let video = screen.getByLabelText('clip.mp4 미리보기') as HTMLVideoElement;
+    setMediaDuration(video, 1);
+    fireEvent.loadedMetadata(video);
+
+    rerender(
+      <StatefulPreview mediaList={[media[1]]} sceneList={[extendedVideo]} />,
+    );
+    fireEvent.change(
+      screen.getByRole('slider', { name: '전체 프로젝트 재생 위치' }),
+      { target: { value: '2500' } },
+    );
+
+    video = screen.getByLabelText('clip.mp4 미리보기') as HTMLVideoElement;
+    expect(video.currentTime).toBe(0.5);
   });
 
   it('reports its project clock as a read-only timeline snapshot', async () => {
@@ -290,19 +427,21 @@ describe('PreviewPanel', () => {
     expect(screen.getByRole('button', { name: '재생' })).toBeInTheDocument();
   });
 
-  it('tracks active video time on the project seek bar', () => {
+  it('tracks active video time from the project clock', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
     const { container } = render(<StatefulPreview initialSceneIndex={1} />);
     loadVideoDuration(container, 'video', 4);
     const video = screen.getByLabelText('clip.mp4 미리보기') as HTMLVideoElement;
     setMediaDuration(video, 4);
     fireEvent.loadedMetadata(video);
 
-    video.currentTime = 1.25;
-    fireEvent.timeUpdate(video);
+    fireEvent.click(screen.getByRole('button', { name: '재생' }));
+    await act(async () => vi.advanceTimersByTimeAsync(1200));
 
     expect(
       screen.getByRole('slider', { name: '전체 프로젝트 재생 위치' }),
-    ).toHaveValue('4250');
+    ).toHaveValue('4200');
     expect(screen.getByText('00:04 / 00:09')).toBeInTheDocument();
   });
 
@@ -471,8 +610,7 @@ describe('PreviewPanel', () => {
   });
 
   it('keeps the same narration element and source across a scene-changing seek', () => {
-    const { container } = render(<StatefulPreview narrationAsset={narration} />);
-    loadVideoDuration(container, 'video', 4);
+    render(<StatefulPreview narrationAsset={narration} />);
     const audioBefore = screen.getByLabelText('내레이션') as HTMLAudioElement;
     const sourceBefore = audioBefore.getAttribute('src');
     const load = vi.fn();
@@ -858,7 +996,9 @@ describe('PreviewPanel', () => {
     expect(screen.getByRole('button', { name: '재생' })).toBeInTheDocument();
   });
 
-  it('keeps the project seek bar at one hundred percent after the final video', () => {
+  it('keeps the project seek bar at one hundred percent after the final video', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
     const { container } = render(
       <StatefulPreview
         mediaList={[media[1]]}
@@ -870,7 +1010,8 @@ describe('PreviewPanel', () => {
     setMediaDuration(video, 4);
     fireEvent.loadedMetadata(video);
 
-    fireEvent.ended(video);
+    fireEvent.click(screen.getByRole('button', { name: '재생' }));
+    await act(async () => vi.advanceTimersByTimeAsync(4000));
 
     expect(
       screen.getByRole('slider', { name: '전체 프로젝트 재생 위치' }),
@@ -1050,20 +1191,28 @@ describe('PreviewPanel', () => {
     expect(screen.getByRole('button', { name: '재생' })).toBeInTheDocument();
   });
 
-  it('advances at video EOF between consecutive scenes with the same media', () => {
+  it('advances at the project-clock boundary between consecutive video scenes', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
     const duplicateVideos: Scene[] = [
       { ...scenes[1], subtitle: '원본 영상' },
       { ...scenes[1], subtitle: '복제 영상' },
     ];
-    render(<StatefulPreview sceneList={duplicateVideos} />);
+    const { container } = render(<StatefulPreview sceneList={duplicateVideos} />);
+    loadVideoDuration(container, 'video', 4);
+    const video = screen.getByLabelText('clip.mp4 미리보기') as HTMLVideoElement;
+    setMediaDuration(video, 4);
+    fireEvent.loadedMetadata(video);
 
-    fireEvent.ended(screen.getByLabelText('clip.mp4 미리보기'));
+    fireEvent.click(screen.getByRole('button', { name: '재생' }));
+    await act(async () => vi.advanceTimersByTimeAsync(4000));
 
     expect(screen.getByText('복제 영상')).toBeInTheDocument();
   });
 
   it('moves between image and video scenes with previous and next', () => {
-    render(<StatefulPreview />);
+    const { container } = render(<StatefulPreview />);
+    loadVideoDuration(container, 'video', 4);
 
     fireEvent.click(screen.getByRole('button', { name: '다음' }));
     expect(screen.getByLabelText('clip.mp4 미리보기')).toBeInstanceOf(
@@ -1096,11 +1245,12 @@ describe('PreviewPanel', () => {
   it('advances when video ends and stops on the final scene', async () => {
     vi.useFakeTimers();
     vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
-    render(<StatefulPreview />);
+    const { container } = render(<StatefulPreview />);
+    loadVideoDuration(container, 'video', 4);
     fireEvent.click(screen.getByRole('button', { name: '다음' }));
     fireEvent.click(screen.getByRole('button', { name: '재생' }));
 
-    fireEvent.ended(screen.getByLabelText('clip.mp4 미리보기'));
+    await act(async () => vi.advanceTimersByTimeAsync(4000));
 
     expect(screen.getByRole('img', { name: 'last.png' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '일시정지' })).toBeInTheDocument();
@@ -1147,6 +1297,7 @@ describe('PreviewPanel', () => {
     audio.currentTime = 0;
 
     fireEvent.click(screen.getByRole('button', { name: '재생' }));
+    await act(async () => Promise.resolve());
     expect(audio.currentTime).toBe(0);
     expect(play).toHaveBeenCalledOnce();
 
@@ -1156,6 +1307,7 @@ describe('PreviewPanel', () => {
     expect(audio.currentTime).toBe(1.25);
 
     fireEvent.click(screen.getByRole('button', { name: '재생' }));
+    await act(async () => Promise.resolve());
     expect(play).toHaveBeenCalledTimes(2);
     expect(audio.currentTime).toBe(1.25);
   });
@@ -1163,7 +1315,7 @@ describe('PreviewPanel', () => {
   it('keeps narration playing across scenes and pauses it after the final scene', async () => {
     vi.useFakeTimers();
     vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
-    render(<StatefulPreview narrationAsset={narration} />);
+    const { container } = render(<StatefulPreview narrationAsset={narration} />);
     const audio = screen.getByLabelText('내레이션') as HTMLAudioElement;
     const audioPlay = vi.fn().mockResolvedValue(undefined);
     const audioPause = vi.fn();
@@ -1171,6 +1323,10 @@ describe('PreviewPanel', () => {
     audio.pause = audioPause;
 
     fireEvent.click(screen.getByRole('button', { name: '재생' }));
+    await act(async () => Promise.resolve());
+    expect(audioPlay).toHaveBeenCalledOnce();
+    loadVideoDuration(container, 'video', 4);
+    audioPause.mockClear();
     audio.currentTime = 0.75;
     await act(async () => vi.advanceTimersByTimeAsync(3000));
     expect(screen.getByLabelText('clip.mp4 미리보기')).toBeInTheDocument();
@@ -1178,7 +1334,7 @@ describe('PreviewPanel', () => {
     expect(audioPause).not.toHaveBeenCalled();
     expect(audio.currentTime).toBe(0.75);
 
-    fireEvent.ended(screen.getByLabelText('clip.mp4 미리보기'));
+    await act(async () => vi.advanceTimersByTimeAsync(4000));
     await act(async () => vi.advanceTimersByTimeAsync(2000));
     expect(screen.getByRole('img', { name: 'last.png' })).toBeInTheDocument();
     expect(audioPause).toHaveBeenCalledOnce();

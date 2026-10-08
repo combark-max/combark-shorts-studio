@@ -30,8 +30,8 @@ function createExportProject(): ProjectDocument {
       },
     ],
     scenes: [
-      { mediaId: 'image-id', durationMs: 2500, subtitle: '첫째\\줄\n{둘째}, 줄', subtitlePosition: 'top', subtitleSize: 'large' },
-      { mediaId: 'video-id', durationMs: null, subtitle: '영상 자막', subtitlePosition: 'bottom', subtitleSize: 'medium' },
+      { mediaId: 'image-id', durationMs: 2500, playbackDurationMs: null, subtitle: '첫째\\줄\n{둘째}, 줄', subtitlePosition: 'top', subtitleSize: 'large' },
+      { mediaId: 'video-id', durationMs: null, playbackDurationMs: null, subtitle: '영상 자막', subtitlePosition: 'bottom', subtitleSize: 'medium' },
     ],
     narration: null,
   };
@@ -69,12 +69,13 @@ describe('MP4 export argument generation', () => {
     );
   });
 
-  it('loops images for their exact duration and lets videos render to EOF', () => {
+  it('loops images for their exact duration and lets videos without an override render to EOF', () => {
     const filter = "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps=30,ass=filename='C\\:/Temp/sub title.ass'";
     const imageArgs = buildSceneArgs({
       kind: 'image',
       sourcePath: 'C:\\한글 자료\\first image.png',
       durationMs: 2500,
+      playbackDurationMs: null,
       filter,
       outputPath: 'C:\\Temp\\scene 1.mp4',
     });
@@ -82,6 +83,7 @@ describe('MP4 export argument generation', () => {
       kind: 'video',
       sourcePath: 'C:\\한글 자료\\second video.mp4',
       durationMs: null,
+      playbackDurationMs: null,
       filter,
       outputPath: 'C:\\Temp\\scene 2.mp4',
     });
@@ -91,6 +93,22 @@ describe('MP4 export argument generation', () => {
     expect(videoArgs).not.toContain('-t');
     expect(videoArgs).not.toContain('-shortest');
     expect(videoArgs).toEqual(expect.arrayContaining(['-i', 'C:\\한글 자료\\second video.mp4']));
+  });
+
+  it('loops a video input and cuts the encoded scene to its explicit playback duration', () => {
+    const videoArgs = buildSceneArgs({
+      kind: 'video',
+      sourcePath: 'C:\\video.mp4',
+      durationMs: null,
+      playbackDurationMs: 25_000,
+      filter: 'fps=30',
+      outputPath: 'C:\\scene.mp4',
+    });
+
+    expect(videoArgs).toEqual(expect.arrayContaining([
+      '-stream_loop', '-1', '-i', 'C:\\video.mp4', '-an', '-t', '25',
+    ]));
+    expect(videoArgs.indexOf('-stream_loop')).toBeLessThan(videoArgs.indexOf('-i'));
   });
 
   it('creates either narration-only or silent 48 kHz stereo AAC', () => {
@@ -229,6 +247,7 @@ describe('exportProject pipeline', () => {
         {
           mediaId: 'image-id',
           durationMs: 1200,
+          playbackDurationMs: null,
           subtitle: 'original scene',
           subtitlePosition: 'bottom',
           subtitleSize: 'medium',
@@ -236,6 +255,7 @@ describe('exportProject pipeline', () => {
         {
           mediaId: 'image-id',
           durationMs: 2400,
+          playbackDurationMs: null,
           subtitle: 'duplicated scene',
           subtitlePosition: 'top',
           subtitleSize: 'large',

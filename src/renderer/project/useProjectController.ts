@@ -51,6 +51,7 @@ function hasSameAutoShortsInputs(
     return (
       scene.mediaId === currentScene.mediaId &&
       scene.durationMs === currentScene.durationMs &&
+      scene.playbackDurationMs === currentScene.playbackDurationMs &&
       scene.subtitle === currentScene.subtitle &&
       scene.subtitlePosition === currentScene.subtitlePosition &&
       scene.subtitleSize === currentScene.subtitleSize &&
@@ -382,9 +383,10 @@ export function useProjectController(initialState?: ProjectState) {
         media: [...currentState.project.media, ...media],
         scenes: [
           ...currentState.project.scenes,
-          ...media.map((asset) => ({
+          ...media.map((asset): Scene => ({
             mediaId: asset.id,
             durationMs: asset.kind === 'image' ? 3000 : null,
+            playbackDurationMs: null,
             subtitle: '',
             subtitlePosition: DEFAULT_SUBTITLE_POSITION,
             subtitleSize: DEFAULT_SUBTITLE_SIZE,
@@ -552,8 +554,13 @@ export function useProjectController(initialState?: ProjectState) {
         typeof scene.subtitle === 'string' &&
         ((asset?.kind === 'image' &&
           Number.isInteger(scene.durationMs) &&
-          (scene.durationMs as number) > 0) ||
-          (asset?.kind === 'video' && scene.durationMs === null))
+          (scene.durationMs as number) > 0 &&
+          scene.playbackDurationMs === null) ||
+          (asset?.kind === 'video' &&
+            scene.durationMs === null &&
+            (scene.playbackDurationMs === null ||
+              (Number.isSafeInteger(scene.playbackDurationMs) &&
+                scene.playbackDurationMs > 0))))
       );
     });
     if (!validPlan) {
@@ -564,7 +571,8 @@ export function useProjectController(initialState?: ProjectState) {
       const currentScene = currentState.project.scenes[index];
       return (
         scene.subtitle !== currentScene.subtitle ||
-        scene.durationMs !== currentScene.durationMs
+        scene.durationMs !== currentScene.durationMs ||
+        scene.playbackDurationMs !== currentScene.playbackDurationMs
       );
     });
     if (!changed) {
@@ -696,6 +704,41 @@ export function useProjectController(initialState?: ProjectState) {
         scenes: currentState.project.scenes.map((candidate, index) =>
           index === sceneIndex
             ? { ...candidate, durationMs }
+            : candidate,
+        ),
+      },
+      dirty: true,
+    });
+  };
+
+  const updateVideoPlaybackDuration = (
+    sceneIndex: number,
+    playbackDurationMs: number,
+  ): void => {
+    const currentState = stateRef.current;
+    const scene = currentState.project.scenes[sceneIndex];
+    const asset = currentState.project.media.find(
+      ({ id }) => id === scene?.mediaId,
+    );
+
+    if (
+      asset?.kind !== 'video' ||
+      !scene ||
+      !Number.isSafeInteger(playbackDurationMs) ||
+      playbackDurationMs <= 0 ||
+      scene.playbackDurationMs === playbackDurationMs
+    ) {
+      return;
+    }
+
+    replaceState({
+      ...currentState,
+      project: {
+        ...currentState.project,
+        updatedAt: new Date().toISOString(),
+        scenes: currentState.project.scenes.map((candidate, index) =>
+          index === sceneIndex
+            ? { ...candidate, playbackDurationMs }
             : candidate,
         ),
       },
@@ -1181,6 +1224,7 @@ export function useProjectController(initialState?: ProjectState) {
     duplicateScene,
     deleteScene,
     updateSceneDuration,
+    updateVideoPlaybackDuration,
     updateSceneSubtitle,
     updateSceneSubtitlePosition,
     updateSceneSubtitleSize,

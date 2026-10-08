@@ -70,39 +70,49 @@ const validProjectV6 = {
   })),
 };
 
+const validProjectV7 = {
+  ...validProjectV6,
+  schemaVersion: 7,
+  scenes: validProjectV6.scenes.map((scene) => ({
+    ...scene,
+    playbackDurationMs: null as number | null,
+  })),
+};
+
 const withDefaultSubtitleStyle = (scene: Record<string, unknown>) => ({
   ...scene,
   subtitlePosition: 'bottom',
   subtitleSize: 'medium',
+  playbackDurationMs: null as number | null,
 });
 
 describe('validateProjectDocument', () => {
-  it('migrates a valid v1 project document to v6 with empty media, scenes, and narration', () => {
+  it('migrates a valid v1 project document to v7 with empty media, scenes, and narration', () => {
     expect(validateProjectDocument(validProjectV1)).toEqual({
       ...validProjectV1,
-      schemaVersion: 6,
+      schemaVersion: 7,
       media: [],
       scenes: [],
       narration: null,
     });
   });
 
-  it('migrates a valid v2 project document to v6 with one scene per media asset and default subtitle styles', () => {
+  it('migrates a valid v2 project document to v7 with one scene per media asset and default subtitle styles', () => {
     expect(validateProjectDocument(validProjectV2)).toEqual({
       ...validProjectV4,
       scenes: [
         withDefaultSubtitleStyle({ mediaId: 'image-id', durationMs: 3000, subtitle: '' }),
         withDefaultSubtitleStyle({ mediaId: 'video-id', durationMs: null, subtitle: '' }),
       ],
-      schemaVersion: 6,
+      schemaVersion: 7,
       narration: null,
     });
   });
 
-  it('migrates a valid v3 project document to v6 with empty subtitles and default styles', () => {
+  it('migrates a valid v3 project document to v7 with empty subtitles and default styles', () => {
     expect(validateProjectDocument(validProjectV3)).toEqual({
       ...validProjectV3,
-      schemaVersion: 6,
+      schemaVersion: 7,
       scenes: [
         withDefaultSubtitleStyle({ mediaId: 'image-id', durationMs: 3000, subtitle: '' }),
         withDefaultSubtitleStyle({ mediaId: 'video-id', durationMs: null, subtitle: '' }),
@@ -111,26 +121,26 @@ describe('validateProjectDocument', () => {
     });
   });
 
-  it('migrates a valid v4 project document to v6 with default styles and without narration', () => {
+  it('migrates a valid v4 project document to v7 with default styles and without narration', () => {
     expect(validateProjectDocument(validProjectV4)).toEqual({
       ...validProjectV4,
-      schemaVersion: 6,
+      schemaVersion: 7,
       scenes: validProjectV4.scenes.map(withDefaultSubtitleStyle),
       narration: null,
     });
   });
 
-  it('migrates a valid v5 project document to v6 with default subtitle styles', () => {
+  it('migrates a valid v5 project document to v7 with default subtitle styles', () => {
     expect(validateProjectDocument(validProjectV5)).toEqual({
       ...validProjectV5,
-      schemaVersion: 6,
+      schemaVersion: 7,
       scenes: validProjectV5.scenes.map(withDefaultSubtitleStyle),
     });
   });
 
-  it.each(['mp3', 'wav'])('accepts a valid v6 %s narration', (extension) => {
+  it.each(['mp3', 'wav'])('accepts a valid v7 %s narration', (extension) => {
     const project = {
-      ...validProjectV6,
+      ...validProjectV7,
       narration: {
         sourcePath: `C:\\audio\\voice.${extension}`,
         fileName: `voice.${extension}`,
@@ -140,35 +150,83 @@ describe('validateProjectDocument', () => {
     expect(validateProjectDocument(project)).toEqual(project);
   });
 
-  it.each(['top', 'center', 'bottom'])('accepts v6 subtitle position %s', (subtitlePosition) => {
+  it('migrates every v6 scene with a null playback duration', () => {
+    expect(validateProjectDocument(validProjectV6)).toEqual(validProjectV7);
+  });
+
+  it('accepts a positive safe-integer playback duration for a v7 video scene', () => {
     const project = {
-      ...validProjectV6,
-      scenes: [{ ...validProjectV6.scenes[0], subtitlePosition }],
+      ...validProjectV7,
+      scenes: [
+        {
+          ...validProjectV7.scenes[1],
+          playbackDurationMs: 25_000,
+        },
+      ],
     };
 
     expect(validateProjectDocument(project)).toEqual(project);
   });
 
-  it.each(['small', 'medium', 'large'])('accepts v6 subtitle size %s', (subtitleSize) => {
+  it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1])(
+    'rejects invalid v7 video playback duration %p',
+    (playbackDurationMs) => {
+      expect(() =>
+        validateProjectDocument({
+          ...validProjectV7,
+          scenes: [{ ...validProjectV7.scenes[1], playbackDurationMs }],
+        }),
+      ).toThrow();
+    },
+  );
+
+  it('rejects a non-null playback duration for a v7 image scene', () => {
+    expect(() =>
+      validateProjectDocument({
+        ...validProjectV7,
+        scenes: [{ ...validProjectV7.scenes[0], playbackDurationMs: 3000 }],
+      }),
+    ).toThrow();
+  });
+
+  it('rejects unknown v7 scene fields', () => {
+    expect(() =>
+      validateProjectDocument({
+        ...validProjectV7,
+        scenes: [{ ...validProjectV7.scenes[0], trimStartMs: 100 }],
+      }),
+    ).toThrow();
+  });
+
+  it.each(['top', 'center', 'bottom'])('accepts v7 subtitle position %s', (subtitlePosition) => {
     const project = {
-      ...validProjectV6,
-      scenes: [{ ...validProjectV6.scenes[0], subtitleSize }],
+      ...validProjectV7,
+      scenes: [{ ...validProjectV7.scenes[0], subtitlePosition }],
     };
 
     expect(validateProjectDocument(project)).toEqual(project);
   });
 
-  it('accepts multiple v6 scenes that reference the same media asset', () => {
+  it.each(['small', 'medium', 'large'])('accepts v7 subtitle size %s', (subtitleSize) => {
+    const project = {
+      ...validProjectV7,
+      scenes: [{ ...validProjectV7.scenes[0], subtitleSize }],
+    };
+
+    expect(validateProjectDocument(project)).toEqual(project);
+  });
+
+  it('accepts multiple v7 scenes that reference the same media asset', () => {
     const duplicateScene = {
-      ...validProjectV6.scenes[0],
+      ...validProjectV7.scenes[0],
       durationMs: 4500,
       subtitle: '복제 자막',
       subtitlePosition: 'top',
       subtitleSize: 'large',
     };
     const project = {
-      ...validProjectV6,
-      scenes: [validProjectV6.scenes[0], duplicateScene],
+      ...validProjectV7,
+      scenes: [validProjectV7.scenes[0], duplicateScene],
     };
 
     expect(validateProjectDocument(project)).toEqual(project);
@@ -211,7 +269,7 @@ describe('validateProjectDocument', () => {
   });
 
   it.each([
-    ['schemaVersion', { schemaVersion: 7 }],
+    ['schemaVersion', { schemaVersion: 8 }],
     ['projectId missing', { projectId: undefined }],
     ['projectId empty', { projectId: '' }],
     ['name missing', { name: undefined }],

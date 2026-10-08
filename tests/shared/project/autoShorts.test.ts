@@ -21,6 +21,7 @@ function createProject(
   project.scenes = project.media.map((asset, index) => ({
     mediaId: asset.id,
     durationMs: asset.kind === 'image' ? 3000 : null,
+    playbackDurationMs: null as number | null,
     subtitle: `기존 ${index + 1}`,
     subtitlePosition: index % 2 === 0 ? 'top' : 'bottom',
     subtitleSize: index % 2 === 0 ? 'large' : 'small',
@@ -155,6 +156,21 @@ describe('buildAutoShortsPlan', () => {
       null,
       2000,
     ]);
+  });
+
+  it('uses and preserves an explicit video playback duration instead of source metadata', () => {
+    const project = createProject(['image', 'video'], true);
+    project.scenes[1].playbackDurationMs = 7000;
+
+    const plan = buildAutoShortsPlan(project, '', {
+      narrationDurationMs: 10_000,
+      videoDurationMsByMediaId: { 'video-1': 2000 },
+    });
+
+    expect(plan.totalVideoSceneDurationMs).toBe(7000);
+    expect(plan.scenes[0].durationMs).toBe(3000);
+    expect(plan.scenes[1].playbackDurationMs).toBe(7000);
+    expect(plan.durationMode).toBe('narration');
   });
 
   it.each([

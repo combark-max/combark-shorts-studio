@@ -126,23 +126,38 @@ describe.runIf(runSmoke)('real FFmpeg export smoke', () => {
   it('exports one image with silent AAC and decodes to EOF', async () => {
     await exportAndDecode(projectWith(
       [{ id: 'image', kind: 'image', sourcePath: imagePath, fileName: '입력 이미지.png' }],
-      [{ mediaId: 'image', durationMs: 500, subtitle: '', subtitlePosition: 'bottom', subtitleSize: 'medium' }],
+      [{ mediaId: 'image', durationMs: 500, playbackDurationMs: null, subtitle: '', subtitlePosition: 'bottom', subtitleSize: 'medium' }],
     ), '이미지 결과.mp4');
   }, 30_000);
 
   it('exports one MP4 to its source EOF and decodes to EOF', async () => {
     await exportAndDecode(projectWith(
       [{ id: 'video', kind: 'video', sourcePath: videoPath, fileName: '입력 영상.mp4' }],
-      [{ mediaId: 'video', durationMs: null, subtitle: '', subtitlePosition: 'bottom', subtitleSize: 'medium' }],
+      [{ mediaId: 'video', durationMs: null, playbackDurationMs: null, subtitle: '', subtitlePosition: 'bottom', subtitleSize: 'medium' }],
     ), '영상 결과.mp4');
   }, 30_000);
+
+  it('loops one MP4 to an exact explicit playback duration', async () => {
+    const outputPath = await exportAndDecode(projectWith(
+      [{ id: 'video', kind: 'video', sourcePath: videoPath, fileName: 'loop.mp4' }],
+      [{ mediaId: 'video', durationMs: null, playbackDurationMs: 1800, subtitle: '', subtitlePosition: 'bottom', subtitleSize: 'medium' }],
+    ), 'looped-video.mp4');
+
+    const stderr = await runFfmpegWithStderr(configuredFfmpegPath as string, [
+      '-hide_banner', '-i', outputPath, '-f', 'null', 'NUL',
+    ]);
+    const durationSeconds = readDurationSeconds(stderr);
+
+    expect(durationSeconds).toBeGreaterThanOrEqual(1.75);
+    expect(durationSeconds).toBeLessThanOrEqual(1.9);
+  }, 60_000);
 
   it('exports duplicated scenes from one media asset as two ordered segments', async () => {
     const outputPath = await exportAndDecode(projectWith(
       [{ id: 'image', kind: 'image', sourcePath: imagePath, fileName: '입력 이미지.png' }],
       [
-        { mediaId: 'image', durationMs: 600, subtitle: 'original', subtitlePosition: 'bottom', subtitleSize: 'medium' },
-        { mediaId: 'image', durationMs: 600, subtitle: 'duplicate', subtitlePosition: 'top', subtitleSize: 'large' },
+        { mediaId: 'image', durationMs: 600, playbackDurationMs: null, subtitle: 'original', subtitlePosition: 'bottom', subtitleSize: 'medium' },
+        { mediaId: 'image', durationMs: 600, playbackDurationMs: null, subtitle: 'duplicate', subtitlePosition: 'top', subtitleSize: 'large' },
       ],
     ), '복제 장면 결과.mp4');
 
@@ -166,8 +181,8 @@ describe.runIf(runSmoke)('real FFmpeg export smoke', () => {
         { id: 'video', kind: 'video', sourcePath: videoPath, fileName: '입력 영상.mp4' },
       ],
       [
-        { mediaId: 'image', durationMs: 500, subtitle: '첫 장면\n한글 자막 {테스트}', subtitlePosition: 'top', subtitleSize: 'large' },
-        { mediaId: 'video', durationMs: null, subtitle: '둘째 장면', subtitlePosition: 'center', subtitleSize: 'small' },
+        { mediaId: 'image', durationMs: 500, playbackDurationMs: null, subtitle: '첫 장면\n한글 자막 {테스트}', subtitlePosition: 'top', subtitleSize: 'large' },
+        { mediaId: 'video', durationMs: null, playbackDurationMs: null, subtitle: '둘째 장면', subtitlePosition: 'center', subtitleSize: 'small' },
       ],
       { sourcePath: narrationPath, fileName: '내레이션.wav' },
     ), '통합 결과.mp4');

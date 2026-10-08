@@ -51,6 +51,7 @@ describe('recoveryStorage', () => {
         {
           mediaId: 'recovery-photo-id',
           durationMs: 3000,
+          playbackDurationMs: null as number | null,
           subtitle: '복구 자막',
           subtitlePosition: 'center' as const,
           subtitleSize: 'small' as const,
@@ -94,6 +95,7 @@ describe('recoveryStorage', () => {
         {
           mediaId: 'shared-image-id',
           durationMs: 3000,
+          playbackDurationMs: null as number | null,
           subtitle: 'first scene',
           subtitlePosition: 'bottom' as const,
           subtitleSize: 'medium' as const,
@@ -101,6 +103,7 @@ describe('recoveryStorage', () => {
         {
           mediaId: 'shared-image-id',
           durationMs: 5000,
+          playbackDurationMs: null as number | null,
           subtitle: 'second scene',
           subtitlePosition: 'center' as const,
           subtitleSize: 'small' as const,
@@ -113,6 +116,29 @@ describe('recoveryStorage', () => {
     const candidates = await listRecoveryFiles(userDataDirectory);
     expect(candidates).toHaveLength(1);
     expect(candidates[0].project).toEqual(project);
+  });
+
+  it('preserves an explicit video playback duration in recovery', async () => {
+    const project = createNewProject('video recovery');
+    project.media = [{
+      id: 'video-id',
+      kind: 'video',
+      sourcePath: 'C:\\media\\clip.mp4',
+      fileName: 'clip.mp4',
+    }];
+    project.scenes = [{
+      mediaId: 'video-id',
+      durationMs: null,
+      playbackDurationMs: 25_000,
+      subtitle: '',
+      subtitlePosition: 'bottom',
+      subtitleSize: 'medium',
+    }];
+
+    await writeRecoveryFile(userDataDirectory, project);
+
+    const candidates = await listRecoveryFiles(userDataDirectory);
+    expect(candidates[0].project.scenes[0].playbackDurationMs).toBe(25_000);
   });
 
   it('sorts multiple recovery candidates from newest to oldest', async () => {

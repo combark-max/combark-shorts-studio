@@ -96,9 +96,9 @@ function createSceneState(): ProjectState {
         },
       ],
       scenes: [
-        { mediaId: 'first-image', durationMs: 3000, subtitle: '첫 장면', subtitlePosition: 'bottom', subtitleSize: 'medium' },
-        { mediaId: 'middle-video', durationMs: null, subtitle: '', subtitlePosition: 'bottom', subtitleSize: 'medium' },
-        { mediaId: 'last-image', durationMs: 3000, subtitle: '', subtitlePosition: 'bottom', subtitleSize: 'medium' },
+        { mediaId: 'first-image', durationMs: 3000, playbackDurationMs: null, subtitle: '첫 장면', subtitlePosition: 'bottom', subtitleSize: 'medium' },
+        { mediaId: 'middle-video', durationMs: null, playbackDurationMs: null, subtitle: '', subtitlePosition: 'bottom', subtitleSize: 'medium' },
+        { mediaId: 'last-image', durationMs: 3000, playbackDurationMs: null, subtitle: '', subtitlePosition: 'bottom', subtitleSize: 'medium' },
       ],
     },
   });
@@ -266,8 +266,8 @@ describe('useProjectController', () => {
       },
     ]);
     expect(result.current.state.project.scenes).toEqual([
-      { mediaId: 'photo-id', durationMs: 3000, subtitle: '', subtitlePosition: 'bottom', subtitleSize: 'medium' },
-      { mediaId: 'video-id', durationMs: null, subtitle: '', subtitlePosition: 'bottom', subtitleSize: 'medium' },
+      { mediaId: 'photo-id', durationMs: 3000, playbackDurationMs: null, subtitle: '', subtitlePosition: 'bottom', subtitleSize: 'medium' },
+      { mediaId: 'video-id', durationMs: null, playbackDurationMs: null, subtitle: '', subtitlePosition: 'bottom', subtitleSize: 'medium' },
     ]);
     expect(result.current.state.dirty).toBe(true);
     expect(result.current.state.project.updatedAt).not.toBe(
@@ -316,6 +316,7 @@ describe('useProjectController', () => {
     expect(result.current.state.project.scenes[1]).toEqual({
       mediaId: 'first-image',
       durationMs: 3000,
+      playbackDurationMs: null,
       subtitle: '첫 장면',
       subtitlePosition: 'bottom',
       subtitleSize: 'medium',
@@ -535,7 +536,7 @@ describe('useProjectController', () => {
     expect(result.current.state.project.scenes[2].subtitle).toBe('복제 자막');
   });
 
-  it('changes image duration but does not allow changing video duration', () => {
+  it('changes image duration without changing a video playback duration', () => {
     const initialState = createSceneState();
     const { result } = renderHook(() => useProjectController(initialState));
 
@@ -545,6 +546,7 @@ describe('useProjectController', () => {
     expect(result.current.state.project.scenes[0]).toEqual({
       mediaId: 'first-image',
       durationMs: 4500,
+      playbackDurationMs: null,
       subtitle: '첫 장면',
       subtitlePosition: 'bottom',
       subtitleSize: 'medium',
@@ -555,6 +557,24 @@ describe('useProjectController', () => {
       result.current.updateSceneDuration(1, 5000);
     });
     expect(result.current.state).toBe(afterImageChange);
+  });
+
+  it('changes a video playback duration and preserves it through duplication', () => {
+    const initialState = createSceneState();
+    const { result } = renderHook(() => useProjectController(initialState));
+
+    act(() => {
+      result.current.updateVideoPlaybackDuration(1, 25_000);
+      result.current.duplicateScene(1);
+    });
+
+    expect(result.current.state.project.scenes[1]).toMatchObject({
+      mediaId: 'middle-video',
+      durationMs: null,
+      playbackDurationMs: 25_000,
+    });
+    expect(result.current.state.project.scenes[2].playbackDurationMs).toBe(25_000);
+    expect(result.current.state.dirty).toBe(true);
   });
 
   it('changes one scene subtitle and updates project edit state', () => {
@@ -568,6 +588,7 @@ describe('useProjectController', () => {
     expect(result.current.state.project.scenes[1]).toEqual({
       mediaId: 'middle-video',
       durationMs: null,
+      playbackDurationMs: null,
       subtitle: '새 자막',
       subtitlePosition: 'bottom',
       subtitleSize: 'medium',
@@ -1844,6 +1865,7 @@ describe('useProjectController', () => {
       {
         mediaId: 'second-image',
         durationMs: 3000,
+        playbackDurationMs: null,
         subtitle: '',
         subtitlePosition: 'bottom',
         subtitleSize: 'medium',

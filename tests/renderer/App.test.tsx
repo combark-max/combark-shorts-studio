@@ -906,7 +906,8 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'MP4 내보내기' })).toBeInTheDocument();
 
     expect(screen.getByRole('button', { name: '미디어 열기' })).toBeInTheDocument();
-    expect(screen.getByText('미리보기')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '미리보기' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '미리보기' })).not.toBeInTheDocument();
     expect(screen.queryByText('속성')).not.toBeInTheDocument();
 
     expect(screen.getByRole('region', { name: '타임라인' })).toBeInTheDocument();
@@ -945,6 +946,7 @@ describe('App', () => {
         {
           mediaId: 'auto-image',
           durationMs: 4500,
+          playbackDurationMs: null,
           subtitle: '기존 자막',
           subtitlePosition: 'top' as const,
           subtitleSize: 'large' as const,

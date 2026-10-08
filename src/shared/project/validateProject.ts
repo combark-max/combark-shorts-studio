@@ -26,6 +26,7 @@ const PROJECT_V3_KEYS = [...PROJECT_V2_KEYS, 'scenes'] as const;
 const PROJECT_V4_KEYS = PROJECT_V3_KEYS;
 const PROJECT_V5_KEYS = [...PROJECT_V4_KEYS, 'narration'] as const;
 const PROJECT_V6_KEYS = PROJECT_V5_KEYS;
+const PROJECT_V7_KEYS = PROJECT_V6_KEYS;
 
 const SETTINGS_KEYS = ['width', 'height', 'fps'] as const;
 const MEDIA_KEYS = ['id', 'kind', 'sourcePath', 'fileName'] as const;
@@ -36,6 +37,7 @@ const SCENE_V6_KEYS = [
   'subtitlePosition',
   'subtitleSize',
 ] as const;
+const SCENE_V7_KEYS = [...SCENE_V6_KEYS, 'playbackDurationMs'] as const;
 const NARRATION_KEYS = ['sourcePath', 'fileName'] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -63,6 +65,7 @@ export function validateProjectDocument(
   const isV4 = value.schemaVersion === 4;
   const isV5 = value.schemaVersion === 5;
   const isV6 = value.schemaVersion === 6;
+  const isV7 = value.schemaVersion === 7;
   const projectKeys = isV1
     ? PROJECT_V1_KEYS
     : isV2
@@ -73,10 +76,12 @@ export function validateProjectDocument(
           ? PROJECT_V4_KEYS
           : isV5
             ? PROJECT_V5_KEYS
-            : PROJECT_V6_KEYS;
+            : isV6
+              ? PROJECT_V6_KEYS
+              : PROJECT_V7_KEYS;
 
   if (
-    (!isV1 && !isV2 && !isV3 && !isV4 && !isV5 && !isV6) ||
+    (!isV1 && !isV2 && !isV3 && !isV4 && !isV5 && !isV6 && !isV7) ||
     !hasExactKeys(value, projectKeys)
   ) {
     throw new Error(INVALID_PROJECT_MESSAGE);
@@ -104,7 +109,7 @@ export function validateProjectDocument(
 
   let media: MediaAsset[] = [];
 
-  if (isV2 || isV3 || isV4 || isV5 || isV6) {
+  if (isV2 || isV3 || isV4 || isV5 || isV6 || isV7) {
     if (!Array.isArray(value.media)) {
       throw new Error(INVALID_PROJECT_MESSAGE);
     }
@@ -140,7 +145,7 @@ export function validateProjectDocument(
 
   let scenes: Scene[];
 
-  if (isV3 || isV4 || isV5 || isV6) {
+  if (isV3 || isV4 || isV5 || isV6 || isV7) {
     if (!Array.isArray(value.scenes)) {
       throw new Error(INVALID_PROJECT_MESSAGE);
     }
@@ -153,17 +158,23 @@ export function validateProjectDocument(
         !isRecord(scene) ||
         !hasExactKeys(
           scene,
-          isV6 ? SCENE_V6_KEYS : isV4 || isV5 ? SCENE_V4_KEYS : SCENE_V3_KEYS,
+          isV7
+            ? SCENE_V7_KEYS
+            : isV6
+              ? SCENE_V6_KEYS
+              : isV4 || isV5
+                ? SCENE_V4_KEYS
+                : SCENE_V3_KEYS,
         ) ||
         typeof scene.mediaId !== 'string' ||
         scene.mediaId.length === 0 ||
-        (!isV6 && sceneMediaIds.has(scene.mediaId)) ||
-        ((isV4 || isV5 || isV6) && typeof scene.subtitle !== 'string') ||
-        (isV6 &&
+        (!isV6 && !isV7 && sceneMediaIds.has(scene.mediaId)) ||
+        ((isV4 || isV5 || isV6 || isV7) && typeof scene.subtitle !== 'string') ||
+        ((isV6 || isV7) &&
           scene.subtitlePosition !== 'top' &&
           scene.subtitlePosition !== 'center' &&
           scene.subtitlePosition !== 'bottom') ||
-        (isV6 &&
+        ((isV6 || isV7) &&
           scene.subtitleSize !== 'small' &&
           scene.subtitleSize !== 'medium' &&
           scene.subtitleSize !== 'large')
@@ -179,8 +190,14 @@ export function validateProjectDocument(
       if (
         (asset.kind === 'image' &&
           (!Number.isInteger(scene.durationMs) ||
-            (scene.durationMs as number) <= 0)) ||
-        (asset.kind === 'video' && scene.durationMs !== null)
+            (scene.durationMs as number) <= 0 ||
+            (isV7 && scene.playbackDurationMs !== null))) ||
+        (asset.kind === 'video' &&
+          (scene.durationMs !== null ||
+            (isV7 &&
+              scene.playbackDurationMs !== null &&
+              (!Number.isSafeInteger(scene.playbackDurationMs) ||
+                (scene.playbackDurationMs as number) <= 0))))
       ) {
         throw new Error(INVALID_PROJECT_MESSAGE);
       }
@@ -189,22 +206,26 @@ export function validateProjectDocument(
       return {
         mediaId: scene.mediaId,
         durationMs: scene.durationMs as number | null,
-        subtitle: isV4 || isV5 || isV6 ? (scene.subtitle as string) : '',
-        subtitlePosition: isV6
+        subtitle: isV4 || isV5 || isV6 || isV7 ? (scene.subtitle as string) : '',
+        subtitlePosition: isV6 || isV7
           ? (scene.subtitlePosition as Scene['subtitlePosition'])
           : DEFAULT_SUBTITLE_POSITION,
-        subtitleSize: isV6
+        subtitleSize: isV6 || isV7
           ? (scene.subtitleSize as Scene['subtitleSize'])
           : DEFAULT_SUBTITLE_SIZE,
+        playbackDurationMs: isV7
+          ? (scene.playbackDurationMs as number | null)
+          : null,
       };
     });
   } else if (isV2) {
-    scenes = media.map((asset) => ({
+    scenes = media.map((asset): Scene => ({
       mediaId: asset.id,
       durationMs: asset.kind === 'image' ? 3000 : null,
       subtitle: '',
       subtitlePosition: DEFAULT_SUBTITLE_POSITION,
       subtitleSize: DEFAULT_SUBTITLE_SIZE,
+      playbackDurationMs: null,
     }));
   } else {
     scenes = [];
@@ -212,7 +233,7 @@ export function validateProjectDocument(
 
   let narration: NarrationAsset | null = null;
 
-  if ((isV5 || isV6) && value.narration !== null) {
+  if ((isV5 || isV6 || isV7) && value.narration !== null) {
     if (
       !isRecord(value.narration) ||
       !hasExactKeys(value.narration, NARRATION_KEYS) ||
@@ -232,7 +253,7 @@ export function validateProjectDocument(
   }
 
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     projectId: value.projectId,
     name: value.name,
     createdAt: value.createdAt,

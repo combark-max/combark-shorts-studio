@@ -24,6 +24,7 @@ const media: MediaAsset[] = [
 const imageScene: Scene = {
   mediaId: 'image',
   durationMs: 3000,
+  playbackDurationMs: null,
   subtitle: '',
   subtitlePosition: 'bottom',
   subtitleSize: 'medium',
@@ -32,6 +33,7 @@ const imageScene: Scene = {
 const videoScene: Scene = {
   mediaId: 'video',
   durationMs: null,
+  playbackDurationMs: null,
   subtitle: '',
   subtitlePosition: 'bottom',
   subtitleSize: 'medium',
@@ -64,6 +66,24 @@ describe('previewTimeline', () => {
         { sceneIndex: 1, startMs: 4250, endMs: 8500, durationMs: 4250 },
       ],
       totalDurationMs: 8500,
+    });
+  });
+
+  it.each([
+    [6000, 6000],
+    [25_000, 25_000],
+  ])('uses an explicit %i ms video playback duration', (playbackDurationMs, expectedDurationMs) => {
+    expect(
+      buildPreviewTimeline(
+        [{ ...videoScene, playbackDurationMs }],
+        media,
+        { video: 10_000 },
+      ),
+    ).toEqual({
+      scenes: [
+        { sceneIndex: 0, startMs: 0, endMs: expectedDurationMs, durationMs: expectedDurationMs },
+      ],
+      totalDurationMs: expectedDurationMs,
     });
   });
 

@@ -25,6 +25,7 @@ const scenes: Scene[] = [
   {
     mediaId: 'image',
     durationMs: 3000,
+    playbackDurationMs: null,
     subtitle: '첫 자막',
     subtitlePosition: 'bottom',
     subtitleSize: 'medium',
@@ -32,6 +33,7 @@ const scenes: Scene[] = [
   {
     mediaId: 'video',
     durationMs: null,
+    playbackDurationMs: null,
     subtitle: '',
     subtitlePosition: 'bottom',
     subtitleSize: 'medium',
@@ -68,6 +70,7 @@ function renderTimeline(
     onMoveScene: vi.fn(),
     onMoveSceneTo: vi.fn(),
     onUpdateSceneDuration: vi.fn(),
+    onUpdateVideoPlaybackDuration: vi.fn(),
     ...overrides,
   };
   return { ...render(<MultiTrackTimeline {...props} />), props };
@@ -86,7 +89,7 @@ function setScrollGeometry(
 afterEach(cleanup);
 
 describe('MultiTrackTimeline', () => {
-  it('renders proportional scene and subtitle blocks with the preview playhead', () => {
+  it('renders proportional scene blocks without a subtitle track and keeps the preview playhead', () => {
     renderTimeline();
 
     expect(screen.getByRole('button', { name: '1번 장면 image.png' }).closest('.timeline-clip')).toHaveStyle({
@@ -97,22 +100,18 @@ describe('MultiTrackTimeline', () => {
       left: '180px',
       width: '240px',
     });
-    expect(screen.getByRole('button', { name: '1번 장면 자막' })).toHaveTextContent(
-      '첫 자막',
-    );
-    expect(screen.queryByRole('button', { name: '2번 장면 자막' })).toBeNull();
+    expect(screen.queryByLabelText('자막 트랙')).toBeNull();
+    expect(screen.queryByRole('button', { name: '1번 장면 자막' })).toBeNull();
     expect(screen.getByLabelText('재생 위치선')).toHaveStyle({ left: '210px' });
   });
 
-  it('selects a scene from either its media block or subtitle block', () => {
+  it('selects a scene from its media block', () => {
     const onSelectScene = vi.fn();
     renderTimeline({ onSelectScene });
 
     fireEvent.click(screen.getByRole('button', { name: '1번 장면 image.png' }));
-    fireEvent.click(screen.getByRole('button', { name: '1번 장면 자막' }));
-
-    expect(onSelectScene).toHaveBeenNthCalledWith(1, 0);
-    expect(onSelectScene).toHaveBeenNthCalledWith(2, 0);
+    expect(onSelectScene).toHaveBeenCalledOnce();
+    expect(onSelectScene).toHaveBeenCalledWith(0);
     expect(screen.getByRole('button', { name: '2번 장면 video.mp4' })).toHaveAttribute(
       'aria-pressed',
       'true',
@@ -145,7 +144,7 @@ describe('MultiTrackTimeline', () => {
     ).toBeDisabled();
   });
 
-  it('shows narration length and disabled future audio tracks', () => {
+  it('shows exactly the media, narration, and disabled sound-effects tracks', () => {
     renderTimeline();
 
     expect(screen.getByText('voice.mp3')).toHaveStyle({ width: '300px' });
@@ -153,16 +152,12 @@ describe('MultiTrackTimeline', () => {
       'aria-disabled',
       'true',
     );
-    expect(screen.getByLabelText('음악 트랙')).toHaveAttribute(
-      'aria-disabled',
-      'true',
-    );
-    expect(screen.getAllByText('향후 지원')).toHaveLength(2);
+    expect(screen.getAllByText('향후 지원')).toHaveLength(1);
     expect(screen.getByLabelText('사진/영상 트랙')).toBeInTheDocument();
-    expect(screen.getByLabelText('자막 트랙')).toBeInTheDocument();
     expect(screen.getByLabelText('나레이션 트랙')).toBeInTheDocument();
     expect(screen.getByLabelText('효과음 트랙')).toBeInTheDocument();
-    expect(screen.getByLabelText('음악 트랙')).toBeInTheDocument();
+    expect(screen.queryByLabelText('자막 트랙')).toBeNull();
+    expect(screen.queryByLabelText('음악 트랙')).toBeNull();
   });
 
   it('shows a loading state instead of partial geometry before metadata is ready', () => {
@@ -281,6 +276,7 @@ describe('MultiTrackTimeline', () => {
     const fourScenes: Scene[] = fourMedia.map((asset) => ({
       mediaId: asset.id,
       durationMs: 1000,
+      playbackDurationMs: null,
       subtitle: '',
       subtitlePosition: 'bottom',
       subtitleSize: 'medium',
@@ -363,7 +359,7 @@ describe('MultiTrackTimeline', () => {
     expect(onUpdateSceneDuration).toHaveBeenCalledWith(0, 500);
   });
 
-  it('cancels an image resize on Escape and never offers video resize', () => {
+  it('cancels an image resize on Escape and offers video resize', () => {
     const onUpdateSceneDuration = vi.fn();
     renderTimeline({ onUpdateSceneDuration });
     const handle = screen.getByRole('button', { name: '1번 장면 길이 조절' });
@@ -373,7 +369,21 @@ describe('MultiTrackTimeline', () => {
     fireEvent.keyDown(window, { key: 'Escape' });
 
     expect(onUpdateSceneDuration).not.toHaveBeenCalled();
-    expect(screen.queryByRole('button', { name: '2번 장면 길이 조절' })).toBeNull();
+    expect(screen.getByRole('button', { name: '2번 장면 길이 조절' })).toBeInTheDocument();
+  });
+
+  it('drafts a video resize from its effective duration and commits playback duration once', () => {
+    const onUpdateVideoPlaybackDuration = vi.fn();
+    renderTimeline({ onUpdateVideoPlaybackDuration });
+    const handle = screen.getByRole('button', { name: '2번 장면 길이 조절' });
+
+    fireEvent.pointerDown(handle, { pointerId: 6, clientX: 420 });
+    fireEvent.pointerMove(handle, { pointerId: 6, clientX: 780 });
+    expect(onUpdateVideoPlaybackDuration).not.toHaveBeenCalled();
+    fireEvent.pointerUp(handle, { pointerId: 6, clientX: 780 });
+
+    expect(onUpdateVideoPlaybackDuration).toHaveBeenCalledOnce();
+    expect(onUpdateVideoPlaybackDuration).toHaveBeenCalledWith(1, 10_000);
   });
 
   it('suspends auto-follow during interaction and resumes on the next playback update', () => {

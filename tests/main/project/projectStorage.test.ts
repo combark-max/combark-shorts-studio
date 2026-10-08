@@ -47,6 +47,7 @@ describe('projectStorage', () => {
         {
           mediaId: 'photo-id',
           durationMs: 3000,
+          playbackDurationMs: null as number | null,
           subtitle: '저장된 자막',
           subtitlePosition: 'top' as const,
           subtitleSize: 'large' as const,
@@ -79,6 +80,7 @@ describe('projectStorage', () => {
         {
           mediaId: 'shared-photo-id',
           durationMs: 3000,
+          playbackDurationMs: null as number | null,
           subtitle: 'original',
           subtitlePosition: 'bottom' as const,
           subtitleSize: 'medium' as const,
@@ -86,6 +88,7 @@ describe('projectStorage', () => {
         {
           mediaId: 'shared-photo-id',
           durationMs: 4500,
+          playbackDurationMs: null as number | null,
           subtitle: 'duplicate',
           subtitlePosition: 'top' as const,
           subtitleSize: 'large' as const,
@@ -99,7 +102,30 @@ describe('projectStorage', () => {
     await expect(readProjectFile(filePath)).resolves.toEqual(project);
   });
 
-  it('opens a legacy v1 project as v6 with empty media, scenes, and narration', async () => {
+  it('preserves an explicit video playback duration when reopened', async () => {
+    const project = createNewProject('video playback duration');
+    project.media = [{
+      id: 'video-id',
+      kind: 'video',
+      sourcePath: 'C:\\media\\clip.mp4',
+      fileName: 'clip.mp4',
+    }];
+    project.scenes = [{
+      mediaId: 'video-id',
+      durationMs: null,
+      playbackDurationMs: 25_000,
+      subtitle: '',
+      subtitlePosition: 'bottom',
+      subtitleSize: 'medium',
+    }];
+    const filePath = join(temporaryDirectory, 'video-duration.cssproj');
+
+    await writeProjectFileAtomic(filePath, project);
+
+    await expect(readProjectFile(filePath)).resolves.toEqual(project);
+  });
+
+  it('opens a legacy v1 project as v7 with empty media, scenes, and narration', async () => {
     const currentProject = createNewProject('이전 프로젝트');
     const legacyProject = {
       schemaVersion: 1,
@@ -114,14 +140,14 @@ describe('projectStorage', () => {
 
     await expect(readProjectFile(filePath)).resolves.toEqual({
       ...legacyProject,
-      schemaVersion: 6,
+      schemaVersion: 7,
       media: [],
       scenes: [],
       narration: null,
     });
   });
 
-  it('opens a v2 project as v6 with scenes generated in media order', async () => {
+  it('opens a v2 project as v7 with scenes generated in media order', async () => {
     const currentProject = createNewProject('legacy media');
     const legacyProject = {
       schemaVersion: 2,
@@ -150,10 +176,10 @@ describe('projectStorage', () => {
 
     await expect(readProjectFile(filePath)).resolves.toEqual({
       ...legacyProject,
-      schemaVersion: 6,
+      schemaVersion: 7,
       scenes: [
-        { mediaId: 'image-id', durationMs: 3000, subtitle: '', subtitlePosition: 'bottom', subtitleSize: 'medium' },
-        { mediaId: 'video-id', durationMs: null, subtitle: '', subtitlePosition: 'bottom', subtitleSize: 'medium' },
+        { mediaId: 'image-id', durationMs: 3000, playbackDurationMs: null, subtitle: '', subtitlePosition: 'bottom', subtitleSize: 'medium' },
+        { mediaId: 'video-id', durationMs: null, playbackDurationMs: null, subtitle: '', subtitlePosition: 'bottom', subtitleSize: 'medium' },
       ],
       narration: null,
     });
@@ -183,7 +209,7 @@ describe('projectStorage', () => {
     const project = createNewProject();
     await writeFile(
       filePath,
-      JSON.stringify({ ...project, schemaVersion: 7 }),
+      JSON.stringify({ ...project, schemaVersion: 8 }),
       'utf8',
     );
 

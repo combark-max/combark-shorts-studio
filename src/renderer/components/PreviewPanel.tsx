@@ -91,6 +91,9 @@ export function PreviewPanel({
   const imageTimerResetRef = useRef(false);
   const imageTimerStartedAtRef = useRef<number | null>(null);
   const imageTimerStartingRemainingMsRef = useRef(0);
+  const remainingVideoMsRef = useRef(0);
+  const videoTimerStartedAtRef = useRef<number | null>(null);
+  const videoTimerStartingRemainingMsRef = useRef(0);
   const mediaById = useMemo(
     () => new Map(media.map((asset) => [asset.id, asset])),
     [media],
@@ -274,7 +277,12 @@ export function PreviewPanel({
     }
 
     try {
-      video.currentTime = pendingSeek.sceneLocalTimeMs / 1000;
+      const sourceDurationMs = readMediaDurationMs(video);
+      if (sourceDurationMs === null) {
+        return false;
+      }
+      video.currentTime =
+        (pendingSeek.sceneLocalTimeMs % sourceDurationMs) / 1000;
       pendingSeekRef.current = null;
       return true;
     } catch {
@@ -328,6 +336,16 @@ export function PreviewPanel({
       imageTimerStartingRemainingMsRef.current = remainingImageMsRef.current;
     }
     if (currentAsset?.kind === 'video' && videoRef.current) {
+      remainingVideoMsRef.current = currentSceneTiming
+        ? Math.max(
+            0,
+            currentSceneTiming.durationMs -
+              (pendingSeek?.sceneIndex === currentIndex
+                ? pendingSeek.sceneLocalTimeMs
+                : 0),
+          )
+        : 0;
+      videoTimerStartingRemainingMsRef.current = remainingVideoMsRef.current;
       activeVideoMetadataReadyRef.current =
         readyVideoElementRef.current === videoRef.current &&
         readyVideoSourcePathRef.current === currentAsset.sourcePath;
@@ -371,7 +389,71 @@ export function PreviewPanel({
     currentAsset?.sourcePath,
     currentIndex,
     currentScene?.durationMs,
+    currentScene?.playbackDurationMs,
     scenes.length,
+  ]);
+
+  useEffect(() => {
+    if (
+      !isPlaying ||
+      mediaError ||
+      currentAsset?.kind !== 'video' ||
+      !currentSceneTiming
+    ) {
+      return;
+    }
+
+    if (remainingVideoMsRef.current <= 0) {
+      remainingVideoMsRef.current = currentSceneTiming.durationMs;
+    }
+    const startedAt = Date.now();
+    const startingRemainingMs = remainingVideoMsRef.current;
+    videoTimerStartedAtRef.current = startedAt;
+    videoTimerStartingRemainingMsRef.current = startingRemainingMs;
+    let completed = false;
+    const timeoutId = setTimeout(() => {
+      completed = true;
+      remainingVideoMsRef.current = currentSceneTiming.durationMs;
+      setGlobalCurrentTimeMs(currentSceneTiming.endMs);
+      const nextScene = scenes[currentIndex + 1];
+      if (nextScene) {
+        automaticSceneChangeRef.current = true;
+        onSelectScene(currentIndex + 1);
+      } else {
+        videoRef.current?.pause();
+        audioRef.current?.pause();
+        setIsPlaying(false);
+      }
+    }, startingRemainingMs);
+    const intervalId = setInterval(() => {
+      const remainingMs = Math.max(
+        0,
+        startingRemainingMs - (Date.now() - startedAt),
+      );
+      setGlobalCurrentTimeMs(currentSceneTiming.endMs - remainingMs);
+    }, 100);
+
+    return () => {
+      clearTimeout(timeoutId);
+      clearInterval(intervalId);
+      videoTimerStartedAtRef.current = null;
+      if (!completed) {
+        remainingVideoMsRef.current = Math.max(
+          0,
+          startingRemainingMs - (Date.now() - startedAt),
+        );
+      }
+    };
+  }, [
+    currentAsset?.kind,
+    currentIndex,
+    currentSceneTiming,
+    isPlaying,
+    mediaError,
+    onSelectScene,
+    playbackRestartToken,
+    seekRevision,
+    scenes,
   ]);
 
   useEffect(() => {
@@ -667,6 +749,14 @@ export function PreviewPanel({
       videoRef.current &&
       activeVideoMetadataReadyRef.current
     ) {
+      if (currentSceneTiming) {
+        remainingVideoMsRef.current = Math.max(
+          0,
+          currentSceneTiming.durationMs - position.sceneLocalTimeMs,
+        );
+        videoTimerStartingRemainingMsRef.current =
+          remainingVideoMsRef.current;
+      }
       applyPendingVideoSeek(videoRef.current);
     }
     setSeekRevision((revision) => revision + 1);
@@ -687,20 +777,6 @@ export function PreviewPanel({
     }
 
     setIsPlaying(true);
-  };
-
-  const handleVideoEnded = (): void => {
-    if (currentSceneTiming) {
-      setGlobalCurrentTimeMs(currentSceneTiming.endMs);
-    }
-    const nextScene = scenes[currentIndex + 1];
-    if (nextScene) {
-      automaticSceneChangeRef.current = true;
-      onSelectScene(currentIndex + 1);
-    } else {
-      audioRef.current?.pause();
-      setIsPlaying(false);
-    }
   };
 
   const handleLoadError = (): void => {
@@ -739,8 +815,7 @@ export function PreviewPanel({
   };
 
   return (
-    <section className="panel preview-panel" aria-labelledby="preview-heading">
-      <h2 id="preview-heading">미리보기</h2>
+    <section className="panel preview-panel" aria-label="미리보기">
       <div className="preview-stage">
         <div className="preview-frame">
         {!currentScene || !currentAsset ? (
@@ -768,7 +843,12 @@ export function PreviewPanel({
           <video
             aria-label={`${currentAsset.fileName} 미리보기`}
             className="preview-media"
-            onEnded={handleVideoEnded}
+            loop={
+              typeof videoDurationMsByMediaId[currentAsset.id] === 'number' &&
+              (currentSceneTiming?.durationMs ?? 0) >
+                (videoDurationMsByMediaId[currentAsset.id] as number)
+            }
+            muted
             onError={handleLoadError}
             onLoadedMetadata={(event) => {
               readyVideoElementRef.current = event.currentTarget;
@@ -780,18 +860,6 @@ export function PreviewPanel({
               if (applied) {
                 setSeekRevision((revision) => revision + 1);
               }
-            }}
-            onTimeUpdate={(event) => {
-              if (!currentSceneTiming || pendingSeekRef.current) {
-                return;
-              }
-              setGlobalCurrentTimeMs(
-                Math.min(
-                  currentSceneTiming.endMs,
-                  currentSceneTiming.startMs +
-                    Math.round(event.currentTarget.currentTime * 1000),
-                ),
-              );
             }}
             preload="metadata"
             ref={videoRef}
@@ -836,12 +904,6 @@ export function PreviewPanel({
         </div>
       </div>
       <div className="preview-seek">
-        <span className="preview-time">
-          {formatPreviewTime(globalCurrentTimeMs)} /{' '}
-          {previewTimeline
-            ? formatPreviewTime(previewTimeline.totalDurationMs)
-            : '--:--'}
-        </span>
         <input
           aria-label="전체 프로젝트 재생 위치"
           disabled={!previewTimeline || previewTimeline.scenes.length === 0}
@@ -858,6 +920,12 @@ export function PreviewPanel({
           }
         />
       </div>
+      <span className="preview-time">
+        {formatPreviewTime(globalCurrentTimeMs)} /{' '}
+        {previewTimeline
+          ? formatPreviewTime(previewTimeline.totalDurationMs)
+          : '--:--'}
+      </span>
       <div className="preview-metadata" aria-hidden="true">
         {videoAssets.map((asset) => (
           <video

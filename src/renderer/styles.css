@@ -129,10 +129,11 @@ button:hover {
 }
 
 .preview-stage {
-  align-items: center;
-  display: flex;
+  align-items: stretch;
+  display: grid;
   flex: 1 1 auto;
   gap: 8px;
+  grid-template-columns: minmax(0, max-content) clamp(180px, 18vw, 240px);
   justify-content: center;
   max-width: 100%;
   min-height: 0;
@@ -146,11 +147,11 @@ button:hover {
   border: 1px solid #3a414d;
   display: flex;
   justify-content: center;
-  flex: 0 1 auto;
-  height: min(100%, 320px);
-  max-height: 320px;
+  height: 100%;
+  justify-self: center;
+  max-height: 100%;
   max-width: 100%;
-  min-height: min(300px, 100%);
+  min-height: 0;
   overflow: hidden;
   position: relative;
   width: auto;
@@ -160,7 +161,12 @@ button:hover {
 .preview-media {
   height: 100%;
   object-fit: contain;
+  transform-origin: center;
   width: 100%;
+}
+
+.preview-media-zoomed {
+  transform: scale(1.15);
 }
 
 .preview-empty,
@@ -199,7 +205,7 @@ button:hover {
   display: grid;
   gap: 6px;
   max-width: 100%;
-  width: min(300px, 100%);
+  width: 100%;
 }
 
 .preview-time {
@@ -229,14 +235,40 @@ button:hover {
 }
 
 .preview-controls {
+  align-content: center;
   display: grid;
-  flex: 0 0 88px;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.preview-buttons {
+  display: grid;
   gap: 6px;
-  justify-content: center;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.preview-view-mode {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.preview-view-mode button[aria-pressed="true"] {
+  background: #344c66;
+  border-color: #6fb7f5;
+}
+
+.preview-zoom-note {
+  color: #aab2c0;
+  font-size: 11px;
+  line-height: 1.4;
+  margin: 0;
+  text-align: center;
 }
 
 .preview-controls button {
-  min-width: 88px;
+  min-width: 0;
 }
 
 .preview-controls button:disabled {

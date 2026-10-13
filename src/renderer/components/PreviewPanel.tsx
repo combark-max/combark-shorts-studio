@@ -71,6 +71,7 @@ export function PreviewPanel({
   const [playbackRestartToken, setPlaybackRestartToken] = useState(0);
   const [globalCurrentTimeMs, setGlobalCurrentTimeMs] = useState(0);
   const [seekRevision, setSeekRevision] = useState(0);
+  const [isPreviewZoomed, setIsPreviewZoomed] = useState(false);
   const [videoDurationEntries, setVideoDurationEntries] = useState<
     Record<string, VideoDurationEntry>
   >({});
@@ -835,14 +836,14 @@ export function PreviewPanel({
         ) : currentAsset.kind === 'image' ? (
           <img
             alt={currentAsset.fileName}
-            className="preview-media"
+            className={`preview-media${isPreviewZoomed ? ' preview-media-zoomed' : ''}`}
             onError={handleLoadError}
             src={createMediaUrl(currentAsset.sourcePath)}
           />
         ) : (
           <video
             aria-label={`${currentAsset.fileName} 미리보기`}
-            className="preview-media"
+            className={`preview-media${isPreviewZoomed ? ' preview-media-zoomed' : ''}`}
             loop={
               typeof videoDurationMsByMediaId[currentAsset.id] === 'number' &&
               (currentSceneTiming?.durationMs ?? 0) >
@@ -873,59 +874,86 @@ export function PreviewPanel({
         ) : null}
         </div>
         <div className="preview-controls">
-          <button
-            type="button"
-            disabled={scenes.length === 0}
-            onClick={restartPlayback}
+          <div className="preview-buttons">
+            <button
+              type="button"
+              disabled={scenes.length === 0}
+              onClick={restartPlayback}
+            >
+              처음부터
+            </button>
+            <button
+              type="button"
+              disabled={currentIndex <= 0}
+              onClick={() => selectScene(currentIndex - 1)}
+            >
+              이전
+            </button>
+            <button
+              type="button"
+              disabled={!currentScene || !currentAsset || mediaError !== null}
+              onClick={togglePlayback}
+            >
+              {isPlaying ? '일시정지' : '재생'}
+            </button>
+            <button
+              type="button"
+              disabled={currentIndex < 0 || currentIndex >= scenes.length - 1}
+              onClick={() => selectScene(currentIndex + 1)}
+            >
+              다음
+            </button>
+          </div>
+          <div
+            aria-label="미리보기 표시 방식"
+            className="preview-view-mode"
+            role="group"
           >
-            처음부터
-          </button>
-          <button
-            type="button"
-            disabled={currentIndex <= 0}
-            onClick={() => selectScene(currentIndex - 1)}
-          >
-            이전
-          </button>
-          <button
-            type="button"
-            disabled={!currentScene || !currentAsset || mediaError !== null}
-            onClick={togglePlayback}
-          >
-            {isPlaying ? '일시정지' : '재생'}
-          </button>
-          <button
-            type="button"
-            disabled={currentIndex < 0 || currentIndex >= scenes.length - 1}
-            onClick={() => selectScene(currentIndex + 1)}
-          >
-            다음
-          </button>
+            <button
+              aria-pressed={!isPreviewZoomed}
+              type="button"
+              onClick={() => setIsPreviewZoomed(false)}
+            >
+              맞춤
+            </button>
+            <button
+              aria-pressed={isPreviewZoomed}
+              type="button"
+              onClick={() => setIsPreviewZoomed(true)}
+            >
+              확대
+            </button>
+          </div>
+          {isPreviewZoomed ? (
+            <p className="preview-zoom-note">
+              확대 시 화면 가장자리가 잘릴 수 있습니다.
+            </p>
+          ) : null}
+          <div className="preview-seek">
+            <input
+              aria-label="전체 프로젝트 재생 위치"
+              disabled={!previewTimeline || previewTimeline.scenes.length === 0}
+              max={previewTimeline?.totalDurationMs ?? 0}
+              min="0"
+              step="1"
+              type="range"
+              value={Math.min(
+                globalCurrentTimeMs,
+                previewTimeline?.totalDurationMs ?? 0,
+              )}
+              onChange={(event) =>
+                handleGlobalSeek(Number(event.currentTarget.value))
+              }
+            />
+          </div>
+          <span className="preview-time">
+            {formatPreviewTime(globalCurrentTimeMs)} /{' '}
+            {previewTimeline
+              ? formatPreviewTime(previewTimeline.totalDurationMs)
+              : '--:--'}
+          </span>
         </div>
       </div>
-      <div className="preview-seek">
-        <input
-          aria-label="전체 프로젝트 재생 위치"
-          disabled={!previewTimeline || previewTimeline.scenes.length === 0}
-          max={previewTimeline?.totalDurationMs ?? 0}
-          min="0"
-          step="1"
-          type="range"
-          value={Math.min(
-            globalCurrentTimeMs,
-            previewTimeline?.totalDurationMs ?? 0,
-          )}
-          onChange={(event) =>
-            handleGlobalSeek(Number(event.currentTarget.value))
-          }
-        />
-      </div>
-      <span className="preview-time">
-        {formatPreviewTime(globalCurrentTimeMs)} /{' '}
-        {previewTimeline
-          ? formatPreviewTime(previewTimeline.totalDurationMs)
-          : '--:--'}
-      </span>
       <div className="preview-metadata" aria-hidden="true">
         {videoAssets.map((asset) => (
           <video

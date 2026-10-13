@@ -104,7 +104,7 @@ afterEach(() => {
 });
 
 describe('PreviewPanel', () => {
-  it('places controls beside the frame, then seek, then time without a visible heading', () => {
+  it('places playback controls, seek, and time beside the preview frame', () => {
     const { container } = render(
       <StatefulPreview mediaList={[media[0]]} sceneList={[scenes[0]]} />,
     );
@@ -117,15 +117,78 @@ describe('PreviewPanel', () => {
 
     expect(stage).toContainElement(frame);
     expect(stage).toContainElement(controls);
-    expect(stage).not.toContainElement(seek);
-    expect(stage.nextElementSibling).toBe(seek);
+    expect(controls).toContainElement(seek);
+    expect(controls).toContainElement(time);
     expect(seek.nextElementSibling).toBe(time);
     expect(panel).toHaveAttribute('aria-label', '미리보기');
     expect(screen.queryByRole('heading', { name: '미리보기' })).toBeNull();
     expect(
       within(controls).getByRole('button', { name: '처음부터' }),
     ).toBeInTheDocument();
-    expect(within(controls).getAllByRole('button')).toHaveLength(4);
+    expect(
+      within(controls).getByRole('group', { name: '미리보기 표시 방식' }),
+    ).toBeInTheDocument();
+    expect(within(controls).getAllByRole('button')).toHaveLength(6);
+  });
+
+  it('uses fit by default and switches the image preview between fit and zoom', () => {
+    render(<StatefulPreview mediaList={[media[0]]} sceneList={[scenes[0]]} />);
+    const image = screen.getByRole('img', { name: 'first image.jpg' });
+    const fit = screen.getByRole('button', { name: '맞춤' });
+    const zoom = screen.getByRole('button', { name: '확대' });
+
+    expect(fit).toHaveAttribute('aria-pressed', 'true');
+    expect(zoom).toHaveAttribute('aria-pressed', 'false');
+    expect(image).not.toHaveClass('preview-media-zoomed');
+
+    fireEvent.click(zoom);
+    expect(fit).toHaveAttribute('aria-pressed', 'false');
+    expect(zoom).toHaveAttribute('aria-pressed', 'true');
+    expect(image).toHaveClass('preview-media-zoomed');
+    expect(
+      screen.getByText('확대 시 화면 가장자리가 잘릴 수 있습니다.'),
+    ).toBeInTheDocument();
+
+    fireEvent.click(fit);
+    expect(image).not.toHaveClass('preview-media-zoomed');
+    expect(
+      screen.queryByText('확대 시 화면 가장자리가 잘릴 수 있습니다.'),
+    ).toBeNull();
+  });
+
+  it('keeps zoom enabled when moving from an image to a video scene', () => {
+    render(<StatefulPreview />);
+
+    fireEvent.click(screen.getByRole('button', { name: '확대' }));
+    expect(screen.getByRole('img', { name: 'first image.jpg' })).toHaveClass(
+      'preview-media-zoomed',
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '다음' }));
+    expect(screen.getByLabelText('clip.mp4 미리보기')).toHaveClass(
+      'preview-media-zoomed',
+    );
+    expect(screen.getByRole('button', { name: '확대' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+  });
+
+  it('preserves the video element and playback position when zoom changes', () => {
+    render(<StatefulPreview initialSceneIndex={1} />);
+    const videoBefore = screen.getByLabelText(
+      'clip.mp4 미리보기',
+    ) as HTMLVideoElement;
+    videoBefore.currentTime = 1.25;
+
+    fireEvent.click(screen.getByRole('button', { name: '확대' }));
+
+    const videoAfter = screen.getByLabelText(
+      'clip.mp4 미리보기',
+    ) as HTMLVideoElement;
+    expect(videoAfter).toBe(videoBefore);
+    expect(videoAfter.currentTime).toBe(1.25);
+    expect(videoAfter).toHaveClass('preview-media-zoomed');
   });
 
   it('mutes source audio and seeks an extended video to the modulo source position', () => {

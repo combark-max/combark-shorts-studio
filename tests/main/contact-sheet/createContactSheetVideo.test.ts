@@ -15,6 +15,8 @@ vi.mock('node:fs', () => ({
 
 import {
   buildContactSheetFfmpegArgs,
+  getContactSheetCropRect,
+  getContactSheetDetails,
   createContactSheetVideo,
   publishContactSheetOutput,
 } from '../../../src/main/contact-sheet/createContactSheetVideo';
@@ -459,5 +461,88 @@ describe('publishContactSheetOutput', () => {
     expect(pathExists).not.toHaveBeenCalled();
     expect(renameFile).not.toHaveBeenCalled();
     expect(removeFile).toHaveBeenCalledWith(siblingPath);
+  });
+});
+
+
+describe('phase 1 crop and timing', () => {
+  it.each([24, 30] as const)('preserves duration at %i output fps', (outputFps) => {
+    const args = buildContactSheetFfmpegArgs('frame-%06d.png', 16, 8, 'out.mp4', undefined, outputFps);
+    expect(args).toContain('tpad=stop_mode=clone:stop=-1,minterpolate=fps=' + outputFps + ':mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1:scd=fdiff:scd_threshold=10,trim=end_frame=' + outputFps * 2);
+    expect(args).toEqual(expect.arrayContaining(['-frames:v', String(outputFps * 2)]));
+    expect(args.join(' ')).not.toContain('setpts=');
+  });
+  it('rejects conflicting interpolation modes', () => {
+    expect(() => buildContactSheetFfmpegArgs('frames', 16, 8, 'out.mp4', 'light', 24)).toThrow();
+  });
+  it('centers odd margins and keeps the default top-left crop', () => {
+    const frame = { x: 10, y: 20, width: 25, height: 23 };
+    expect(getContactSheetCropRect(frame, 20, 18)).toEqual({ x: 10, y: 20, width: 20, height: 18 });
+    expect(getContactSheetCropRect(frame, 20, 18, 'center')).toEqual({ x: 12, y: 22, width: 20, height: 18 });
+  });
+  it.each([[26, 18], [20, 24], [19, 18], [0, 18], [NaN, 18]])('rejects invalid crop dimensions %i x %i', (width, height) => {
+    expect(() => getContactSheetCropRect({ x: 0, y: 0, width: 25, height: 23 }, width, height, 'center')).toThrow();
+  });
+  it('returns even dimensions and bounded first/last pixel samples', () => {
+    createFromBuffer.mockReturnValue(createFixtureImage(0, 21, 19));
+    const frames = Array.from({ length: 16 }, (_, index) => ({ x: index === 15 ? 69 : 0, y: index === 15 ? 63 : 0, width: 21, height: 19 }));
+    const details = getContactSheetDetails('one.png', { width: 90, height: 82, frames });
+    expect(details).toMatchObject({ width: 20, height: 18 });
+    expect(details.boundary?.first).toHaveLength(768);
+    expect(details.boundary?.last).toHaveLength(768);
+    expect(details.boundary?.first).not.toEqual(details.boundary?.last);
+  });
+  it('preserves dimensions when optional pixel sampling fails', () => {
+    createFromBuffer.mockImplementation(() => { throw new Error('cannot sample'); });
+    expect(getContactSheetDetails('missing.png', { width: 80, height: 80, frames: Array.from({ length: 16 }, () => ({ x: 0, y: 0, width: 21, height: 19 })) })).toEqual({ width: 20, height: 18 });
+  });
+});
+
+describe('phase 1 extraction integration', () => {
+  it('centers different sheets within their cells and forwards the output rate', async () => {
+    const inputs = sources(2);
+    const images = [createFixtureImage(0, 25, 23), createFixtureImage(1, 20, 18)];
+    createFromBuffer.mockImplementation((encoded: Buffer) => images[inputs.findIndex((source) => source.sourcePath === encoded.toString())]);
+    const writes: string[] = [];
+    const runFfmpeg = vi.fn().mockResolvedValue(undefined);
+    await createContactSheetVideo({ sheets: inputs, fps: 8, outputFps: 24, cropMode: 'center' }, 'C:\\exports\\center.mp4', {
+      ffmpegPath: 'ffmpeg', makeTempDirectory: async () => 'C:\\Temp\\center',
+      writeFrame: async (_path, data) => { writes.push(data.toString()); },
+      runFfmpeg, copyFile: vi.fn(), renameFile: vi.fn(), pathExists: async () => false,
+      removeDirectory: vi.fn(), makeSiblingPath: () => 'C:\\exports\\publish.tmp',
+    });
+    expect(writes).toHaveLength(32);
+    expect(writes[0]).toBe('0:2,2,20,18');
+    expect(writes[16]).toBe('1:0,0,20,18');
+    for (const value of writes) {
+      const [sheet, coordinates] = value.split(':');
+      const [x, y, width, height] = coordinates.split(',').map(Number);
+      const image = images[Number(sheet)].getSize();
+      expect(x).toBeGreaterThanOrEqual(0);
+      expect(y).toBeGreaterThanOrEqual(0);
+      expect(x + width).toBeLessThanOrEqual(image.width);
+      expect(y + height).toBeLessThanOrEqual(image.height);
+    }
+    expect(runFfmpeg.mock.calls[0][1]).toEqual(expect.arrayContaining(['-frames:v', '96']));
+  });
+
+  it.each([{ outputFps: 60 }, { cropMode: 'track' }, { outputFps: 24, interpolation: 'medium' }])('rejects invalid options before reading files %j', async (options) => {
+    await expect(createContactSheetVideo({ sheets: sources(1), fps: 8, ...options } as never, 'out.mp4', { ffmpegPath: 'ffmpeg' })).rejects.toThrow('유효하지 않은');
+    expect(readFileSync).not.toHaveBeenCalled();
+  });
+
+  it('cancels speed-preserving extraction and cleans temporary frames', async () => {
+    const controller = new AbortController();
+    createFromBuffer.mockReturnValue(createFixtureImage(0, 20, 20));
+    const removeDirectory = vi.fn();
+    const runFfmpeg = vi.fn();
+    const copyFile = vi.fn();
+    await expect(createContactSheetVideo({ sheets: sources(1), fps: 8, outputFps: 30, cropMode: 'center' }, 'out.mp4', {
+      ffmpegPath: 'ffmpeg', makeTempDirectory: async () => 'C:\\Temp\\cancel-phase1',
+      writeFrame: async () => { controller.abort(); }, runFfmpeg, copyFile, removeDirectory,
+    }, controller.signal)).rejects.toMatchObject({ name: 'AbortError' });
+    expect(removeDirectory).toHaveBeenCalledWith('C:\\Temp\\cancel-phase1');
+    expect(runFfmpeg).not.toHaveBeenCalled();
+    expect(copyFile).not.toHaveBeenCalled();
   });
 });

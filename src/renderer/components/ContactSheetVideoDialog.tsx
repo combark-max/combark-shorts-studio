@@ -1,11 +1,15 @@
 import type {
   ContactSheetFps,
+  ContactSheetOutputFps,
+  ContactSheetCropMode,
   ContactSheetInterpolation,
   ContactSheetVideoProgress,
 } from '../../shared/contactSheetVideo';
 import {
   CONTACT_SHEET_FPS_VALUES,
-  CONTACT_SHEET_INTERPOLATION_MULTIPLIERS,
+  CONTACT_SHEET_OUTPUT_FPS_VALUES,
+  getContactSheetOutputInfo,
+  compareContactSheetBoundary,
 } from '../../shared/contactSheetVideo';
 import { useContactSheetVideo } from '../contact-sheet/useContactSheetVideo';
 
@@ -39,10 +43,18 @@ export function ContactSheetVideoDialog({
 }: ContactSheetVideoDialogProps) {
   const workflow = useContactSheetVideo(onBusyChange);
   const frameCount = workflow.sheets.length * 16;
-  const interpolationMultiplier = workflow.interpolationEnabled
-    ? CONTACT_SHEET_INTERPOLATION_MULTIPLIERS[workflow.interpolation]
-    : 1;
-  const outputFrameCount = frameCount * interpolationMultiplier;
+  const output = getContactSheetOutputInfo(
+    frameCount, workflow.fps,
+    workflow.interpolationEnabled ? workflow.interpolation : undefined,
+    workflow.smoothEnabled ? workflow.outputFps : undefined,
+  );
+  const dimensionsKnown = workflow.sheets.length > 0 && workflow.sheets.every((sheet) =>
+    sheet.analysisStatus === 'recognized' && sheet.details &&
+    Number.isSafeInteger(sheet.details.width) && Number.isSafeInteger(sheet.details.height) &&
+    sheet.details.width >= 2 && sheet.details.height >= 2,
+  );
+  const outputWidth = dimensionsKnown ? Math.min(...workflow.sheets.map((sheet) => sheet.details.width)) & ~1 : null;
+  const outputHeight = dimensionsKnown ? Math.min(...workflow.sheets.map((sheet) => sheet.details.height)) & ~1 : null;
   const canCreate =
     workflow.sheets.length > 0 &&
     workflow.sheets.every(
@@ -122,7 +134,7 @@ export function ContactSheetVideoDialog({
         )}
 
         <label className="contact-sheet-fps">
-          <span>FPS</span>
+          <span>원본 프레임 속도 (FPS)</span>
           <select
             aria-label="FPS"
             disabled={workflow.status === 'creating'}
@@ -170,15 +182,55 @@ export function ContactSheetVideoDialog({
           </label>
         </div>
 
+        <div className="contact-sheet-interpolation">
+          <label>
+            <input type="checkbox" checked={workflow.smoothEnabled}
+              disabled={workflow.status === 'creating'}
+              onChange={(event) => workflow.setSmoothEnabled(event.currentTarget.checked)} />
+            <span>동작 속도 유지 · 부드러운 영상</span>
+          </label>
+          <label>
+            <span>출력 FPS</span>
+            <select aria-label="출력 FPS" value={workflow.outputFps}
+              disabled={!workflow.smoothEnabled || workflow.status === 'creating'}
+              onChange={(event) => workflow.setOutputFps(Number(event.currentTarget.value) as ContactSheetOutputFps)}>
+              {CONTACT_SHEET_OUTPUT_FPS_VALUES.map((fps) => <option key={fps} value={fps}>{fps}</option>)}
+            </select>
+          </label>
+        </div>
+        <label className="contact-sheet-fps">
+          <span>크롭 기준</span>
+          <select aria-label="크롭 기준" value={workflow.cropMode} disabled={workflow.status === 'creating'}
+            onChange={(event) => workflow.setCropMode(event.currentTarget.value as ContactSheetCropMode)}>
+            <option value="top-left">좌상단 기준 (기존)</option>
+            <option value="center">중앙 기준</option>
+          </select>
+        </label>
+
         <div className="contact-sheet-summary" aria-live="polite">
           <span>이미지 {workflow.sheets.length}장</span>
           <span>
-            원본 {frameCount}프레임 → 출력 {outputFrameCount}프레임 / 예상{' '}
-            {outputFrameCount === 0
-              ? '0.0'
-              : (outputFrameCount / workflow.fps).toFixed(1)}초
+            원본 {frameCount}프레임 → 출력 {output.frameCount}프레임 / 예상{' '}
+            {output.duration.toFixed(1)}초
           </span>
+          <span>원본 FPS {workflow.fps} / 출력 FPS {output.fps}</span>
+          {outputWidth !== null && outputHeight !== null ? (
+            <span>예상 출력 해상도 {outputWidth} × {outputHeight}</span>
+          ) : <span>예상 출력 해상도: 분석 정보 없음</span>}
         </div>
+        {workflow.sheets.length > 1 ? (
+          <div className="contact-sheet-boundaries" aria-label="시트 연결부 경량 진단" aria-live="polite">
+            <p>전체 셀의 작은 픽셀 표본을 비교한 참고 정보입니다. 크롭 적용 전 기준이며, 오탐·누락이 있을 수 있습니다. 움직임이나 장면을 인식하지 않으며 영상 생성을 차단하지 않습니다.</p>
+            {workflow.sheets.slice(1).map((sheet, index) => {
+              const diagnostic = compareContactSheetBoundary(workflow.sheets[index].details, sheet.details);
+              return <p key={sheet.id} className={diagnostic === 'warning' ? 'contact-sheet-boundary-warning' : undefined}>
+                연결부 {index + 1} → {index + 2}: {diagnostic === 'warning'
+                  ? '픽셀 변화가 큽니다. 연결 시 갑작스러운 변화가 보일 수 있습니다.'
+                  : diagnostic === 'normal' ? '큰 픽셀 변화가 감지되지 않았습니다.' : '진단하지 못했습니다. 영상 생성은 계속할 수 있습니다.'}
+              </p>;
+            })}
+          </div>
+        ) : null}
 
         {workflow.status === 'creating' || workflow.status === 'success' ? (
           <p role="status">{progressMessage(workflow.progress)}</p>

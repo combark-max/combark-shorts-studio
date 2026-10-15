@@ -12,11 +12,12 @@ import type {
 } from '../../shared/contactSheetVideo';
 import {
   CONTACT_SHEET_FPS_VALUES,
+  CONTACT_SHEET_OUTPUT_FPS_VALUES,
   CONTACT_SHEET_INTERPOLATION_VALUES,
 } from '../../shared/contactSheetVideo';
 import { IPC_CHANNELS } from '../../shared/ipc';
 import { analyzeContactSheet } from '../contact-sheet/analyzeContactSheet';
-import { createContactSheetVideo } from '../contact-sheet/createContactSheetVideo';
+import { createContactSheetVideo, getContactSheetDetails } from '../contact-sheet/createContactSheetVideo';
 import { getRuntimeFfmpegPath } from '../export/exportProject';
 
 const contactSheetFilter = {
@@ -68,6 +69,9 @@ function validateCreateRequest(
   if (
     typeof value.fps !== 'number' ||
     !CONTACT_SHEET_FPS_VALUES.some((fps) => fps === value.fps) ||
+    (value.outputFps !== undefined && !CONTACT_SHEET_OUTPUT_FPS_VALUES.some((fps) => fps === value.outputFps)) ||
+    (value.cropMode !== undefined && value.cropMode !== 'top-left' && value.cropMode !== 'center') ||
+    (value.outputFps !== undefined && value.interpolation !== undefined) ||
     (
       value.interpolation !== undefined &&
       (
@@ -127,7 +131,13 @@ export function registerContactSheetVideoIpc(): void {
           if (analysis.frames.length !== 16) {
             throw new Error('16개 프레임을 인식하지 못했습니다.');
           }
-          return { id: sheet.id, status: 'recognized', frameCount: 16 };
+          let details: Extract<ContactSheetAnalysisResult, { status: 'recognized' }>['details'];
+          try {
+            details = getContactSheetDetails(sheet.sourcePath, analysis);
+          } catch {
+            // Optional metadata must not turn valid grid recognition into failure.
+          }
+          return { id: sheet.id, status: 'recognized', frameCount: 16, ...(details ? { details } : {}) };
         } catch (error) {
           return { id: sheet.id, status: 'failed', message: errorMessage(error) };
         }

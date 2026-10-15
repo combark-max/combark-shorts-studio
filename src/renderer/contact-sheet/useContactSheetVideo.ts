@@ -2,6 +2,9 @@ import { useState } from 'react';
 
 import {
   type ContactSheetFps,
+  type ContactSheetOutputFps,
+  type ContactSheetCropMode,
+  type ContactSheetDetails,
   type ContactSheetInterpolation,
   type ContactSheetSource,
   type ContactSheetVideoProgress,
@@ -10,6 +13,7 @@ import {
 export interface ContactSheetListItem extends ContactSheetSource {
   analysisStatus: 'analyzing' | 'recognized' | 'failed';
   analysisMessage?: string;
+  details?: ContactSheetDetails;
 }
 
 export type ContactSheetVideoStatus =
@@ -26,6 +30,17 @@ export function useContactSheetVideo(
   const [interpolationEnabled, setInterpolationEnabled] = useState(false);
   const [interpolation, setInterpolation] =
     useState<ContactSheetInterpolation>('medium');
+  const [smoothEnabled, setSmoothEnabledState] = useState(false);
+  const [outputFps, setOutputFps] = useState<ContactSheetOutputFps>(24);
+  const [cropMode, setCropMode] = useState<ContactSheetCropMode>('top-left');
+  const setSlowMotionEnabled = (enabled: boolean): void => {
+    setInterpolationEnabled(enabled);
+    if (enabled) setSmoothEnabledState(false);
+  };
+  const setSmoothEnabled = (enabled: boolean): void => {
+    setSmoothEnabledState(enabled);
+    if (enabled) setInterpolationEnabled(false);
+  };
   const [adding, setAdding] = useState(false);
   const [status, setStatus] = useState<ContactSheetVideoStatus>('idle');
   const [progress, setProgress] = useState<ContactSheetVideoProgress | null>(
@@ -62,7 +77,7 @@ export function useContactSheetVideo(
           }
           const result = resultById.get(sheet.id);
           return result?.status === 'recognized'
-            ? { ...sheet, analysisStatus: 'recognized' }
+            ? { ...sheet, analysisStatus: 'recognized', details: result.details }
             : {
                 ...sheet,
                 analysisStatus: 'failed',
@@ -127,7 +142,8 @@ export function useContactSheetVideo(
           fileName,
         })),
         fps,
-        ...(interpolationEnabled ? { interpolation } : {}),
+        ...(smoothEnabled ? { outputFps } : interpolationEnabled ? { interpolation } : {}),
+        ...(cropMode === 'center' ? { cropMode } : {}),
       });
       if (result.status === 'success') {
         setStatus('success');
@@ -167,7 +183,13 @@ export function useContactSheetVideo(
     progress,
     outputPath,
     setFps,
-    setInterpolationEnabled,
+    setInterpolationEnabled: setSlowMotionEnabled,
+    smoothEnabled,
+    outputFps,
+    cropMode,
+    setSmoothEnabled,
+    setOutputFps,
+    setCropMode,
     setInterpolation,
     addSheets,
     moveSheet,

@@ -115,7 +115,12 @@ function buildVideoFilter(subtitlePath: string | null, fontsDirectory: string): 
     return VIDEO_FILTER;
   }
 
-  return `${VIDEO_FILTER},ass=filename='${escapeFilterPath(subtitlePath)}':fontsdir='${escapeFilterPath(fontsDirectory)}'`;
+  // Installed Windows fonts are resolved by DirectWrite. Preloading the whole
+  // system directory repeats hundreds of font reads for every subtitle scene.
+  const isWindowsSystemFonts = process.platform === 'win32' &&
+    normalizedWindowsPath(fontsDirectory) === normalizedWindowsPath(win32.dirname(getMalgunGothicPath()));
+  const fontsOption = isWindowsSystemFonts ? '' : `:fontsdir='${escapeFilterPath(fontsDirectory)}'`;
+  return `${VIDEO_FILTER},ass=filename='${escapeFilterPath(subtitlePath)}'${fontsOption}`;
 }
 
 export function buildSceneArgs(input: SceneArgsInput): string[] {

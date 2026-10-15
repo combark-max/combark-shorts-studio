@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   showOpenDialog: vi.fn(),
   showSaveDialog: vi.fn(),
   analyzeContactSheet: vi.fn(),
+  getContactSheetDetails: vi.fn(),
   createContactSheetVideo: vi.fn(),
   getRuntimeFfmpegPath: vi.fn(() => 'C:\\tools\\ffmpeg.exe'),
   randomUUID: vi.fn(),
@@ -34,6 +35,7 @@ vi.mock('../../../src/main/contact-sheet/analyzeContactSheet', () => ({
 }));
 vi.mock('../../../src/main/contact-sheet/createContactSheetVideo', () => ({
   createContactSheetVideo: mocks.createContactSheetVideo,
+  getContactSheetDetails: mocks.getContactSheetDetails,
 }));
 vi.mock('../../../src/main/export/exportProject', () => ({
   getRuntimeFfmpegPath: mocks.getRuntimeFfmpegPath,
@@ -265,5 +267,36 @@ describe('registerContactSheetVideoIpc', () => {
     )).rejects.toThrow('진행 중');
     finish?.();
     await first;
+  });
+});
+
+
+describe('phase 1 analysis metadata and validation', () => {
+  const sheets = [{ id: 'one', sourcePath: 'C:\\images\\one.png', fileName: 'one.png' }];
+  beforeEach(() => { vi.clearAllMocks(); registerContactSheetVideoIpc(); });
+  it('includes optional analysis metadata through the existing channel', async () => {
+    mocks.analyzeContactSheet.mockReturnValue({ frames: Array(16).fill({ width: 20, height: 20 }) });
+    mocks.getContactSheetDetails.mockReturnValue({ width: 20, height: 20, boundary: { first: [0], last: [255] } });
+    await expect(mocks.handlers.get(IPC_CHANNELS.contactSheetVideoAnalyze)?.({}, sheets)).resolves.toEqual([
+      { id: 'one', status: 'recognized', frameCount: 16, details: { width: 20, height: 20, boundary: { first: [0], last: [255] } } },
+    ]);
+  });
+  it('keeps successful grid recognition when optional metadata fails', async () => {
+    mocks.analyzeContactSheet.mockReturnValue({ frames: Array(16).fill({ width: 20, height: 20 }) });
+    mocks.getContactSheetDetails.mockImplementation(() => { throw new Error('optional failure'); });
+    await expect(mocks.handlers.get(IPC_CHANNELS.contactSheetVideoAnalyze)?.({}, sheets)).resolves.toEqual([
+      { id: 'one', status: 'recognized', frameCount: 16 },
+    ]);
+  });
+  it.each([{ outputFps: 60 }, { outputFps: null }, { cropMode: 'tracking' }, { cropMode: null }, { outputFps: 24, interpolation: 'light' }])('rejects invalid phase 1 options %j', async (options) => {
+    await expect(mocks.handlers.get(IPC_CHANNELS.contactSheetVideoCreate)?.({ sender: sender() }, { sheets, fps: 8, ...options })).rejects.toThrow('유효하지 않은');
+    expect(mocks.showSaveDialog).not.toHaveBeenCalled();
+  });
+  it.each([24, 30])('forwards %i fps and center crop', async (outputFps) => {
+    const request = { sheets, fps: 8, outputFps, cropMode: 'center' };
+    mocks.showSaveDialog.mockResolvedValue({ canceled: false, filePath: 'C:\\exports\\out.mp4' });
+    mocks.createContactSheetVideo.mockResolvedValue(undefined);
+    await mocks.handlers.get(IPC_CHANNELS.contactSheetVideoCreate)?.({ sender: sender() }, request);
+    expect(mocks.createContactSheetVideo).toHaveBeenCalledWith(request, 'C:\\exports\\out.mp4', expect.anything(), expect.any(AbortSignal));
   });
 });

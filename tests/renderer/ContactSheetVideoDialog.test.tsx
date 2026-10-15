@@ -2,6 +2,7 @@ import { act, cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { compareContactSheetBoundary } from '../../src/shared/contactSheetVideo';
 import { ContactSheetVideoDialog } from '../../src/renderer/components/ContactSheetVideoDialog';
 
 const desktopApi = {
@@ -55,6 +56,7 @@ describe('ContactSheetVideoDialog', () => {
       name: '부드러운 미세 동작',
     });
     expect(checkbox).not.toBeChecked();
+    expect(screen.getByText('예상 출력 해상도: 분석 정보 없음')).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: '강도' })).toBeDisabled();
 
     await user.click(screen.getByRole('button', { name: 'Contact sheet 이미지 추가' }));
@@ -246,5 +248,84 @@ describe('ContactSheetVideoDialog', () => {
     );
 
     expect(screen.getByRole('button', { name: '영상 만들기' })).toBeDisabled();
+  });
+});
+
+
+describe('phase 1 contact-sheet options', () => {
+  async function openWithDetails(values: Array<number | null>) {
+    const sheets = selectedSheets(values.length);
+    desktopApi.openContactSheetImages.mockResolvedValue(sheets);
+    desktopApi.analyzeContactSheets.mockResolvedValue(sheets.map((sheet, index) => ({
+      id: sheet.id, status: 'recognized', frameCount: 16,
+      details: { width: 320 - index * 2, height: 240, ...(values[index] === null ? {} : { boundary: { first: Array(768).fill(values[index]), last: Array(768).fill(values[index]) } }) },
+    })));
+    render(<ContactSheetVideoDialog generalExportInProgress={false} onClose={vi.fn()} onBusyChange={vi.fn()} />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Contact sheet 이미지 추가' }));
+    await screen.findAllByText('16프레임 인식');
+    return { user, sheets };
+  }
+  it.each([24, 30])('preserves two seconds at %i fps and forwards center crop', async (outputFps) => {
+    const { user, sheets } = await openWithDetails([0]);
+    const smooth = screen.getByRole('checkbox', { name: '동작 속도 유지 · 부드러운 영상' });
+    expect(smooth).not.toBeChecked();
+    expect(screen.getByRole('combobox', { name: '출력 FPS' })).toHaveValue('24');
+    expect(screen.getByRole('combobox', { name: '크롭 기준' })).toHaveValue('top-left');
+    await user.click(screen.getByRole('checkbox', { name: '부드러운 미세 동작' }));
+    await user.click(smooth);
+    expect(screen.getByRole('checkbox', { name: '부드러운 미세 동작' })).not.toBeChecked();
+    await user.selectOptions(screen.getByRole('combobox', { name: '출력 FPS' }), String(outputFps));
+    await user.selectOptions(screen.getByRole('combobox', { name: '크롭 기준' }), 'center');
+    expect(screen.getByText('원본 16프레임 → 출력 ' + outputFps * 2 + '프레임 / 예상 2.0초')).toBeInTheDocument();
+    expect(screen.getByText('원본 FPS 8 / 출력 FPS ' + outputFps)).toBeInTheDocument();
+    expect(screen.getByText('예상 출력 해상도 320 × 240')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '영상 만들기' }));
+    expect(desktopApi.createContactSheetVideo).toHaveBeenCalledWith({ sheets, fps: 8, outputFps, cropMode: 'center' });
+  });
+  it('switches back to the unchanged slow-motion mode', async () => {
+    const { user } = await openWithDetails([0]);
+    await user.click(screen.getByRole('checkbox', { name: '동작 속도 유지 · 부드러운 영상' }));
+    await user.click(screen.getByRole('checkbox', { name: '부드러운 미세 동작' }));
+    expect(screen.getByRole('checkbox', { name: '동작 속도 유지 · 부드러운 영상' })).not.toBeChecked();
+    expect(screen.getByText('원본 16프레임 → 출력 48프레임 / 예상 6.0초')).toBeInTheDocument();
+  });
+  it('warns without blocking and recalculates boundaries after reorder/removal', async () => {
+    const { user } = await openWithDetails([0, 0, 255]);
+    expect(screen.getByText(/연결부 2 → 3: 픽셀 변화가 큽니다/)).toBeInTheDocument();
+    expect(screen.getByText('예상 출력 해상도 316 × 240')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '영상 만들기' })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: 'sheet-3.png 위로' }));
+    expect(screen.getByText(/연결부 1 → 2: 픽셀 변화가 큽니다/)).toBeInTheDocument();
+    expect(screen.getByText(/연결부 2 → 3: 픽셀 변화가 큽니다/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'sheet-3.png 제거' }));
+    expect(screen.queryByText(/픽셀 변화가 큽니다/)).not.toBeInTheDocument();
+    expect(screen.getByText(/연결부 1 → 2: 큰 픽셀 변화가 감지되지 않았습니다/)).toBeInTheDocument();
+  });
+  it('does not block generation when optional diagnostics are unavailable', async () => {
+    await openWithDetails([0, null]);
+    expect(screen.getByText(/연결부 1 → 2: 진단하지 못했습니다/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '영상 만들기' })).toBeEnabled();
+  });
+});
+
+describe('lightweight boundary comparison', () => {
+  const details = (first: number, last: number) => ({
+    width: 20, height: 20,
+    boundary: { first: Array(768).fill(first), last: Array(768).fill(last) },
+  });
+  it('compares the previous last cell with the next first cell', () => {
+    expect(compareContactSheetBoundary(details(255, 0), details(0, 255))).toBe('normal');
+    expect(compareContactSheetBoundary(details(0, 255), details(0, 255))).toBe('warning');
+  });
+  it('uses a fixed normalized absolute pixel difference threshold of 0.25', () => {
+    expect(compareContactSheetBoundary(details(0, 0), details(63, 0))).toBe('normal');
+    expect(compareContactSheetBoundary(details(0, 0), details(64, 0))).toBe('warning');
+  });
+  it('returns unavailable for missing or malformed samples', () => {
+    expect(compareContactSheetBoundary(undefined, details(0, 0))).toBe('unavailable');
+    for (const values of [[0], Array(768).fill(NaN), Array(768).fill(256)]) {
+      expect(compareContactSheetBoundary({ width: 20, height: 20, boundary: { first: [], last: values } }, details(0, 0))).toBe('unavailable');
+    }
   });
 });

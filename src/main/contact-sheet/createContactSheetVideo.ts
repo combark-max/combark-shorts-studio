@@ -13,6 +13,11 @@ import { basename, dirname, join } from 'node:path';
 
 import {
   CONTACT_SHEET_FPS_VALUES,
+  CONTACT_SHEET_OUTPUT_FPS_VALUES,
+  getContactSheetOutputInfo,
+  type ContactSheetOutputFps,
+  type ContactSheetCropMode,
+  type ContactSheetDetails,
   CONTACT_SHEET_INTERPOLATION_MULTIPLIERS,
   CONTACT_SHEET_INTERPOLATION_VALUES,
   type ContactSheetFps,
@@ -24,6 +29,7 @@ import {
   analyzeContactSheetBitmap,
   loadContactSheetImage,
   type ContactSheetAnalysis,
+  type ContactSheetFrameRect,
 } from './analyzeContactSheet';
 
 type RunFfmpeg = (
@@ -83,6 +89,9 @@ function validateRequest(request: CreateContactSheetVideoRequest): void {
     !Array.isArray(request.sheets) ||
     request.sheets.length === 0 ||
     !CONTACT_SHEET_FPS_VALUES.includes(request.fps) ||
+    (request.outputFps !== undefined && !CONTACT_SHEET_OUTPUT_FPS_VALUES.includes(request.outputFps)) ||
+    (request.cropMode !== undefined && request.cropMode !== 'top-left' && request.cropMode !== 'center') ||
+    (request.outputFps !== undefined && request.interpolation !== undefined) ||
     (
       request.interpolation !== undefined &&
       !CONTACT_SHEET_INTERPOLATION_VALUES.includes(request.interpolation)
@@ -200,13 +209,83 @@ export async function publishContactSheetOutput(
   }
 }
 
+
+export function getContactSheetCropRect(
+  frame: ContactSheetFrameRect,
+  width: number,
+  height: number,
+  mode: ContactSheetCropMode = 'top-left',
+): ContactSheetFrameRect {
+  if ([frame.x, frame.y, frame.width, frame.height, width, height].some((value) => !Number.isSafeInteger(value)) ||
+    frame.x < 0 || frame.y < 0 || width < 2 || height < 2 || width % 2 !== 0 || height % 2 !== 0 ||
+    width > frame.width || height > frame.height || (mode !== 'top-left' && mode !== 'center')) {
+    throw new Error('유효하지 않은 프레임 크롭 영역입니다.');
+  }
+  return {
+    x: frame.x + (mode === 'center' ? Math.floor((frame.width - width) / 2) : 0),
+    y: frame.y + (mode === 'center' ? Math.floor((frame.height - height) / 2) : 0),
+    width,
+    height,
+  };
+}
+
+export function getContactSheetDetails(
+  sourcePath: string,
+  analysis: ContactSheetAnalysis,
+): ContactSheetDetails | undefined {
+  const width = Math.min(...analysis.frames.map((frame) => frame.width)) & ~1;
+  const height = Math.min(...analysis.frames.map((frame) => frame.height)) & ~1;
+  if (width < 2 || height < 2) return undefined;
+  const details: ContactSheetDetails = { width, height };
+  try {
+    const { bitmap } = loadContactSheetImage(sourcePath);
+    if (bitmap.width !== analysis.width || bitmap.height !== analysis.height) return details;
+    const sample = (frame: ContactSheetFrameRect): number[] => {
+      if (!frame || frame.x < 0 || frame.y < 0 || frame.width < 1 || frame.height < 1 ||
+        frame.x + frame.width > bitmap.width || frame.y + frame.height > bitmap.height) {
+        throw new Error('진단할 프레임 영역이 유효하지 않습니다.');
+      }
+      const values: number[] = [];
+      for (let y = 0; y < 16; y += 1) {
+        for (let x = 0; x < 16; x += 1) {
+          const px = frame.x + Math.floor((x + 0.5) * frame.width / 16);
+          const py = frame.y + Math.floor((y + 0.5) * frame.height / 16);
+          const offset = (py * bitmap.width + px) * 4;
+          // Compare visible RGB against black, ignoring invisible color data.
+          const alpha = bitmap.data[offset + 3] / 255;
+          values.push(...[2, 1, 0].map((channel) => Math.round(bitmap.data[offset + channel] * alpha)));
+        }
+      }
+      return values;
+    };
+    details.boundary = { first: sample(analysis.frames[0]), last: sample(analysis.frames[15]) };
+  } catch {
+    // Advisory diagnostics must not block valid grid recognition.
+  }
+  return details;
+}
+
 export function buildContactSheetFfmpegArgs(
   inputPattern: string,
   frameCount: number,
   fps: ContactSheetFps,
   outputPath: string,
   interpolation?: ContactSheetInterpolation,
+  outputFps?: ContactSheetOutputFps,
 ): string[] {
+  if (outputFps !== undefined) {
+    if (interpolation !== undefined) throw new Error('두 보간 방식을 동시에 사용할 수 없습니다.');
+    if (!CONTACT_SHEET_OUTPUT_FPS_VALUES.includes(outputFps)) throw new Error('유효하지 않은 출력 FPS입니다.');
+    const output = getContactSheetOutputInfo(frameCount, fps, undefined, outputFps);
+    return [
+      '-y', '-framerate', String(fps), '-start_number', '0', '-i', inputPattern,
+      '-vf',
+      'tpad=stop_mode=clone:stop=-1,minterpolate=fps=' + outputFps +
+        ':mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1:scd=fdiff:scd_threshold=10,trim=end_frame=' + output.frameCount,
+      '-frames:v', String(output.frameCount), '-an', '-c:v', 'libx264',
+      '-crf', '18', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', outputPath,
+    ];
+  }
   if (interpolation) {
     const multiplier = CONTACT_SHEET_INTERPOLATION_MULTIPLIERS[interpolation];
     const outputFrameCount = frameCount * multiplier;
@@ -358,12 +437,11 @@ export async function createContactSheetVideo(
           tempDirectory,
           `frame-${frameIndex.toString().padStart(6, '0')}.png`,
         );
-        const png = image.crop({
-          x: frame.x,
-          y: frame.y,
-          width: minimumWidth,
-          height: minimumHeight,
-        }).toPNG();
+        const crop = getContactSheetCropRect(frame, minimumWidth, minimumHeight, request.cropMode);
+        if (crop.x + crop.width > bitmap.width || crop.y + crop.height > bitmap.height) {
+          throw new Error('프레임 크롭 영역이 이미지 경계를 벗어났습니다.');
+        }
+        const png = image.crop(crop).toPNG();
         await writeFrame(framePath, png);
         frameIndex += 1;
       }
@@ -380,6 +458,7 @@ export async function createContactSheetVideo(
         request.fps,
         finalPath,
         request.interpolation,
+        request.outputFps,
       ),
       signal,
     );

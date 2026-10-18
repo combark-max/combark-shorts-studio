@@ -38,10 +38,10 @@ function createSheetFixture(
   const expectedFrames: SheetFixture['expectedFrames'] = [];
   let y = 0;
 
-  for (let row = 0; row < 4; row += 1) {
+  for (let row = 0; row < rowHeights.length; row += 1) {
     let x = 0;
-    for (let column = 0; column < 4; column += 1) {
-      const frameIndex = row * 4 + column;
+    for (let column = 0; column < columnWidths.length; column += 1) {
+      const frameIndex = row * columnWidths.length + column;
       const color = [
         20 + frameIndex * 11,
         40 + frameIndex * 7,
@@ -63,7 +63,7 @@ function createSheetFixture(
         }
       }
       x += columnWidths[column];
-      if (column < 3) {
+      if (column < columnWidths.length - 1) {
         for (let pixelY = y; pixelY < y + rowHeights[row]; pixelY += 1) {
           for (let pixelX = x; pixelX < x + verticalSeparators[column]; pixelX += 1) {
             const offset = (pixelY * width + pixelX) * 4;
@@ -75,7 +75,7 @@ function createSheetFixture(
       }
     }
     y += rowHeights[row];
-    if (row < 3) {
+    if (row < rowHeights.length - 1) {
       for (let pixelY = y; pixelY < y + horizontalSeparators[row]; pixelY += 1) {
         for (let pixelX = 0; pixelX < width; pixelX += 1) {
           const offset = (pixelY * width + pixelX) * 4;
@@ -152,6 +152,40 @@ function createRealisticBoundaryFixture(): SheetFixture {
 }
 
 describe('analyzeContactSheetBitmap', () => {
+  it.each([
+    [4, 4],
+    [4, 6],
+    [5, 6],
+    [6, 6],
+    [1, 6],
+    [6, 1],
+  ] as const)('returns row-major frames for a %ix%i grid', (rows, columns) => {
+    const fixture = createSheetFixture(
+      Array.from({ length: columns }, (_, index) => 20 + index % 2),
+      Array.from({ length: rows }, (_, index) => 18 + index % 2),
+      Array.from({ length: columns - 1 }, () => 2),
+      Array.from({ length: rows - 1 }, () => 2),
+    );
+
+    const result = analyzeContactSheetBitmap(fixture.bitmap, { rows, columns });
+
+    expect(result.frames).toEqual(fixture.expectedFrames);
+    expect(result.frames).toHaveLength(rows * columns);
+    expect(result).toMatchObject({ rows, columns });
+  });
+
+  it.each([
+    [{ rows: 0, columns: 4 }, '행과 열'],
+    [{ rows: 4, columns: 0 }, '행과 열'],
+    [{ rows: 13, columns: 1 }, '행과 열'],
+    [{ rows: 12, columns: 13 }, '행과 열'],
+    [{ rows: 1.5, columns: 4 }, '행과 열'],
+  ] as const)('rejects an invalid grid %j', (grid, message) => {
+    const fixture = createSheetFixture();
+
+    expect(() => analyzeContactSheetBitmap(fixture.bitmap, grid)).toThrow(message);
+  });
+
   it('prefers the strongest quarter-grid transitions over weak internal image structures', () => {
     const fixture = createRealisticBoundaryFixture();
 

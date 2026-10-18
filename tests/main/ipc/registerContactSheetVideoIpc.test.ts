@@ -103,7 +103,7 @@ describe('registerContactSheetVideoIpc', () => {
 
   it('reports each sheet analysis independently without dropping failures', async () => {
     mocks.analyzeContactSheet
-      .mockReturnValueOnce({ frames: Array.from({ length: 16 }) })
+      .mockReturnValueOnce({ width: 80, height: 80, rows: 4, columns: 4, frames: Array.from({ length: 16 }) })
       .mockImplementationOnce(() => {
         throw new Error('separator missing');
       });
@@ -115,9 +115,29 @@ describe('registerContactSheetVideoIpc', () => {
     await expect(
       mocks.handlers.get(IPC_CHANNELS.contactSheetVideoAnalyze)?.({}, sheets),
     ).resolves.toEqual([
-      { id: 'ok', status: 'recognized', frameCount: 16 },
+      { id: 'ok', status: 'recognized', rows: 4, columns: 4, frameCount: 16, width: 80, height: 80, frames: Array.from({ length: 16 }) },
       { id: 'bad', status: 'failed', message: 'separator missing' },
     ]);
+  });
+
+  it('analyzes a sheet with its explicit grid and returns preview rectangles', async () => {
+    const frames = Array.from({ length: 24 }, (_, index) => ({
+      x: index % 6 * 20, y: Math.floor(index / 6) * 18, width: 20, height: 18,
+    }));
+    mocks.analyzeContactSheet.mockReturnValue({
+      width: 120, height: 72, rows: 4, columns: 6, frames,
+    });
+    const sheet = { id: 'grid', sourcePath: 'C:\\images\\grid.png', fileName: 'grid.png', rows: 4, columns: 6 };
+
+    await expect(
+      mocks.handlers.get(IPC_CHANNELS.contactSheetVideoAnalyze)?.({}, [sheet]),
+    ).resolves.toEqual([{
+      id: 'grid', status: 'recognized', rows: 4, columns: 6,
+      frameCount: 24, width: 120, height: 72, frames,
+    }]);
+    expect(mocks.analyzeContactSheet).toHaveBeenCalledWith(
+      sheet.sourcePath, { rows: 4, columns: 6 },
+    );
   });
 
   it('returns canceled without creating frames when output selection is canceled', async () => {
@@ -275,17 +295,17 @@ describe('phase 1 analysis metadata and validation', () => {
   const sheets = [{ id: 'one', sourcePath: 'C:\\images\\one.png', fileName: 'one.png' }];
   beforeEach(() => { vi.clearAllMocks(); registerContactSheetVideoIpc(); });
   it('includes optional analysis metadata through the existing channel', async () => {
-    mocks.analyzeContactSheet.mockReturnValue({ frames: Array(16).fill({ width: 20, height: 20 }) });
+    mocks.analyzeContactSheet.mockReturnValue({ width: 80, height: 80, rows: 4, columns: 4, frames: Array(16).fill({ width: 20, height: 20 }) });
     mocks.getContactSheetDetails.mockReturnValue({ width: 20, height: 20, boundary: { first: [0], last: [255] } });
     await expect(mocks.handlers.get(IPC_CHANNELS.contactSheetVideoAnalyze)?.({}, sheets)).resolves.toEqual([
-      { id: 'one', status: 'recognized', frameCount: 16, details: { width: 20, height: 20, boundary: { first: [0], last: [255] } } },
+      { id: 'one', status: 'recognized', rows: 4, columns: 4, frameCount: 16, width: 80, height: 80, frames: Array(16).fill({ width: 20, height: 20 }), details: { width: 20, height: 20, boundary: { first: [0], last: [255] } } },
     ]);
   });
   it('keeps successful grid recognition when optional metadata fails', async () => {
-    mocks.analyzeContactSheet.mockReturnValue({ frames: Array(16).fill({ width: 20, height: 20 }) });
+    mocks.analyzeContactSheet.mockReturnValue({ width: 80, height: 80, rows: 4, columns: 4, frames: Array(16).fill({ width: 20, height: 20 }) });
     mocks.getContactSheetDetails.mockImplementation(() => { throw new Error('optional failure'); });
     await expect(mocks.handlers.get(IPC_CHANNELS.contactSheetVideoAnalyze)?.({}, sheets)).resolves.toEqual([
-      { id: 'one', status: 'recognized', frameCount: 16 },
+      { id: 'one', status: 'recognized', rows: 4, columns: 4, frameCount: 16, width: 80, height: 80, frames: Array(16).fill({ width: 20, height: 20 }) },
     ]);
   });
   it.each([{ outputFps: 60 }, { outputFps: null }, { cropMode: 'tracking' }, { cropMode: null }, { outputFps: 24, interpolation: 'light' }])('rejects invalid phase 1 options %j', async (options) => {

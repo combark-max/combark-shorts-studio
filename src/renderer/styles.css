@@ -1060,6 +1060,49 @@ button:hover {
   padding: 10px;
 }
 
+.contact-sheet-grid-controls {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  grid-column: 2 / -1;
+}
+
+.contact-sheet-grid-controls label {
+  align-items: center;
+  display: flex;
+  gap: 4px;
+}
+
+.contact-sheet-grid-controls input {
+  width: 54px;
+}
+
+.contact-sheet-preview {
+  color: #aab2c0;
+  grid-column: 2 / -1;
+  max-width: 360px;
+}
+
+.contact-sheet-preview-canvas {
+  display: inline-block;
+  line-height: 0;
+  position: relative;
+}
+
+.contact-sheet-preview-canvas img {
+  display: block;
+  height: auto;
+  max-height: 220px;
+  max-width: 100%;
+}
+
+.contact-sheet-preview-frame {
+  border: 1px solid rgba(114, 203, 255, 0.9);
+  box-sizing: border-box;
+  pointer-events: none;
+  position: absolute;
+}
+
 .contact-sheet-order,
 .contact-sheet-analysis {
   color: #aab2c0;

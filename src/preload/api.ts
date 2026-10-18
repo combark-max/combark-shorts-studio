@@ -3,6 +3,7 @@ import { ipcRenderer, type IpcRendererEvent } from 'electron';
 import type {
   ContactSheetAnalysisResult,
   ContactSheetSource,
+  ContactSheetConfiguredSource,
   ContactSheetVideoProgress,
   CreateContactSheetVideoRequest,
   CreateContactSheetVideoResult,
@@ -32,7 +33,7 @@ export const desktopApi = {
   openContactSheetImages: (): Promise<ContactSheetSource[]> =>
     ipcRenderer.invoke(IPC_CHANNELS.contactSheetVideoOpen),
   analyzeContactSheets: (
-    sheets: ContactSheetSource[],
+    sheets: ContactSheetConfiguredSource[],
   ): Promise<ContactSheetAnalysisResult[]> =>
     ipcRenderer.invoke(IPC_CHANNELS.contactSheetVideoAnalyze, sheets),
   createContactSheetVideo: (

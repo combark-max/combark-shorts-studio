@@ -12,6 +12,7 @@ import {
   compareContactSheetBoundary,
 } from '../../shared/contactSheetVideo';
 import { useContactSheetVideo } from '../contact-sheet/useContactSheetVideo';
+import { createMediaUrl } from '../../shared/mediaProtocol';
 
 export interface ContactSheetVideoDialogProps {
   generalExportInProgress: boolean;
@@ -42,7 +43,7 @@ export function ContactSheetVideoDialog({
   onBusyChange,
 }: ContactSheetVideoDialogProps) {
   const workflow = useContactSheetVideo(onBusyChange);
-  const frameCount = workflow.sheets.length * 16;
+  const frameCount = workflow.sheets.reduce((total, sheet) => total + sheet.frameCount, 0);
   const output = getContactSheetOutputInfo(
     frameCount, workflow.fps,
     workflow.interpolationEnabled ? workflow.interpolation : undefined,
@@ -93,12 +94,40 @@ export function ContactSheetVideoDialog({
                   {sheet.analysisStatus === 'analyzing'
                     ? '분석 중'
                     : sheet.analysisStatus === 'recognized'
-                      ? '16프레임 인식'
+                      ? `${sheet.frameCount}프레임 인식`
                       : '인식 실패'}
                 </span>
                 {sheet.analysisMessage ? (
                   <span className="contact-sheet-analysis-message">{sheet.analysisMessage}</span>
                 ) : null}
+                <div className="contact-sheet-grid-controls">
+                  <label>행
+                    <input aria-label={`${sheet.fileName} 행`} type="number" min="1" max="12"
+                      disabled={workflow.status === 'creating'} value={sheet.rows}
+                      onChange={(event) => workflow.updateGrid(sheet.id, 'rows', Number(event.currentTarget.value))} />
+                  </label>
+                  <label>열
+                    <input aria-label={`${sheet.fileName} 열`} type="number" min="1" max="12"
+                      disabled={workflow.status === 'creating'} value={sheet.columns}
+                      onChange={(event) => workflow.updateGrid(sheet.id, 'columns', Number(event.currentTarget.value))} />
+                  </label>
+                  <span>{sheet.rows}행 × {sheet.columns}열 / 총 {sheet.frameCount}프레임</span>
+                </div>
+                <div className={`contact-sheet-preview contact-sheet-preview-${sheet.analysisStatus}`}>
+                  {sheet.analysisStatus === 'recognized' && sheet.previewWidth && sheet.previewHeight && sheet.frames ? (
+                    <div className="contact-sheet-preview-canvas">
+                      <img src={createMediaUrl(sheet.sourcePath)} alt={`${sheet.fileName} 분할 미리보기`} />
+                      {sheet.frames.map((frame, frameIndex) => (
+                        <span key={frameIndex} data-testid="contact-sheet-frame" className="contact-sheet-preview-frame" style={{
+                          left: `${frame.x / sheet.previewWidth * 100}%`,
+                          top: `${frame.y / sheet.previewHeight * 100}%`,
+                          width: `${frame.width / sheet.previewWidth * 100}%`,
+                          height: `${frame.height / sheet.previewHeight * 100}%`,
+                        }} />
+                      ))}
+                    </div>
+                  ) : <span>{sheet.analysisStatus === 'failed' ? '미리보기를 표시할 수 없습니다.' : '분할 결과 분석 중'}</span>}
+                </div>
                 <div className="contact-sheet-item-actions">
                   <button
                     type="button"

@@ -1,4 +1,12 @@
 export const CONTACT_SHEET_FPS_VALUES = [8, 10, 12, 16] as const;
+export const CONTACT_SHEET_GRID_MIN = 1;
+export const CONTACT_SHEET_GRID_MAX = 12;
+export const CONTACT_SHEET_MAX_FRAMES = 144;
+
+export interface ContactSheetGrid {
+  rows: number;
+  columns: number;
+}
 export const CONTACT_SHEET_INTERPOLATION_VALUES = [
   'light',
   'medium',
@@ -24,8 +32,13 @@ export interface ContactSheetSource {
   fileName: string;
 }
 
+export interface ContactSheetConfiguredSource extends ContactSheetSource {
+  rows?: number;
+  columns?: number;
+}
+
 export interface CreateContactSheetVideoRequest {
-  sheets: ContactSheetSource[];
+  sheets: ContactSheetConfiguredSource[];
   fps: ContactSheetFps;
   interpolation?: ContactSheetInterpolation;
   outputFps?: ContactSheetOutputFps;
@@ -33,8 +46,25 @@ export interface CreateContactSheetVideoRequest {
 }
 
 export type ContactSheetAnalysisResult =
-  | { id: string; status: 'recognized'; frameCount: 16; details?: ContactSheetDetails }
+  | {
+      id: string;
+      status: 'recognized';
+      rows: number;
+      columns: number;
+      frameCount: number;
+      width: number;
+      height: number;
+      frames: ContactSheetFrameRect[];
+      details?: ContactSheetDetails;
+    }
   | { id: string; status: 'failed'; message: string };
+
+export interface ContactSheetFrameRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 
 export type ContactSheetVideoProgress =
   | { stage: 'analyzing'; sheetIndex: number; sheetCount: number }

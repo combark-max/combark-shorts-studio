@@ -1,22 +1,25 @@
 import { nativeImage } from 'electron';
 import { readFileSync } from 'node:fs';
 
+import {
+  CONTACT_SHEET_GRID_MAX,
+  CONTACT_SHEET_GRID_MIN,
+  CONTACT_SHEET_MAX_FRAMES,
+  type ContactSheetFrameRect,
+  type ContactSheetGrid,
+} from '../../shared/contactSheetVideo';
+
 export interface ContactSheetBitmap {
   width: number;
   height: number;
   data: Buffer;
 }
 
-export interface ContactSheetFrameRect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
 export interface ContactSheetAnalysis {
   width: number;
   height: number;
+  rows: number;
+  columns: number;
   frames: ContactSheetFrameRect[];
 }
 
@@ -35,6 +38,21 @@ const MIN_BOUNDARY_SCORE = 8;
 const BOUNDARY_SEARCH_RATIO = 0.04;
 const MAX_SEPARATOR_RADIUS = 6;
 const LOCAL_SEPARATOR_SCORE_RATIO = 0.2;
+const DEFAULT_GRID: ContactSheetGrid = { rows: 4, columns: 4 };
+
+export function validateContactSheetGrid(grid: ContactSheetGrid): void {
+  if (
+    !Number.isSafeInteger(grid?.rows) ||
+    !Number.isSafeInteger(grid?.columns) ||
+    grid.rows < CONTACT_SHEET_GRID_MIN ||
+    grid.columns < CONTACT_SHEET_GRID_MIN ||
+    grid.rows > CONTACT_SHEET_GRID_MAX ||
+    grid.columns > CONTACT_SHEET_GRID_MAX ||
+    grid.rows * grid.columns > CONTACT_SHEET_MAX_FRAMES
+  ) {
+    throw new Error('행과 열은 각각 1~12 범위이며 최대 144프레임이어야 합니다.');
+  }
+}
 
 function validateBitmap(bitmap: ContactSheetBitmap): void {
   if (
@@ -168,22 +186,21 @@ function findContentRanges(
   bitmap: ContactSheetBitmap,
   grayscale: Float64Array,
   axis: 'x' | 'y',
+  rangeCount: number,
 ): Array<{ start: number; end: number }> {
   const axisLength = axis === 'x' ? bitmap.width : bitmap.height;
-  const separators = [1, 2, 3].map((index) =>
+  const separators = Array.from({ length: rangeCount - 1 }, (_, index) =>
     findSeparatorBand(
       bitmap,
       grayscale,
       axis,
-      (axisLength * index) / 4,
+      (axisLength * (index + 1)) / rangeCount,
     ),
   );
-  const ranges = [
-    { start: 0, end: separators[0].start },
-    { start: separators[0].end, end: separators[1].start },
-    { start: separators[1].end, end: separators[2].start },
-    { start: separators[2].end, end: axisLength },
-  ];
+  const ranges = Array.from({ length: rangeCount }, (_, index) => ({
+    start: index === 0 ? 0 : separators[index - 1].end,
+    end: index === rangeCount - 1 ? axisLength : separators[index].start,
+  }));
 
   if (
     ranges.some(({ start, end }) => end <= start) ||
@@ -192,7 +209,7 @@ function findContentRanges(
         index > 0 && separator.start <= separators[index - 1].end,
     )
   ) {
-    throw new Error('4×4 separator 경계를 찾지 못했습니다.');
+    throw new Error(`${rangeCount}개 구간의 separator 경계를 찾지 못했습니다.`);
   }
 
   return ranges;
@@ -200,11 +217,13 @@ function findContentRanges(
 
 export function analyzeContactSheetBitmap(
   bitmap: ContactSheetBitmap,
+  grid: ContactSheetGrid = DEFAULT_GRID,
 ): ContactSheetAnalysis {
+  validateContactSheetGrid(grid);
   validateBitmap(bitmap);
   const grayscale = buildGrayscale(bitmap);
-  const columns = findContentRanges(bitmap, grayscale, 'x');
-  const rows = findContentRanges(bitmap, grayscale, 'y');
+  const columns = findContentRanges(bitmap, grayscale, 'x', grid.columns);
+  const rows = findContentRanges(bitmap, grayscale, 'y', grid.rows);
   const frames = rows.flatMap(({ start: y, end: bottom }) =>
     columns.map(({ start: x, end: right }) => ({
       x,
@@ -217,12 +236,17 @@ export function analyzeContactSheetBitmap(
   return {
     width: bitmap.width,
     height: bitmap.height,
+    rows: grid.rows,
+    columns: grid.columns,
     frames,
   };
 }
 
-export function analyzeContactSheet(sourcePath: string): ContactSheetAnalysis {
-  return analyzeContactSheetBitmap(loadContactSheetImage(sourcePath).bitmap);
+export function analyzeContactSheet(
+  sourcePath: string,
+  grid: ContactSheetGrid = DEFAULT_GRID,
+): ContactSheetAnalysis {
+  return analyzeContactSheetBitmap(loadContactSheetImage(sourcePath).bitmap, grid);
 }
 
 export function loadContactSheetImage(

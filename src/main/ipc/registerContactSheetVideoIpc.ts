@@ -6,6 +6,7 @@ import { app, dialog, ipcMain } from 'electron';
 import type {
   ContactSheetAnalysisResult,
   ContactSheetSource,
+  ContactSheetConfiguredSource,
   ContactSheetVideoProgress,
   CreateContactSheetVideoRequest,
   CreateContactSheetVideoResult,
@@ -30,7 +31,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function isContactSheetSource(value: unknown): value is ContactSheetSource {
+function isContactSheetSource(value: unknown): value is ContactSheetConfiguredSource {
   if (!isRecord(value)) {
     return false;
   }
@@ -41,14 +42,20 @@ function isContactSheetSource(value: unknown): value is ContactSheetSource {
     win32.isAbsolute(value.sourcePath) &&
     supportedContactSheetPath.test(value.sourcePath) &&
     typeof value.fileName === 'string' &&
-    value.fileName.length > 0
+    value.fileName.length > 0 &&
+    ((value.rows === undefined && value.columns === undefined) || (
+      Number.isSafeInteger(value.rows) && Number.isSafeInteger(value.columns) &&
+      (value.rows as number) >= 1 && (value.columns as number) >= 1 &&
+      (value.rows as number) <= 12 && (value.columns as number) <= 12 &&
+      (value.rows as number) * (value.columns as number) <= 144
+    ))
   );
 }
 
 function validateSheets(
   value: unknown,
   allowEmpty: boolean,
-): asserts value is ContactSheetSource[] {
+): asserts value is ContactSheetConfiguredSource[] {
   if (
     !Array.isArray(value) ||
     (!allowEmpty && value.length === 0) ||
@@ -127,9 +134,11 @@ export function registerContactSheetVideoIpc(): void {
       validateSheets(sheets, true);
       return sheets.map((sheet): ContactSheetAnalysisResult => {
         try {
-          const analysis = analyzeContactSheet(sheet.sourcePath);
-          if (analysis.frames.length !== 16) {
-            throw new Error('16개 프레임을 인식하지 못했습니다.');
+          const rows = sheet.rows ?? 4;
+          const columns = sheet.columns ?? 4;
+          const analysis = analyzeContactSheet(sheet.sourcePath, { rows, columns });
+          if (analysis.frames.length !== rows * columns) {
+            throw new Error(`${rows * columns}개 프레임을 인식하지 못했습니다.`);
           }
           let details: Extract<ContactSheetAnalysisResult, { status: 'recognized' }>['details'];
           try {
@@ -137,7 +146,17 @@ export function registerContactSheetVideoIpc(): void {
           } catch {
             // Optional metadata must not turn valid grid recognition into failure.
           }
-          return { id: sheet.id, status: 'recognized', frameCount: 16, ...(details ? { details } : {}) };
+          return {
+            id: sheet.id,
+            status: 'recognized',
+            rows,
+            columns,
+            frameCount: analysis.frames.length,
+            width: analysis.width,
+            height: analysis.height,
+            frames: analysis.frames,
+            ...(details ? { details } : {}),
+          };
         } catch (error) {
           return { id: sheet.id, status: 'failed', message: errorMessage(error) };
         }

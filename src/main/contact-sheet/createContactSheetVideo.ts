@@ -18,18 +18,20 @@ import {
   type ContactSheetOutputFps,
   type ContactSheetCropMode,
   type ContactSheetDetails,
+  type ContactSheetConfiguredSource,
+  type ContactSheetGrid,
   CONTACT_SHEET_INTERPOLATION_MULTIPLIERS,
   CONTACT_SHEET_INTERPOLATION_VALUES,
   type ContactSheetFps,
   type ContactSheetInterpolation,
   type ContactSheetVideoProgress,
   type CreateContactSheetVideoRequest,
+  type ContactSheetFrameRect,
 } from '../../shared/contactSheetVideo';
 import {
   analyzeContactSheetBitmap,
   loadContactSheetImage,
   type ContactSheetAnalysis,
-  type ContactSheetFrameRect,
 } from './analyzeContactSheet';
 
 type RunFfmpeg = (
@@ -104,7 +106,13 @@ function validateRequest(request: CreateContactSheetVideoRequest): void {
         typeof sheet.sourcePath !== 'string' ||
         !SUPPORTED_IMAGE_PATH.test(sheet.sourcePath) ||
         typeof sheet.fileName !== 'string' ||
-        sheet.fileName.length === 0,
+        sheet.fileName.length === 0 ||
+        ((sheet.rows === undefined) !== (sheet.columns === undefined)) ||
+        (sheet.rows !== undefined && sheet.columns !== undefined && (
+          !Number.isSafeInteger(sheet.rows) || !Number.isSafeInteger(sheet.columns) ||
+          sheet.rows < 1 || sheet.columns < 1 || sheet.rows > 12 || sheet.columns > 12 ||
+          sheet.rows * sheet.columns > 144
+        )),
     ) ||
     new Set(ids).size !== ids.length
   ) {
@@ -112,8 +120,12 @@ function validateRequest(request: CreateContactSheetVideoRequest): void {
   }
 }
 
-function loadAndAnalyze(sourcePath: string): ContactSheetAnalysis {
-  return analyzeContactSheetBitmap(loadContactSheetImage(sourcePath).bitmap);
+function gridForSheet(sheet: ContactSheetConfiguredSource): ContactSheetGrid {
+  return { rows: sheet.rows ?? 4, columns: sheet.columns ?? 4 };
+}
+
+function loadAndAnalyze(sheet: ContactSheetConfiguredSource): ContactSheetAnalysis {
+  return analyzeContactSheetBitmap(loadContactSheetImage(sheet.sourcePath).bitmap, gridForSheet(sheet));
 }
 
 function defaultSiblingPath(
@@ -258,7 +270,10 @@ export function getContactSheetDetails(
       }
       return values;
     };
-    details.boundary = { first: sample(analysis.frames[0]), last: sample(analysis.frames[15]) };
+    const firstFrame = analysis.frames[0];
+    const lastFrame = analysis.frames.at(-1);
+    if (!firstFrame || !lastFrame) return details;
+    details.boundary = { first: sample(firstFrame), last: sample(lastFrame) };
   } catch {
     // Advisory diagnostics must not block valid grid recognition.
   }
@@ -384,7 +399,7 @@ export async function createContactSheetVideo(
       sheetIndex: index + 1,
       sheetCount: request.sheets.length,
     });
-    analyses.push(loadAndAnalyze(sheet.sourcePath));
+    analyses.push(loadAndAnalyze(sheet));
   }
 
   const minimumWidth = Math.min(
@@ -414,14 +429,17 @@ export async function createContactSheetVideo(
   const removeTempDirectory = dependencies.removeDirectory ??
     ((path) => rm(path, { recursive: true, force: true }));
   const tempDirectory = await makeTempDirectory();
-  const totalFrameCount = request.sheets.length * 16;
+  const totalFrameCount = analyses.reduce((total, analysis) => total + analysis.frames.length, 0);
 
   try {
     let frameIndex = 0;
-    for (const sheet of request.sheets) {
+    for (const [sheetIndex, sheet] of request.sheets.entries()) {
       throwIfAborted(signal);
       const { image, bitmap } = loadContactSheetImage(sheet.sourcePath);
-      const analysis = analyzeContactSheetBitmap(bitmap);
+      const analysis = analyzeContactSheetBitmap(bitmap, gridForSheet(sheet));
+      if (analysis.frames.length !== analyses[sheetIndex].frames.length) {
+        throw new Error('contact sheet의 프레임 수가 분석 후 변경되었습니다.');
+      }
 
       for (const frame of analysis.frames) {
         throwIfAborted(signal);
@@ -445,6 +463,10 @@ export async function createContactSheetVideo(
         await writeFrame(framePath, png);
         frameIndex += 1;
       }
+    }
+
+    if (frameIndex !== totalFrameCount) {
+      throw new Error('실제 추출 프레임 수가 분석 결과와 일치하지 않습니다.');
     }
 
     throwIfAborted(signal);

@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -37,6 +37,92 @@ function selectedSheets(count: number) {
 }
 
 describe('ContactSheetVideoDialog', () => {
+  it('reanalyzes one sheet after a grid change and updates its real-frame overlay', async () => {
+    const user = userEvent.setup();
+    const sheets = selectedSheets(1);
+    const fourByFour = Array.from({ length: 16 }, (_, index) => ({
+      x: index % 4 * 20, y: Math.floor(index / 4) * 18, width: 20, height: 18,
+    }));
+    const fourBySix = Array.from({ length: 24 }, (_, index) => ({
+      x: index % 6 * 20, y: Math.floor(index / 6) * 18, width: 20, height: 18,
+    }));
+    desktopApi.openContactSheetImages.mockResolvedValue(sheets);
+    desktopApi.analyzeContactSheets
+      .mockResolvedValueOnce([{
+        id: sheets[0].id, status: 'recognized', rows: 4, columns: 4,
+        frameCount: 16, width: 80, height: 72, frames: fourByFour,
+      }])
+      .mockResolvedValueOnce([{
+        id: sheets[0].id, status: 'recognized', rows: 4, columns: 6,
+        frameCount: 24, width: 120, height: 72, frames: fourBySix,
+      }]);
+    render(<ContactSheetVideoDialog generalExportInProgress={false} onClose={vi.fn()} onBusyChange={vi.fn()} />);
+
+    await user.click(screen.getByRole('button', { name: 'Contact sheet 이미지 추가' }));
+    expect(await screen.findByText('4행 × 4열 / 총 16프레임')).toBeInTheDocument();
+    expect(screen.getAllByTestId('contact-sheet-frame')).toHaveLength(16);
+
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'sheet-1.png 열' }), {
+      target: { value: '6' },
+    });
+
+    expect(await screen.findByText('4행 × 6열 / 총 24프레임')).toBeInTheDocument();
+    expect(screen.getAllByTestId('contact-sheet-frame')).toHaveLength(24);
+    expect(desktopApi.analyzeContactSheets).toHaveBeenLastCalledWith([
+      { ...sheets[0], rows: 4, columns: 6 },
+    ]);
+    expect(screen.getByText('원본 24프레임 → 출력 24프레임 / 예상 3.0초')).toBeInTheDocument();
+  });
+
+  it('ignores an older analysis result after the grid changes', async () => {
+    const sheets = selectedSheets(1);
+    let resolveInitial!: (value: unknown[]) => void;
+    let resolveGrid!: (value: unknown[]) => void;
+    desktopApi.openContactSheetImages.mockResolvedValue(sheets);
+    desktopApi.analyzeContactSheets
+      .mockReturnValueOnce(new Promise((resolve) => { resolveInitial = resolve; }))
+      .mockReturnValueOnce(new Promise((resolve) => { resolveGrid = resolve; }));
+    render(<ContactSheetVideoDialog generalExportInProgress={false} onClose={vi.fn()} onBusyChange={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Contact sheet 이미지 추가' }));
+    const columns = await screen.findByRole('spinbutton', { name: 'sheet-1.png 열' });
+    fireEvent.change(columns, { target: { value: '6' } });
+    await act(async () => resolveGrid([{
+      id: sheets[0].id, status: 'recognized', rows: 4, columns: 6,
+      frameCount: 24, width: 120, height: 72, frames: [],
+    }]));
+    expect(screen.getByText('4행 × 6열 / 총 24프레임')).toBeInTheDocument();
+
+    await act(async () => resolveInitial([{
+      id: sheets[0].id, status: 'recognized', rows: 4, columns: 4,
+      frameCount: 16, width: 80, height: 72, frames: [],
+    }]));
+    expect(screen.getByText('4행 × 6열 / 총 24프레임')).toBeInTheDocument();
+  });
+
+  it('ignores an older analysis failure after the grid changes', async () => {
+    const sheets = selectedSheets(1);
+    let rejectInitial!: (reason: Error) => void;
+    desktopApi.openContactSheetImages.mockResolvedValue(sheets);
+    desktopApi.analyzeContactSheets
+      .mockReturnValueOnce(new Promise((_resolve, reject) => { rejectInitial = reject; }))
+      .mockResolvedValueOnce([{
+        id: sheets[0].id, status: 'recognized', rows: 4, columns: 6,
+        frameCount: 24, width: 120, height: 72, frames: [],
+      }]);
+    render(<ContactSheetVideoDialog generalExportInProgress={false} onClose={vi.fn()} onBusyChange={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Contact sheet 이미지 추가' }));
+    fireEvent.change(await screen.findByRole('spinbutton', { name: 'sheet-1.png 열' }), {
+      target: { value: '6' },
+    });
+    expect(await screen.findByText('24프레임 인식')).toBeInTheDocument();
+
+    await act(async () => rejectInitial(new Error('old failure')));
+    expect(screen.getByText('24프레임 인식')).toBeInTheDocument();
+    expect(screen.queryByText('인식 실패')).not.toBeInTheDocument();
+  });
+
   it('keeps interpolation off by default and omits it from the create request', async () => {
     const user = userEvent.setup();
     const sheets = selectedSheets(1);
@@ -70,7 +156,7 @@ describe('ContactSheetVideoDialog', () => {
 
     await user.click(screen.getByRole('button', { name: '영상 만들기' }));
     expect(desktopApi.createContactSheetVideo).toHaveBeenCalledWith({
-      sheets,
+      sheets: sheets.map((sheet) => ({ ...sheet, rows: 4, columns: 4 })),
       fps: 8,
     });
   });
@@ -109,7 +195,7 @@ describe('ContactSheetVideoDialog', () => {
 
       await user.click(screen.getByRole('button', { name: '영상 만들기' }));
       expect(desktopApi.createContactSheetVideo).toHaveBeenCalledWith({
-        sheets,
+        sheets: sheets.map((sheet) => ({ ...sheet, rows: 4, columns: 4 })),
         fps: 8,
         interpolation,
       });
@@ -281,7 +367,7 @@ describe('phase 1 contact-sheet options', () => {
     expect(screen.getByText('원본 FPS 8 / 출력 FPS ' + outputFps)).toBeInTheDocument();
     expect(screen.getByText('예상 출력 해상도 320 × 240')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '영상 만들기' }));
-    expect(desktopApi.createContactSheetVideo).toHaveBeenCalledWith({ sheets, fps: 8, outputFps, cropMode: 'center' });
+    expect(desktopApi.createContactSheetVideo).toHaveBeenCalledWith({ sheets: sheets.map((sheet) => ({ ...sheet, rows: 4, columns: 4 })), fps: 8, outputFps, cropMode: 'center' });
   });
   it('switches back to the unchanged slow-motion mode', async () => {
     const { user } = await openWithDetails([0]);

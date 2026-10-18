@@ -35,17 +35,19 @@ function createFixtureImage(
   sheetIndex: number,
   cellWidth: number,
   cellHeight: number,
+  rows = 4,
+  columns = 4,
 ): FixtureImage {
   const separatorWidth = 2;
-  const width = cellWidth * 4 + separatorWidth * 3;
-  const height = cellHeight * 4 + separatorWidth * 3;
+  const width = cellWidth * columns + separatorWidth * (columns - 1);
+  const height = cellHeight * rows + separatorWidth * (rows - 1);
   const data = Buffer.alloc(width * height * 4);
   let y = 0;
 
-  for (let row = 0; row < 4; row += 1) {
+  for (let row = 0; row < rows; row += 1) {
     let x = 0;
-    for (let column = 0; column < 4; column += 1) {
-      const frameIndex = row * 4 + column;
+    for (let column = 0; column < columns; column += 1) {
+      const frameIndex = row * columns + column;
       for (let pixelY = y; pixelY < y + cellHeight; pixelY += 1) {
         for (let pixelX = x; pixelX < x + cellWidth; pixelX += 1) {
           const offset = (pixelY * width + pixelX) * 4;
@@ -56,7 +58,7 @@ function createFixtureImage(
         }
       }
       x += cellWidth;
-      if (column < 3) {
+      if (column < columns - 1) {
         for (let pixelY = y; pixelY < y + cellHeight; pixelY += 1) {
           for (let pixelX = x; pixelX < x + separatorWidth; pixelX += 1) {
             const offset = (pixelY * width + pixelX) * 4;
@@ -68,7 +70,7 @@ function createFixtureImage(
       }
     }
     y += cellHeight;
-    if (row < 3) {
+    if (row < rows - 1) {
       for (let pixelY = y; pixelY < y + separatorWidth; pixelY += 1) {
         for (let pixelX = 0; pixelX < width; pixelX += 1) {
           const offset = (pixelY * width + pixelX) * 4;
@@ -158,6 +160,45 @@ describe('buildContactSheetFfmpegArgs', () => {
 });
 
 describe('createContactSheetVideo', () => {
+  it('uses the actual frame total for mixed per-sheet grids', async () => {
+    const grids = [{ rows: 4, columns: 6 }, { rows: 5, columns: 6 }, { rows: 6, columns: 6 }];
+    const inputs = sources(3).map((sheet, index) => ({ ...sheet, ...grids[index] }));
+    const images = inputs.map((sheet, index) =>
+      createFixtureImage(index, 20, 18, sheet.rows, sheet.columns),
+    );
+    createFromBuffer.mockImplementation((encoded: Buffer) =>
+      images[inputs.findIndex((source) => source.sourcePath === encoded.toString())],
+    );
+    const writes: string[] = [];
+    const progress: Array<{ stage: string; frameCount?: number }> = [];
+    const runFfmpeg = vi.fn().mockResolvedValue(undefined);
+
+    await createContactSheetVideo(
+      { sheets: inputs, fps: 8 },
+      'C:\\exports\\mixed.mp4',
+      {
+        ffmpegPath: 'ffmpeg',
+        makeTempDirectory: async () => 'C:\\Temp\\mixed',
+        writeFrame: async (path) => { writes.push(path); },
+        runFfmpeg,
+        copyFile: vi.fn(),
+        renameFile: vi.fn(),
+        pathExists: async () => false,
+        removeDirectory: vi.fn(),
+        makeSiblingPath: () => 'C:\\exports\\publish.tmp',
+        onProgress: (value) => { progress.push(value); },
+      },
+    );
+
+    expect(writes).toHaveLength(90);
+    expect(writes.at(-1)).toMatch(/frame-000089\.png$/);
+    expect(progress.filter((value) => value.stage === 'extracting').at(-1))
+      .toMatchObject({ frameCount: 90 });
+    expect(runFfmpeg.mock.calls[0][1]).toEqual(
+      expect.arrayContaining(['-frames:v', '90']),
+    );
+  });
+
   it.each([null, 2, 'off', 'unexpected'])(
     'rejects invalid interpolation value %j before reading source images',
     async (interpolation) => {
@@ -485,8 +526,8 @@ describe('phase 1 crop and timing', () => {
   });
   it('returns even dimensions and bounded first/last pixel samples', () => {
     createFromBuffer.mockReturnValue(createFixtureImage(0, 21, 19));
-    const frames = Array.from({ length: 16 }, (_, index) => ({ x: index === 15 ? 69 : 0, y: index === 15 ? 63 : 0, width: 21, height: 19 }));
-    const details = getContactSheetDetails('one.png', { width: 90, height: 82, frames });
+    const frames = Array.from({ length: 24 }, (_, index) => ({ x: index === 23 ? 69 : 0, y: index === 23 ? 63 : 0, width: 21, height: 19 }));
+    const details = getContactSheetDetails('one.png', { width: 90, height: 82, rows: 4, columns: 6, frames });
     expect(details).toMatchObject({ width: 20, height: 18 });
     expect(details.boundary?.first).toHaveLength(768);
     expect(details.boundary?.last).toHaveLength(768);
@@ -494,7 +535,7 @@ describe('phase 1 crop and timing', () => {
   });
   it('preserves dimensions when optional pixel sampling fails', () => {
     createFromBuffer.mockImplementation(() => { throw new Error('cannot sample'); });
-    expect(getContactSheetDetails('missing.png', { width: 80, height: 80, frames: Array.from({ length: 16 }, () => ({ x: 0, y: 0, width: 21, height: 19 })) })).toEqual({ width: 20, height: 18 });
+    expect(getContactSheetDetails('missing.png', { width: 80, height: 80, rows: 4, columns: 4, frames: Array.from({ length: 16 }, () => ({ x: 0, y: 0, width: 21, height: 19 })) })).toEqual({ width: 20, height: 18 });
   });
 });
 

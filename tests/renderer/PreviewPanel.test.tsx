@@ -128,7 +128,144 @@ describe('PreviewPanel', () => {
     expect(
       within(controls).getByRole('group', { name: '미리보기 표시 방식' }),
     ).toBeInTheDocument();
-    expect(within(controls).getAllByRole('button')).toHaveLength(6);
+    expect(within(controls).getAllByRole('button')).toHaveLength(8);
+  });
+
+  it('uses the wide preview by default and switches to the output frame and back', () => {
+    const { container } = render(
+      <StatefulPreview mediaList={[media[0]]} sceneList={[scenes[0]]} />,
+    );
+    const frame = container.querySelector('.preview-frame') as HTMLElement;
+    const wide = screen.getByRole('button', { name: '가로 크게 보기' });
+    const output = screen.getByRole('button', { name: '출력 화면' });
+
+    expect(frame).toHaveClass('preview-frame-wide');
+    expect(wide).toHaveAttribute('aria-pressed', 'true');
+    expect(output).toHaveAttribute('aria-pressed', 'false');
+    expect(
+      screen.getByText('가로 크게 보기는 원본 미디어 확인용입니다.'),
+    ).toBeInTheDocument();
+
+    fireEvent.click(output);
+    expect(frame).toHaveClass('preview-frame-output');
+    expect(frame).not.toHaveClass('preview-frame-wide');
+    expect(wide).toHaveAttribute('aria-pressed', 'false');
+    expect(output).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: '재생' })).toBeInTheDocument();
+    expect(
+      screen.queryByText('가로 크게 보기는 원본 미디어 확인용입니다.'),
+    ).toBeNull();
+
+    fireEvent.click(wide);
+    expect(frame).toHaveClass('preview-frame-wide');
+    expect(wide).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: '재생' })).toBeInTheDocument();
+  });
+
+  it('preserves the playing video, playback position, narration, and seek state when the frame mode changes', async () => {
+    const play = vi
+      .spyOn(HTMLMediaElement.prototype, 'play')
+      .mockResolvedValue(undefined);
+    const pause = vi.mocked(HTMLMediaElement.prototype.pause);
+    const onPlaybackSnapshotChange = vi.fn();
+    const { container } = render(
+      <StatefulPreview
+        initialSceneIndex={1}
+        narrationAsset={narration}
+        onPlaybackSnapshotChange={onPlaybackSnapshotChange}
+      />,
+    );
+    loadVideoDuration(container, 'video', 4);
+    const videoBefore = screen.getByLabelText(
+      'clip.mp4 미리보기',
+    ) as HTMLVideoElement;
+    const audioBefore = screen.getByLabelText('내레이션') as HTMLAudioElement;
+    setMediaDuration(videoBefore, 4);
+    fireEvent.loadedMetadata(videoBefore);
+    setMediaDuration(audioBefore, 10);
+    fireEvent.loadedMetadata(audioBefore);
+    const seek = screen.getByRole('slider', {
+      name: '전체 프로젝트 재생 위치',
+    });
+    fireEvent.change(seek, { target: { value: '4250' } });
+    fireEvent.seeked(audioBefore);
+    fireEvent.click(screen.getByRole('button', { name: '재생' }));
+    await act(async () => Promise.resolve());
+    const seekBefore = seek.getAttribute('value');
+    expect(seekBefore).toBe('4250');
+    play.mockClear();
+    pause.mockClear();
+    onPlaybackSnapshotChange.mockClear();
+
+    fireEvent.click(screen.getByRole('button', { name: '출력 화면' }));
+    fireEvent.click(screen.getByRole('button', { name: '가로 크게 보기' }));
+
+    const videoAfter = screen.getByLabelText(
+      'clip.mp4 미리보기',
+    ) as HTMLVideoElement;
+    const audioAfter = screen.getByLabelText('내레이션') as HTMLAudioElement;
+    expect(videoAfter).toBe(videoBefore);
+    expect(videoAfter.currentTime).toBe(1.25);
+    expect(audioAfter).toBe(audioBefore);
+    expect(audioAfter.currentTime).toBe(4.25);
+    expect(screen.getByRole('button', { name: '일시정지' })).toBeInTheDocument();
+    expect(container.querySelector('.preview-frame')).toHaveClass(
+      'preview-frame-wide',
+    );
+    expect(
+      screen.getByRole('slider', { name: '전체 프로젝트 재생 위치' }),
+    ).toHaveAttribute('value', seekBefore);
+    expect(play).not.toHaveBeenCalled();
+    expect(pause).not.toHaveBeenCalled();
+    expect(onPlaybackSnapshotChange).not.toHaveBeenCalled();
+  });
+
+  it('keeps fit and zoom independent from the selected frame mode', () => {
+    const { container } = render(
+      <StatefulPreview mediaList={[media[0]]} sceneList={[scenes[0]]} />,
+    );
+    const image = screen.getByRole('img', { name: 'first image.jpg' });
+
+    fireEvent.click(screen.getByRole('button', { name: '확대' }));
+    expect(image).toHaveClass('preview-media-zoomed');
+    fireEvent.click(screen.getByRole('button', { name: '출력 화면' }));
+    expect(container.querySelector('.preview-frame')).toHaveClass(
+      'preview-frame-output',
+    );
+    expect(image).toHaveClass('preview-media-zoomed');
+
+    fireEvent.click(screen.getByRole('button', { name: '맞춤' }));
+    expect(image).not.toHaveClass('preview-media-zoomed');
+    fireEvent.click(screen.getByRole('button', { name: '가로 크게 보기' }));
+    expect(container.querySelector('.preview-frame')).toHaveClass(
+      'preview-frame-wide',
+    );
+    expect(image).not.toHaveClass('preview-media-zoomed');
+  });
+
+  it('keeps a bottom subtitle inside both preview frame modes', () => {
+    const bottomScene = {
+      ...scenes[2],
+      subtitle: '하단 자막',
+    };
+    const { container } = render(
+      <StatefulPreview
+        mediaList={[media[2]]}
+        sceneList={[bottomScene]}
+        initialSceneIndex={0}
+      />,
+    );
+    const subtitle = screen.getByText('하단 자막');
+    const expectedBottom = `${(150 / 1920) * 100}%`;
+
+    expect(subtitle.parentElement).toHaveClass('preview-frame-wide');
+    expect(subtitle.style.bottom).toBe(expectedBottom);
+    fireEvent.click(screen.getByRole('button', { name: '출력 화면' }));
+    expect(container.querySelector('.preview-frame')).toHaveClass(
+      'preview-frame-output',
+    );
+    expect(subtitle.parentElement).toHaveClass('preview-frame-output');
+    expect(subtitle.style.bottom).toBe(expectedBottom);
   });
 
   it('uses fit by default and switches the image preview between fit and zoom', () => {
@@ -1200,8 +1337,11 @@ describe('PreviewPanel', () => {
     const subtitle = screen.getByText('첫 자막');
     expect(subtitle).toBeInTheDocument();
     expect(subtitle.style.fontSize).toBe(`${(80 / 1080) * 100}cqw`);
+    expect(subtitle).toHaveClass('preview-subtitle-large');
     expect(subtitle.style.top).toBe(`${(150 / 1920) * 100}%`);
     expect(subtitle.style.left).toBe(`${(80 / 1080) * 100}%`);
+    fireEvent.click(screen.getByRole('button', { name: '출력 화면' }));
+    expect(subtitle.style.fontSize).toBe(`${(80 / 1080) * 100}cqw`);
     expect(screen.getByRole('button', { name: '이전' })).toBeDisabled();
     expect(screen.getByRole('button', { name: '다음' })).toBeEnabled();
     expect(screen.getByRole('button', { name: '재생' })).toBeEnabled();
@@ -1212,9 +1352,38 @@ describe('PreviewPanel', () => {
 
     const subtitle = screen.getByText('영상 자막');
     expect(subtitle.style.fontSize).toBe(`${(48 / 1080) * 100}cqw`);
+    expect(subtitle).toHaveClass('preview-subtitle-small');
     expect(subtitle.style.top).toBe('50%');
     expect(subtitle.style.transform).toBe('translateY(-50%)');
   });
+
+  it.each([
+    ['top', 'top'],
+    ['center', 'top'],
+    ['bottom', 'bottom'],
+  ] as const)(
+    'scales a multiline large subtitle safely in the wide frame at %s',
+    (subtitlePosition, positionProperty) => {
+      const multilineScene: Scene = {
+        ...scenes[0],
+        subtitle: '하나\n둘\n셋\n넷\n다섯\n여섯',
+        subtitlePosition,
+        subtitleSize: 'large',
+      };
+      render(
+        <StatefulPreview
+          mediaList={[media[0]]}
+          sceneList={[multilineScene]}
+        />,
+      );
+
+      const subtitle = screen.getByText(/하나/);
+      expect(subtitle.parentElement).toHaveClass('preview-frame-wide');
+      expect(subtitle.style.fontSize).toBe(`${(80 / 1080) * 100}cqw`);
+      expect(subtitle).toHaveClass('preview-subtitle-large');
+      expect(subtitle.style[positionProperty]).not.toBe('');
+    },
+  );
 
   it('previews and navigates scenes with the same media independently by index', () => {
     const duplicateScenes: Scene[] = [
@@ -1233,6 +1402,7 @@ describe('PreviewPanel', () => {
     const duplicateSubtitle = screen.getByText('복제 자막');
     expect(duplicateSubtitle.style.top).toBe(`${(150 / 1920) * 100}%`);
     expect(duplicateSubtitle.style.fontSize).toBe(`${(80 / 1080) * 100}cqw`);
+    expect(duplicateSubtitle).toHaveClass('preview-subtitle-large');
 
     fireEvent.click(screen.getByRole('button', { name: '이전' }));
     expect(screen.getByText('원본 자막')).toBeInTheDocument();

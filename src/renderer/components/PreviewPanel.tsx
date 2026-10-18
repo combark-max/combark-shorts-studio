@@ -72,6 +72,9 @@ export function PreviewPanel({
   const [globalCurrentTimeMs, setGlobalCurrentTimeMs] = useState(0);
   const [seekRevision, setSeekRevision] = useState(0);
   const [isPreviewZoomed, setIsPreviewZoomed] = useState(false);
+  const [previewFrameMode, setPreviewFrameMode] = useState<'wide' | 'output'>(
+    'wide',
+  );
   const [videoDurationEntries, setVideoDurationEntries] = useState<
     Record<string, VideoDurationEntry>
   >({});
@@ -818,7 +821,7 @@ export function PreviewPanel({
   return (
     <section className="panel preview-panel" aria-label="미리보기">
       <div className="preview-stage">
-        <div className="preview-frame">
+        <div className={`preview-frame preview-frame-${previewFrameMode}`}>
         {!currentScene || !currentAsset ? (
           <p className="preview-empty">
             {scenes.length === 0
@@ -868,12 +871,40 @@ export function PreviewPanel({
           />
         )}
         {currentScene?.subtitle ? (
-          <p className="preview-subtitle" style={previewSubtitleStyle}>
+          <p
+            className={`preview-subtitle preview-subtitle-${currentScene.subtitleSize}`}
+            style={previewSubtitleStyle}
+          >
             {currentScene.subtitle}
           </p>
         ) : null}
         </div>
         <div className="preview-controls">
+          <div
+            aria-label="미리보기 화면 비율"
+            className="preview-frame-mode"
+            role="group"
+          >
+            <button
+              aria-pressed={previewFrameMode === 'wide'}
+              type="button"
+              onClick={() => setPreviewFrameMode('wide')}
+            >
+              가로 크게 보기
+            </button>
+            <button
+              aria-pressed={previewFrameMode === 'output'}
+              type="button"
+              onClick={() => setPreviewFrameMode('output')}
+            >
+              출력 화면
+            </button>
+          </div>
+          {previewFrameMode === 'wide' ? (
+            <p className="preview-frame-note">
+              가로 크게 보기는 원본 미디어 확인용입니다.
+            </p>
+          ) : null}
           <div className="preview-buttons">
             <button
               type="button"

@@ -133,7 +133,7 @@ button:hover {
   display: grid;
   flex: 1 1 auto;
   gap: 8px;
-  grid-template-columns: minmax(0, max-content) clamp(180px, 18vw, 240px);
+  grid-template-columns: minmax(0, 1fr) clamp(180px, 18vw, 240px);
   justify-content: center;
   max-width: 100%;
   min-height: 0;
@@ -142,7 +142,6 @@ button:hover {
 
 .preview-frame {
   align-items: center;
-  aspect-ratio: 9 / 16;
   background: #050608;
   border: 1px solid #3a414d;
   display: flex;
@@ -156,6 +155,14 @@ button:hover {
   position: relative;
   width: auto;
   container-type: inline-size;
+}
+
+.preview-frame-wide {
+  aspect-ratio: 16 / 9;
+}
+
+.preview-frame-output {
+  aspect-ratio: 9 / 16;
 }
 
 .preview-media {
@@ -199,6 +206,18 @@ button:hover {
   text-align: center;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.preview-frame-wide .preview-subtitle-small {
+  font-size: 1.40625cqw !important;
+}
+
+.preview-frame-wide .preview-subtitle-medium {
+  font-size: 1.875cqw !important;
+}
+
+.preview-frame-wide .preview-subtitle-large {
+  font-size: 2.34375cqw !important;
 }
 
 .preview-seek {
@@ -248,17 +267,25 @@ button:hover {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.preview-frame-mode {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .preview-view-mode {
   display: grid;
   gap: 6px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.preview-frame-mode button[aria-pressed="true"],
 .preview-view-mode button[aria-pressed="true"] {
   background: #344c66;
   border-color: #6fb7f5;
 }
 
+.preview-frame-note,
 .preview-zoom-note {
   color: #aab2c0;
   font-size: 11px;
@@ -278,6 +305,17 @@ button:hover {
 
 .preview-controls button:disabled:hover {
   background: #20252e;
+}
+
+@media (max-width: 1180px), (max-height: 760px) {
+  .preview-stage {
+    grid-template-columns: minmax(0, 1fr) minmax(180px, 220px);
+  }
+
+  .preview-controls {
+    gap: 8px;
+    padding: 8px;
+  }
 }
 
 .properties-panel p {

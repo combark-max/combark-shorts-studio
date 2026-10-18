@@ -48,4 +48,57 @@ describe('compact editor layout styles', () => {
     expect(clip.height).toBe('26px');
     expect(handle.width).toBe('12px');
   });
+
+  it('defines bounded wide and output preview frames with minimum-window safeguards', () => {
+    const style = document.createElement('style');
+    style.textContent = readFileSync(
+      join(process.cwd(), 'src', 'renderer', 'styles.css'),
+      'utf8',
+    );
+    document.head.append(style);
+    document.body.innerHTML = `
+      <main class="workspace">
+        <section class="preview-panel">
+          <div class="preview-stage">
+            <div class="preview-frame preview-frame-wide">
+              <img class="preview-media" alt="wide" />
+              <p class="preview-subtitle preview-subtitle-large">subtitle</p>
+            </div>
+            <div class="preview-controls"></div>
+          </div>
+        </section>
+        <div class="preview-frame preview-frame-output"></div>
+      </main>
+    `;
+
+    const stage = getComputedStyle(document.querySelector('.preview-stage') as Element);
+    const wide = getComputedStyle(document.querySelector('.preview-frame-wide') as Element);
+    const output = getComputedStyle(document.querySelector('.preview-frame-output') as Element);
+    const media = getComputedStyle(document.querySelector('.preview-media') as Element);
+    const subtitle = getComputedStyle(document.querySelector('.preview-subtitle') as Element);
+
+    expect(stage.gridTemplateColumns).toContain('minmax(0, 1fr)');
+    expect(wide.aspectRatio).toBe('16 / 9');
+    expect(wide.maxWidth).toBe('100%');
+    expect(output.aspectRatio).toBe('9 / 16');
+    expect(media.objectFit).toBe('contain');
+    expect(subtitle.fontSize).toBe('2.34375cqw');
+
+    const minimumWindowRule = Array.from(
+      (style.sheet as CSSStyleSheet).cssRules,
+    ).find(
+      (rule): rule is CSSMediaRule =>
+        rule instanceof CSSMediaRule &&
+        rule.conditionText.includes('max-width: 1180px'),
+    );
+    expect(minimumWindowRule).toBeDefined();
+    expect(
+      Array.from(minimumWindowRule?.cssRules ?? []).some(
+        (rule) =>
+          rule instanceof CSSStyleRule &&
+          rule.selectorText === '.preview-controls' &&
+          rule.style.padding === '8px',
+      ),
+    ).toBe(true);
+  });
 });

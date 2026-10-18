@@ -402,18 +402,25 @@ describe('App', () => {
     await screen.findByText('Combark Shorts Studio');
     openMediaDrawer();
     await user.click(screen.getByRole('button', { name: '파일 추가' }));
-    await screen.findByRole('button', { name: '1번 장면 photo.jpg' });
+    const firstScene = await screen.findByRole('button', {
+      name: '1번 장면 photo.jpg',
+    });
+    await waitFor(() =>
+      expect(firstScene).toHaveAttribute('aria-pressed', 'true'),
+    );
 
     const previewSeek = screen.getByRole('slider', {
       name: '전체 프로젝트 재생 위치',
     });
-    expect(previewSeek).toBeEnabled();
-    fireEvent.input(
-      previewSeek,
-      { target: { value: '1500' } },
-    );
+    await waitFor(() => {
+      expect(previewSeek).toBeEnabled();
+      expect(previewSeek).toHaveAttribute('max', '3000');
+    });
+    fireEvent.change(previewSeek, { target: { value: '1500' } });
 
-    expect(previewSeek).toHaveValue('1500');
+    await waitFor(() =>
+      expect(previewSeek).toHaveValue('1500'),
+    );
     await waitFor(() =>
       expect(screen.getByLabelText('재생 위치선')).toHaveStyle({ left: '90px' }),
     );

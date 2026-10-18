@@ -38,29 +38,40 @@ function renderSidebar(
 afterEach(cleanup);
 
 describe('MediaSidebar', () => {
-  it('shows a media launcher and source-attention badge while the drawer is closed', () => {
-    const { props } = renderSidebar({ collapsed: true });
+  it('keeps a collapsed media dock mounted with source attention visible', () => {
+    const { container, props, rerender } = renderSidebar({ collapsed: true });
+    const dock = screen.getByRole('complementary', { name: '미디어' });
+    const content = container.querySelector('#media-dock-content');
 
     expect(
-      screen.getByRole('button', { name: '미디어 열기' }),
+      screen.getByRole('button', { name: '미디어 펼치기' }),
     ).toBeInTheDocument();
+    expect(dock).toHaveClass('media-sidebar-collapsed');
+    expect(content).toHaveAttribute('hidden');
     expect(screen.getByRole('status')).toHaveAccessibleName(
       '원본 파일 확인 필요',
     );
+    expect(container.querySelector('.media-drawer-backdrop')).toBeNull();
 
-    expect(screen.queryByRole('complementary', { name: '미디어' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: '미디어 열기' }));
+    fireEvent.click(screen.getByRole('button', { name: '미디어 펼치기' }));
 
     expect(props.onToggleCollapsed).toHaveBeenCalledWith(false);
+
+    rerender(<MediaSidebar {...props} collapsed={false} />);
+    expect(screen.getByRole('complementary', { name: '미디어' })).toBe(dock);
+    expect(container.querySelector('#media-dock-content')).toBe(content);
+    expect(content).not.toHaveAttribute('hidden');
+    expect(screen.getByText('missing.jpg')).toBeInTheDocument();
   });
 
   it('restores all existing media and narration controls when expanded', () => {
-    const { props } = renderSidebar();
+    const { container, props } = renderSidebar();
 
     expect(screen.getByRole('complementary', { name: '미디어' })).toBeInTheDocument();
+    expect(container.querySelector('.media-drawer-backdrop')).toBeNull();
 
     fireEvent.click(
-      screen.getByRole('button', { name: '미디어 닫기' }),
+      screen.getByRole('button', { name: '미디어 접기' }),
     );
     fireEvent.click(
       screen.getByRole('button', { name: 'missing.jpg 파일 다시 찾기' }),
@@ -75,5 +86,23 @@ describe('MediaSidebar', () => {
     expect(props.onRelinkNarration).toHaveBeenCalledOnce();
     expect(props.onRemoveNarration).toHaveBeenCalledOnce();
     expect(screen.getByText('전환효과')).toBeInTheDocument();
+  });
+
+  it('preserves empty and source-check error states inside the dock', () => {
+    renderSidebar({
+      media: [],
+      narration: null,
+      missingMediaIds: [],
+      narrationMissing: false,
+      sourceCheckFailed: true,
+    });
+
+    expect(screen.getByText('추가된 미디어가 없습니다.')).toBeInTheDocument();
+    expect(
+      screen.getByText('원본 파일 상태를 확인하지 못했습니다.'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'MP3/WAV 내레이션 선택' }),
+    ).toBeInTheDocument();
   });
 });

@@ -104,22 +104,46 @@ afterEach(() => {
 });
 
 describe('PreviewPanel', () => {
-  it('places playback controls, seek, and time beside the preview frame', () => {
+  it('places control groups above a full-width seek row and auxiliary notes', () => {
     const { container } = render(
       <StatefulPreview mediaList={[media[0]]} sceneList={[scenes[0]]} />,
     );
     const stage = container.querySelector('.preview-stage') as HTMLElement;
     const frame = container.querySelector('.preview-frame') as HTMLElement;
     const controls = container.querySelector('.preview-controls') as HTMLElement;
+    const primary = container.querySelector(
+      '.preview-controls-primary',
+    ) as HTMLElement;
+    const secondary = container.querySelector(
+      '.preview-controls-secondary',
+    ) as HTMLElement;
+    const notes = container.querySelector(
+      '.preview-control-notes',
+    ) as HTMLElement;
     const seek = container.querySelector('.preview-seek') as HTMLElement;
     const time = container.querySelector('.preview-time') as HTMLElement;
     const panel = container.querySelector('.preview-panel') as HTMLElement;
 
     expect(stage).toContainElement(frame);
     expect(stage).toContainElement(controls);
-    expect(controls).toContainElement(seek);
-    expect(controls).toContainElement(time);
+    expect(controls).toContainElement(primary);
+    expect(controls).toContainElement(secondary);
+    expect(controls).toContainElement(notes);
+    expect(primary).toContainElement(
+      screen.getByRole('group', { name: '미리보기 화면 비율' }),
+    );
+    expect(primary).toContainElement(
+      screen.getByRole('button', { name: '처음부터' }),
+    );
+    expect(primary).toContainElement(
+      screen.getByRole('group', { name: '미리보기 표시 방식' }),
+    );
+    expect(secondary).toContainElement(seek);
+    expect(secondary).toContainElement(time);
     expect(seek.nextElementSibling).toBe(time);
+    expect(notes).toHaveTextContent(
+      '가로 크게 보기는 원본 미디어 확인용입니다.',
+    );
     expect(panel).toHaveAttribute('aria-label', '미리보기');
     expect(screen.queryByRole('heading', { name: '미리보기' })).toBeNull();
     expect(
@@ -285,6 +309,10 @@ describe('PreviewPanel', () => {
     expect(
       screen.getByText('확대 시 화면 가장자리가 잘릴 수 있습니다.'),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText('확대 시 화면 가장자리가 잘릴 수 있습니다.')
+        .parentElement,
+    ).toHaveClass('preview-control-notes');
 
     fireEvent.click(fit);
     expect(image).not.toHaveClass('preview-media-zoomed');

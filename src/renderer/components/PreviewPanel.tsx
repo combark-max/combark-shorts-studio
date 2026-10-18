@@ -880,109 +880,117 @@ export function PreviewPanel({
         ) : null}
         </div>
         <div className="preview-controls">
-          <div
-            aria-label="미리보기 화면 비율"
-            className="preview-frame-mode"
-            role="group"
-          >
-            <button
-              aria-pressed={previewFrameMode === 'wide'}
-              type="button"
-              onClick={() => setPreviewFrameMode('wide')}
+          <div className="preview-controls-primary">
+            <div
+              aria-label="미리보기 화면 비율"
+              className="preview-frame-mode"
+              role="group"
             >
-              가로 크게 보기
-            </button>
-            <button
-              aria-pressed={previewFrameMode === 'output'}
-              type="button"
-              onClick={() => setPreviewFrameMode('output')}
+              <button
+                aria-pressed={previewFrameMode === 'wide'}
+                type="button"
+                onClick={() => setPreviewFrameMode('wide')}
+              >
+                가로 크게 보기
+              </button>
+              <button
+                aria-pressed={previewFrameMode === 'output'}
+                type="button"
+                onClick={() => setPreviewFrameMode('output')}
+              >
+                출력 화면
+              </button>
+            </div>
+            <div className="preview-buttons">
+              <button
+                type="button"
+                disabled={scenes.length === 0}
+                onClick={restartPlayback}
+              >
+                처음부터
+              </button>
+              <button
+                type="button"
+                disabled={currentIndex <= 0}
+                onClick={() => selectScene(currentIndex - 1)}
+              >
+                이전
+              </button>
+              <button
+                type="button"
+                disabled={!currentScene || !currentAsset || mediaError !== null}
+                onClick={togglePlayback}
+              >
+                {isPlaying ? '일시정지' : '재생'}
+              </button>
+              <button
+                type="button"
+                disabled={currentIndex < 0 || currentIndex >= scenes.length - 1}
+                onClick={() => selectScene(currentIndex + 1)}
+              >
+                다음
+              </button>
+            </div>
+            <div
+              aria-label="미리보기 표시 방식"
+              className="preview-view-mode"
+              role="group"
             >
-              출력 화면
-            </button>
+              <button
+                aria-pressed={!isPreviewZoomed}
+                type="button"
+                onClick={() => setIsPreviewZoomed(false)}
+              >
+                맞춤
+              </button>
+              <button
+                aria-pressed={isPreviewZoomed}
+                type="button"
+                onClick={() => setIsPreviewZoomed(true)}
+              >
+                확대
+              </button>
+            </div>
           </div>
-          {previewFrameMode === 'wide' ? (
-            <p className="preview-frame-note">
-              가로 크게 보기는 원본 미디어 확인용입니다.
-            </p>
+          <div className="preview-controls-secondary">
+            <div className="preview-seek">
+              <input
+                aria-label="전체 프로젝트 재생 위치"
+                disabled={!previewTimeline || previewTimeline.scenes.length === 0}
+                max={previewTimeline?.totalDurationMs ?? 0}
+                min="0"
+                step="1"
+                type="range"
+                value={Math.min(
+                  globalCurrentTimeMs,
+                  previewTimeline?.totalDurationMs ?? 0,
+                )}
+                onChange={(event) =>
+                  handleGlobalSeek(Number(event.currentTarget.value))
+                }
+              />
+            </div>
+            <span className="preview-time">
+              {formatPreviewTime(globalCurrentTimeMs)} /{' '}
+              {previewTimeline
+                ? formatPreviewTime(previewTimeline.totalDurationMs)
+                : '--:--'}
+            </span>
+          </div>
+          {previewFrameMode === 'wide' || isPreviewZoomed ? (
+            <div className="preview-control-notes">
+              {previewFrameMode === 'wide' ? (
+                <p className="preview-frame-note">
+                  가로 크게 보기는 원본 미디어 확인용입니다.
+                </p>
+              ) : null}
+              {isPreviewZoomed ? (
+                <p className="preview-zoom-note">
+                  확대 시 화면 가장자리가 잘릴 수 있습니다.
+                </p>
+              ) : null}
+            </div>
           ) : null}
-          <div className="preview-buttons">
-            <button
-              type="button"
-              disabled={scenes.length === 0}
-              onClick={restartPlayback}
-            >
-              처음부터
-            </button>
-            <button
-              type="button"
-              disabled={currentIndex <= 0}
-              onClick={() => selectScene(currentIndex - 1)}
-            >
-              이전
-            </button>
-            <button
-              type="button"
-              disabled={!currentScene || !currentAsset || mediaError !== null}
-              onClick={togglePlayback}
-            >
-              {isPlaying ? '일시정지' : '재생'}
-            </button>
-            <button
-              type="button"
-              disabled={currentIndex < 0 || currentIndex >= scenes.length - 1}
-              onClick={() => selectScene(currentIndex + 1)}
-            >
-              다음
-            </button>
-          </div>
-          <div
-            aria-label="미리보기 표시 방식"
-            className="preview-view-mode"
-            role="group"
-          >
-            <button
-              aria-pressed={!isPreviewZoomed}
-              type="button"
-              onClick={() => setIsPreviewZoomed(false)}
-            >
-              맞춤
-            </button>
-            <button
-              aria-pressed={isPreviewZoomed}
-              type="button"
-              onClick={() => setIsPreviewZoomed(true)}
-            >
-              확대
-            </button>
-          </div>
-          {isPreviewZoomed ? (
-            <p className="preview-zoom-note">
-              확대 시 화면 가장자리가 잘릴 수 있습니다.
-            </p>
-          ) : null}
-          <div className="preview-seek">
-            <input
-              aria-label="전체 프로젝트 재생 위치"
-              disabled={!previewTimeline || previewTimeline.scenes.length === 0}
-              max={previewTimeline?.totalDurationMs ?? 0}
-              min="0"
-              step="1"
-              type="range"
-              value={Math.min(
-                globalCurrentTimeMs,
-                previewTimeline?.totalDurationMs ?? 0,
-              )}
-              onChange={(event) =>
-                handleGlobalSeek(Number(event.currentTarget.value))
-              }
-            />
-          </div>
-          <span className="preview-time">
-            {formatPreviewTime(globalCurrentTimeMs)} /{' '}
-            {previewTimeline
-              ? formatPreviewTime(previewTimeline.totalDurationMs)
-              : '--:--'}
-          </span>
         </div>
       </div>
       <div className="preview-metadata" aria-hidden="true">

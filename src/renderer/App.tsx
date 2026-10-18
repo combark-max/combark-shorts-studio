@@ -16,6 +16,8 @@ import {
 import { useProjectController } from './project/useProjectController';
 import type { ProjectDocument } from '../shared/project/types';
 
+const MEDIA_DOCK_COLLAPSE_BREAKPOINT = 1180;
+
 function getExportProgressMessage(
   progress: ReturnType<typeof useProjectController>['exportProgress'],
 ): string {
@@ -48,7 +50,9 @@ export function App() {
   );
   const [timelinePlayback, setTimelinePlayback] =
     useState<TimelinePlaybackSnapshot>(EMPTY_TIMELINE_PLAYBACK_SNAPSHOT);
-  const [mediaSidebarCollapsed, setMediaSidebarCollapsed] = useState(true);
+  const [mediaSidebarCollapsed, setMediaSidebarCollapsed] = useState(
+    () => window.innerWidth <= MEDIA_DOCK_COLLAPSE_BREAKPOINT,
+  );
   const {
     state,
     newProject,

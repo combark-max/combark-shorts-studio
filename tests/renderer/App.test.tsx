@@ -40,6 +40,15 @@ const desktopApi = {
   respondToWindowClose: vi.fn(),
 };
 
+const initialWindowInnerWidth = window.innerWidth;
+
+function setWindowWidth(width: number): void {
+  Object.defineProperty(window, 'innerWidth', {
+    configurable: true,
+    value: width,
+  });
+}
+
 function loadPreviewVideoDuration(
   container: HTMLElement,
   mediaId: string,
@@ -57,8 +66,11 @@ function loadPreviewVideoDuration(
 }
 
 function openMediaDrawer(): void {
-  if (!screen.queryByRole('complementary', { name: '미디어' })) {
-    fireEvent.click(screen.getByRole('button', { name: '미디어 열기' }));
+  const expandButton = screen.queryByRole('button', {
+    name: '미디어 펼치기',
+  });
+  if (expandButton) {
+    fireEvent.click(expandButton);
   }
 }
 
@@ -81,6 +93,7 @@ function expandRecentProjects(): void {
 }
 
 beforeEach(() => {
+  setWindowWidth(initialWindowInnerWidth);
   vi.clearAllMocks();
   vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(
     () => undefined,
@@ -115,6 +128,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  setWindowWidth(initialWindowInnerWidth);
 });
 
 describe('App', () => {
@@ -908,11 +922,40 @@ describe('App', () => {
     render(<App />);
 
     expect(await screen.findByText('Combark Shorts Studio')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '새 프로젝트' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '쇼츠 자동 만들기' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'MP4 내보내기' })).toBeInTheDocument();
+    const projectActions = screen.getByRole('group', {
+      name: '프로젝트 관리',
+    });
+    const creationActions = screen.getByRole('group', { name: '영상 제작' });
+    const exportActions = screen.getByRole('group', { name: '내보내기' });
+    expect(
+      within(projectActions).getByRole('button', { name: '새 프로젝트' }),
+    ).toBeInTheDocument();
+    expect(
+      within(projectActions).getByRole('button', { name: '열기' }),
+    ).toBeInTheDocument();
+    expect(
+      within(projectActions).getByRole('button', { name: '저장' }),
+    ).toBeInTheDocument();
+    expect(
+      within(projectActions).getByRole('button', {
+        name: '다른 이름으로 저장',
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(creationActions).getByRole('button', {
+        name: '쇼츠 자동 만들기',
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(creationActions).getByRole('button', {
+        name: '연속 프레임 영상 만들기',
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(exportActions).getByRole('button', { name: 'MP4 내보내기' }),
+    ).toBeInTheDocument();
 
-    expect(screen.getByRole('button', { name: '미디어 열기' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '미디어 펼치기' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: '미리보기' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: '미리보기' })).not.toBeInTheDocument();
     expect(screen.queryByText('속성')).not.toBeInTheDocument();
@@ -926,15 +969,94 @@ describe('App', () => {
     expect(await screen.findByText('v0.1.0')).toBeInTheDocument();
   });
 
-  it('opens and closes media as an overlay drawer', async () => {
+  it('keeps media as an in-flow dock while it expands and collapses', async () => {
     render(<App />);
     await screen.findByText('Combark Shorts Studio');
 
-    expect(screen.queryByRole('complementary', { name: '미디어' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: '미디어 열기' }));
-    expect(screen.getByRole('complementary', { name: '미디어' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '미디어 닫기' }));
-    expect(screen.queryByRole('complementary', { name: '미디어' })).toBeNull();
+    const dock = screen.getByRole('complementary', { name: '미디어' });
+    const preview = screen.getByRole('region', { name: '미리보기' });
+    expect(dock).toHaveClass('media-sidebar-collapsed');
+    expect(document.querySelector('.media-drawer-backdrop')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: '미디어 펼치기' }));
+    expect(screen.getByRole('complementary', { name: '미디어' })).toBe(dock);
+    expect(screen.getByRole('region', { name: '미리보기' })).toBe(preview);
+    expect(dock).not.toHaveClass('media-sidebar-collapsed');
+
+    fireEvent.click(screen.getByRole('button', { name: '미디어 접기' }));
+    expect(screen.getByRole('complementary', { name: '미디어' })).toBe(dock);
+    expect(dock).toHaveClass('media-sidebar-collapsed');
+  });
+
+  it('defaults the media dock by viewport width without overriding a user choice', async () => {
+    setWindowWidth(1440);
+    const { unmount } = render(<App />);
+    await screen.findByText('Combark Shorts Studio');
+
+    expect(screen.getByRole('complementary', { name: '미디어' }))
+      .not.toHaveClass('media-sidebar-collapsed');
+    unmount();
+
+    setWindowWidth(1100);
+    render(<App />);
+    await screen.findByText('Combark Shorts Studio');
+    const dock = screen.getByRole('complementary', { name: '미디어' });
+    expect(dock).toHaveClass('media-sidebar-collapsed');
+
+    fireEvent.click(screen.getByRole('button', { name: '미디어 펼치기' }));
+    setWindowWidth(1440);
+    fireEvent(window, new Event('resize'));
+
+    expect(dock).not.toHaveClass('media-sidebar-collapsed');
+    expect(screen.getByRole('button', { name: '미디어 접기' })).toBeInTheDocument();
+  });
+
+  it('keeps the preview media element and playback position while toggling the dock', async () => {
+    setWindowWidth(1440);
+    desktopApi.openMediaDialog.mockResolvedValue([
+      {
+        id: 'dock-video',
+        kind: 'video',
+        sourcePath: 'C:\\media\\dock.mp4',
+        fileName: 'dock.mp4',
+      },
+    ]);
+    desktopApi.openNarrationDialog.mockResolvedValue({
+      sourcePath: 'C:\\audio\\dock.mp3',
+      fileName: 'dock.mp3',
+    });
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByText('Combark Shorts Studio');
+    await user.click(screen.getByRole('button', { name: '파일 추가' }));
+    await user.click(
+      screen.getByRole('button', { name: 'MP3/WAV 내레이션 선택' }),
+    );
+
+    const video = await screen.findByLabelText('dock.mp4 미리보기');
+    const audio = await screen.findByLabelText('내레이션');
+    Object.defineProperty(video, 'currentTime', {
+      configurable: true,
+      writable: true,
+      value: 1.5,
+    });
+    Object.defineProperty(audio, 'currentTime', {
+      configurable: true,
+      writable: true,
+      value: 1.5,
+    });
+    fireEvent.click(screen.getByRole('button', { name: '미디어 접기' }));
+
+    expect(screen.getByLabelText('dock.mp4 미리보기')).toBe(video);
+    expect(screen.getByLabelText('내레이션')).toBe(audio);
+    expect((video as HTMLVideoElement).currentTime).toBe(1.5);
+    expect((audio as HTMLAudioElement).currentTime).toBe(1.5);
+
+    fireEvent.click(screen.getByRole('button', { name: '미디어 펼치기' }));
+    expect(screen.getByLabelText('dock.mp4 미리보기')).toBe(video);
+    expect(screen.getByLabelText('내레이션')).toBe(audio);
+    expect((video as HTMLVideoElement).currentTime).toBe(1.5);
+    expect((audio as HTMLAudioElement).currentTime).toBe(1.5);
   });
 
   it('opens auto shorts from the header and applies subtitles and image duration to the existing scene', async () => {

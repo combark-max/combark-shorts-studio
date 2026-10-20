@@ -17,6 +17,7 @@ vi.mock('electron', () => ({
 }));
 
 import { IPC_CHANNELS } from '../../src/shared/ipc';
+import type { VideoDiagnosticResult } from '../../src/shared/videoDiagnostics';
 import { desktopApi } from '../../src/preload/api';
 
 describe('desktopApi', () => {
@@ -34,6 +35,10 @@ describe('desktopApi', () => {
       'createContactSheetVideo',
       'cancelContactSheetVideo',
       'onContactSheetVideoProgress',
+      'selectDiagnosticVideo',
+      'analyzeDiagnosticVideo',
+      'cancelVideoDiagnostics',
+      'onVideoDiagnosticsProgress',
       'exportMp4',
       'onExportProgress',
       'openMediaDialog',
@@ -59,6 +64,29 @@ describe('desktopApi', () => {
 
     await expect(desktopApi.getAppVersion()).resolves.toBe('1.0.0');
     expect(invoke).toHaveBeenCalledWith(IPC_CHANNELS.appGetVersion);
+  });
+
+  it('exposes scoped video diagnostics and removes the exact progress listener', async () => {
+    const selected = { sourcePath: 'C:\\video.mp4', fileName: 'video.mp4' };
+    const result: VideoDiagnosticResult = { candidates: [], uncertainties: [], notices: [] };
+    invoke.mockResolvedValueOnce(selected).mockResolvedValueOnce(result).mockResolvedValueOnce(undefined);
+
+    await expect(desktopApi.selectDiagnosticVideo()).resolves.toBe(selected);
+    await expect(desktopApi.analyzeDiagnosticVideo('C:\\video.mp4')).resolves.toBe(result);
+    await expect(desktopApi.cancelVideoDiagnostics()).resolves.toBeUndefined();
+    expect(invoke.mock.calls).toEqual([
+      [IPC_CHANNELS.videoDiagnosticsSelect],
+      [IPC_CHANNELS.videoDiagnosticsAnalyze, 'C:\\video.mp4'],
+      [IPC_CHANNELS.videoDiagnosticsCancel],
+    ]);
+
+    const listener = vi.fn();
+    const cleanup = desktopApi.onVideoDiagnosticsProgress(listener);
+    const registered = on.mock.calls.at(-1)?.[1];
+    registered({}, { stage: 'probing', analyzedMs: null, durationMs: null, percent: null });
+    expect(listener).toHaveBeenCalledOnce();
+    cleanup();
+    expect(removeListener).toHaveBeenCalledWith(IPC_CHANNELS.videoDiagnosticsProgress, registered);
   });
 
   it('exposes the scoped contact-sheet workflow and progress subscription', async () => {

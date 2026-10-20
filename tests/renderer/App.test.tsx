@@ -19,6 +19,10 @@ const desktopApi = {
   createContactSheetVideo: vi.fn(),
   cancelContactSheetVideo: vi.fn(),
   onContactSheetVideoProgress: vi.fn(),
+  selectDiagnosticVideo: vi.fn(),
+  analyzeDiagnosticVideo: vi.fn(),
+  cancelVideoDiagnostics: vi.fn(),
+  onVideoDiagnosticsProgress: vi.fn(),
   exportMp4: vi.fn(),
   onExportProgress: vi.fn(),
   openMediaDialog: vi.fn(),
@@ -104,6 +108,10 @@ beforeEach(() => {
   desktopApi.createContactSheetVideo.mockResolvedValue({ status: 'canceled' });
   desktopApi.cancelContactSheetVideo.mockResolvedValue(undefined);
   desktopApi.onContactSheetVideoProgress.mockReturnValue(vi.fn());
+  desktopApi.selectDiagnosticVideo.mockResolvedValue(null);
+  desktopApi.analyzeDiagnosticVideo.mockResolvedValue({ candidates: [], uncertainties: [], notices: [] });
+  desktopApi.cancelVideoDiagnostics.mockResolvedValue(undefined);
+  desktopApi.onVideoDiagnosticsProgress.mockReturnValue(vi.fn());
   desktopApi.openMediaDialog.mockResolvedValue([]);
   desktopApi.openNarrationDialog.mockResolvedValue(null);
   desktopApi.checkProjectSources.mockResolvedValue({
@@ -132,6 +140,73 @@ afterEach(() => {
 });
 
 describe('App', () => {
+  it('opens independent video diagnostics and locks export and contact-sheet work only while analyzing', async () => {
+    const user = userEvent.setup();
+    desktopApi.selectDiagnosticVideo.mockResolvedValue({
+      sourcePath: 'C:\\video.mp4', fileName: 'video.mp4', probeStatus: 'ready',
+      metadata: { durationMs: 10_000, width: 1080, height: 1920, fps: 30, hasVideo: true, hasAudio: true },
+    });
+    let finish: ((value: { candidates: []; uncertainties: []; notices: [] }) => void) | undefined;
+    desktopApi.analyzeDiagnosticVideo.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    render(<App />);
+    await screen.findByText('Combark Shorts Studio');
+
+    const diagnosticsButton = screen.getByRole('button', { name: '영상 최종 보정 진단' });
+    const exportButton = screen.getByRole('button', { name: /MP4/ });
+    const contactButton = screen.getByRole('button', { name: /연속.*영상 만들기/ });
+    await user.click(diagnosticsButton);
+    expect(screen.getByRole('dialog', { name: '영상 최종 보정 진단' })).toBeInTheDocument();
+    expect(exportButton).toBeEnabled();
+    expect(contactButton).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: 'MP4 선택' }));
+    await user.click(screen.getByRole('button', { name: '진단 시작' }));
+    expect(exportButton).toBeDisabled();
+    expect(contactButton).toBeDisabled();
+    finish?.({ candidates: [], uncertainties: [], notices: [] });
+    await vi.waitFor(() => expect(exportButton).toBeEnabled());
+    await user.click(screen.getByRole('button', { name: '닫기' }));
+    expect(screen.queryByRole('dialog', { name: '영상 최종 보정 진단' })).not.toBeInTheDocument();
+  });
+
+  it('disables diagnostic analysis while an export is active', async () => {
+    const user = userEvent.setup();
+    desktopApi.selectDiagnosticVideo.mockResolvedValue({
+      sourcePath: 'C:\\video.mp4', fileName: 'video.mp4', probeStatus: 'ready',
+      metadata: { durationMs: 10_000, width: 1080, height: 1920, fps: 30, hasVideo: true, hasAudio: true },
+    });
+    let finishExport: ((value: { status: 'canceled' }) => void) | undefined;
+    desktopApi.exportMp4.mockReturnValue(new Promise((resolve) => { finishExport = resolve; }));
+    render(<App />);
+    await screen.findByText('Combark Shorts Studio');
+    await user.click(screen.getByRole('button', { name: '영상 최종 보정 진단' }));
+    await user.click(screen.getByRole('button', { name: 'MP4 선택' }));
+    await user.click(screen.getByRole('button', { name: /MP4.*내보내기/ }));
+    expect(screen.getByRole('button', { name: '진단 시작' })).toBeDisabled();
+    finishExport?.({ status: 'canceled' });
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: '진단 시작' })).toBeEnabled());
+  });
+
+  it('disables contact-sheet creation in an already-open dialog when diagnostics starts', async () => {
+    const user = userEvent.setup();
+    const sheet = { id: 'sheet-id', sourcePath: 'C:\\images\\sheet.png', fileName: 'sheet.png' };
+    desktopApi.selectDiagnosticVideo.mockResolvedValue({
+      sourcePath: 'C:\\video.mp4', fileName: 'video.mp4', probeStatus: 'ready',
+      metadata: { durationMs: 10_000, width: 1080, height: 1920, fps: 30, hasVideo: true, hasAudio: true },
+    });
+    desktopApi.openContactSheetImages.mockResolvedValue([sheet]);
+    desktopApi.analyzeContactSheets.mockResolvedValue([{ id: sheet.id, status: 'recognized', frameCount: 16 }]);
+    desktopApi.analyzeDiagnosticVideo.mockReturnValue(new Promise(() => undefined));
+    render(<App />);
+    await screen.findByText('Combark Shorts Studio');
+    await user.click(screen.getByRole('button', { name: '영상 최종 보정 진단' }));
+    await user.click(screen.getByRole('button', { name: 'MP4 선택' }));
+    await user.click(screen.getByRole('button', { name: /연속.*영상 만들기/ }));
+    await user.click(screen.getByRole('button', { name: /Contact sheet.*추가/ }));
+    await screen.findByText('16프레임 인식');
+    await user.click(screen.getByRole('button', { name: '진단 시작' }));
+    expect(screen.getByRole('button', { name: '영상 만들기' })).toBeDisabled();
+  });
+
   it('opens the contact-sheet workflow and disables general export while it creates', async () => {
     const user = userEvent.setup();
     const sheet = {

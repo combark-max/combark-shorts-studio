@@ -10,6 +10,11 @@ import type {
 } from '../shared/contactSheetVideo';
 import type { ExportMp4Result, ExportProgress } from '../shared/export';
 import type {
+  SelectedDiagnosticVideo,
+  VideoDiagnosticProgress,
+  VideoDiagnosticResult,
+} from '../shared/videoDiagnostics';
+import type {
   MediaAsset,
   NarrationAsset,
   OpenRecentProjectResult,
@@ -57,6 +62,24 @@ export const desktopApi = {
         IPC_CHANNELS.contactSheetVideoProgress,
         handler,
       );
+    };
+  },
+  selectDiagnosticVideo: (): Promise<SelectedDiagnosticVideo | null> =>
+    ipcRenderer.invoke(IPC_CHANNELS.videoDiagnosticsSelect),
+  analyzeDiagnosticVideo: (sourcePath: string): Promise<VideoDiagnosticResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.videoDiagnosticsAnalyze, sourcePath),
+  cancelVideoDiagnostics: (): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.videoDiagnosticsCancel),
+  onVideoDiagnosticsProgress: (
+    listener: (progress: VideoDiagnosticProgress) => void,
+  ): (() => void) => {
+    const handler = (
+      _event: IpcRendererEvent,
+      progress: VideoDiagnosticProgress,
+    ): void => listener(progress);
+    ipcRenderer.on(IPC_CHANNELS.videoDiagnosticsProgress, handler);
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.videoDiagnosticsProgress, handler);
     };
   },
   exportMp4: (project: ProjectDocument): Promise<ExportMp4Result> =>

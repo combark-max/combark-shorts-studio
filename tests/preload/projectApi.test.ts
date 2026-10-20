@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createNewProject } from '../../src/shared/project/createProject';
 import { IPC_CHANNELS } from '../../src/shared/ipc';
+import type { VideoDiagnosticResult } from '../../src/shared/videoDiagnostics';
 
 const { invoke, on, removeListener } = vi.hoisted(() => ({
   invoke: vi.fn(),
@@ -21,6 +22,8 @@ import { desktopApi } from '../../src/preload/api';
 describe('desktopApi project methods', () => {
   beforeEach(() => {
     invoke.mockReset();
+    on.mockReset();
+    removeListener.mockReset();
   });
 
   it('invokes the approved project channels and keeps app version access', async () => {
@@ -70,6 +73,10 @@ describe('desktopApi project methods', () => {
       'createContactSheetVideo',
       'cancelContactSheetVideo',
       'onContactSheetVideoProgress',
+      'selectDiagnosticVideo',
+      'analyzeDiagnosticVideo',
+      'cancelVideoDiagnostics',
+      'onVideoDiagnosticsProgress',
       'exportMp4',
       'onExportProgress',
       'openMediaDialog',
@@ -179,6 +186,53 @@ describe('desktopApi project methods', () => {
       13,
       IPC_CHANNELS.projectRecentRemove,
       recentProject.filePath,
+    );
+  });
+
+  it('invokes every approved video diagnostics channel and cleans up progress listeners', async () => {
+    const selected = {
+      sourcePath: 'C:\\videos\\complete.mp4',
+      fileName: 'complete.mp4',
+      metadata: {
+        durationMs: 10_000,
+        width: 1080,
+        height: 1920,
+        fps: 30,
+        hasVideo: true,
+        hasAudio: true,
+      },
+      probeStatus: 'ready',
+    };
+    const result: VideoDiagnosticResult = { candidates: [], uncertainties: [], notices: [] };
+    invoke
+      .mockResolvedValueOnce(selected)
+      .mockResolvedValueOnce(result)
+      .mockResolvedValueOnce(undefined);
+
+    await expect(desktopApi.selectDiagnosticVideo()).resolves.toEqual(selected);
+    await expect(desktopApi.analyzeDiagnosticVideo(selected.sourcePath)).resolves.toEqual(result);
+    await expect(desktopApi.cancelVideoDiagnostics()).resolves.toBeUndefined();
+    expect(invoke.mock.calls).toEqual([
+      [IPC_CHANNELS.videoDiagnosticsSelect],
+      [IPC_CHANNELS.videoDiagnosticsAnalyze, selected.sourcePath],
+      [IPC_CHANNELS.videoDiagnosticsCancel],
+    ]);
+
+    const listener = vi.fn();
+    const cleanup = desktopApi.onVideoDiagnosticsProgress(listener);
+    const registeredListener = on.mock.calls[0][1];
+    const progress = {
+      stage: 'motion-analysis' as const,
+      analyzedMs: 5_000,
+      durationMs: 10_000,
+      percent: 50,
+    };
+    registeredListener({}, progress);
+    expect(listener).toHaveBeenCalledWith(progress);
+    cleanup();
+    expect(removeListener).toHaveBeenCalledWith(
+      IPC_CHANNELS.videoDiagnosticsProgress,
+      registeredListener,
     );
   });
 

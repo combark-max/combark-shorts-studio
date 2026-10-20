@@ -8,6 +8,7 @@ import { PreviewPanel } from './components/PreviewPanel';
 import { RecoveryPrompt } from './components/RecoveryPrompt';
 import { RecentProjects } from './components/RecentProjects';
 import { TimelineShell } from './components/TimelineShell';
+import { VideoDiagnosticsDialog } from './components/VideoDiagnosticsDialog';
 import { getSelectedSceneIndexAfterMove } from './project/timelineInteraction';
 import {
   EMPTY_TIMELINE_PLAYBACK_SNAPSHOT,
@@ -45,6 +46,8 @@ export function App() {
     useState<ProjectDocument | null>(null);
   const [contactSheetVideoOpen, setContactSheetVideoOpen] = useState(false);
   const [contactSheetVideoBusy, setContactSheetVideoBusy] = useState(false);
+  const [videoDiagnosticsOpen, setVideoDiagnosticsOpen] = useState(false);
+  const [videoDiagnosticsBusy, setVideoDiagnosticsBusy] = useState(false);
   const [selectedSceneIndex, setSelectedSceneIndex] = useState<number | null>(
     null,
   );
@@ -258,21 +261,35 @@ export function App() {
         autoShortsDisabled={exportStatus === 'exporting'}
         onContactSheetVideo={() => setContactSheetVideoOpen(true)}
         contactSheetVideoDisabled={
-          exportStatus === 'exporting' || contactSheetVideoBusy
+          exportStatus === 'exporting' || contactSheetVideoBusy || videoDiagnosticsBusy
+        }
+        onVideoDiagnostics={() => setVideoDiagnosticsOpen(true)}
+        videoDiagnosticsDisabled={
+          exportStatus === 'exporting' || contactSheetVideoBusy || videoDiagnosticsBusy
         }
         onExport={() => {
           void exportMp4();
         }}
         exportInProgress={exportStatus === 'exporting'}
         exportDisabled={
-          exportStatus === 'exporting' || contactSheetVideoBusy
+          exportStatus === 'exporting' || contactSheetVideoBusy || videoDiagnosticsBusy
         }
       />
       {contactSheetVideoOpen ? (
         <ContactSheetVideoDialog
-          generalExportInProgress={exportStatus === 'exporting'}
+          generalExportInProgress={
+            exportStatus === 'exporting' || videoDiagnosticsBusy
+          }
           onClose={() => setContactSheetVideoOpen(false)}
           onBusyChange={setContactSheetVideoBusy}
+        />
+      ) : null}
+      {videoDiagnosticsOpen ? (
+        <VideoDiagnosticsDialog
+          exportInProgress={exportStatus === 'exporting'}
+          contactSheetBusy={contactSheetVideoBusy}
+          onBusyChange={setVideoDiagnosticsBusy}
+          onClose={() => setVideoDiagnosticsOpen(false)}
         />
       ) : null}
       {autoShortsProject ? (

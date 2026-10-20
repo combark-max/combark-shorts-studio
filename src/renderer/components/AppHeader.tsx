@@ -7,6 +7,8 @@ export interface AppHeaderProps {
   autoShortsDisabled: boolean;
   onContactSheetVideo(): void;
   contactSheetVideoDisabled: boolean;
+  onVideoDiagnostics(): void;
+  videoDiagnosticsDisabled: boolean;
   onExport(): void;
   exportInProgress: boolean;
   exportDisabled: boolean;
@@ -21,6 +23,8 @@ export function AppHeader({
   autoShortsDisabled,
   onContactSheetVideo,
   contactSheetVideoDisabled,
+  onVideoDiagnostics,
+  videoDiagnosticsDisabled,
   onExport,
   exportInProgress,
   exportDisabled,
@@ -61,6 +65,13 @@ export function AppHeader({
             disabled={contactSheetVideoDisabled}
           >
             연속 프레임 영상 만들기
+          </button>
+          <button
+            type="button"
+            onClick={onVideoDiagnostics}
+            disabled={videoDiagnosticsDisabled}
+          >
+            영상 최종 보정 진단
           </button>
         </div>
         <div

@@ -1385,3 +1385,131 @@ button:hover {
 .contact-sheet-boundary-warning {
   color: #ffd18a;
 }
+
+.video-diagnostics-backdrop {
+  align-items: center;
+  background: rgba(6, 9, 14, 0.78);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 24px;
+  position: fixed;
+  z-index: 120;
+}
+
+.video-diagnostics-dialog {
+  background: #171b22;
+  border: 1px solid #343b48;
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+  color: #eef1f6;
+  max-height: calc(100vh - 48px);
+  max-width: 1180px;
+  overflow: auto;
+  padding: 20px;
+  width: 100%;
+}
+
+.video-diagnostics-header,
+.video-diagnostics-toolbar,
+.video-diagnostics-result {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.video-diagnostics-header {
+  justify-content: space-between;
+}
+
+.video-diagnostics-header h2,
+.video-diagnostics-header p,
+.video-diagnostics-dialog p {
+  margin: 0;
+}
+
+.video-diagnostics-toolbar {
+  margin: 16px 0;
+}
+
+.video-diagnostics-content {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(280px, 0.8fr) minmax(360px, 1.2fr);
+}
+
+.video-diagnostics-preview video {
+  background: #050608;
+  display: block;
+  max-height: 55vh;
+  width: 100%;
+}
+
+.video-diagnostics-metadata {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0 0;
+}
+
+.video-diagnostics-metadata div {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 90px 1fr;
+}
+
+.video-diagnostics-metadata dt {
+  color: #9da7b6;
+}
+
+.video-diagnostics-metadata dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.video-diagnostics-results {
+  min-width: 0;
+}
+
+.video-diagnostics-result-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  max-height: 52vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.video-diagnostics-result {
+  display: grid;
+  grid-template-columns: 130px minmax(150px, 1fr) 48px;
+  text-align: left;
+}
+
+.video-diagnostics-result small {
+  color: #aab2c0;
+  grid-column: 2 / 4;
+}
+
+.video-diagnostics-error,
+.video-diagnostics-uncertainty {
+  color: #ffb3b3;
+  margin-top: 10px !important;
+}
+
+.video-diagnostics-disclaimer,
+.video-diagnostics-notice {
+  color: #bdc6d4;
+  font-size: 12px;
+  margin-top: 10px !important;
+}
+
+.video-diagnostics-progress progress {
+  margin-top: 8px;
+  width: 100%;
+}
+
+@media (max-width: 840px) {
+  .video-diagnostics-content {
+    grid-template-columns: 1fr;
+  }
+}

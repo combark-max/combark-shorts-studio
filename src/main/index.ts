@@ -6,6 +6,7 @@ import { registerAppIpc } from './ipc/registerAppIpc';
 import { registerContactSheetVideoIpc } from './ipc/registerContactSheetVideoIpc';
 import { registerExportIpc } from './ipc/registerExportIpc';
 import { registerProjectIpc } from './ipc/registerProjectIpc';
+import { registerVideoDiagnosticsIpc } from './ipc/registerVideoDiagnosticsIpc';
 import {
   registerMediaProtocol,
   registerMediaProtocolScheme,
@@ -20,6 +21,7 @@ void app.whenReady().then(() => {
   registerContactSheetVideoIpc();
   registerExportIpc();
   registerProjectIpc();
+  registerVideoDiagnosticsIpc();
   createMainWindow();
 
   app.on('activate', () => {

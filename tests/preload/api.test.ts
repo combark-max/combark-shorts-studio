@@ -39,6 +39,15 @@ describe('desktopApi', () => {
       'analyzeDiagnosticVideo',
       'cancelVideoDiagnostics',
       'onVideoDiagnosticsProgress',
+      'createStabilizationPreview',
+      'cancelStabilizationPreview',
+      'disposeStabilizationPreview',
+      'onStabilizationPreviewProgress',
+      'selectFinalCorrectionVideo',
+      'selectFinalCorrectionOutput',
+      'startVideoFinalCorrection',
+      'cancelVideoFinalCorrection',
+      'onVideoFinalCorrectionProgress',
       'exportMp4',
       'onExportProgress',
       'openMediaDialog',
@@ -87,6 +96,65 @@ describe('desktopApi', () => {
     expect(listener).toHaveBeenCalledOnce();
     cleanup();
     expect(removeListener).toHaveBeenCalledWith(IPC_CHANNELS.videoDiagnosticsProgress, registered);
+  });
+
+  it('exposes only scoped stabilization preview operations', async () => {
+    const request = {
+      sourcePath: 'C:\\video.mp4', candidateKey: 'motion-jitter:1:2:1',
+      selectionMode: 'range' as const, requestedStartMs: 0, requestedEndMs: 5_000,
+      sceneBoundaryConfirmed: true, scaleMotionConfirmed: false,
+      strength: 'weak' as const, zoomPercent: 2 as const,
+      encoder: 'libx264' as const, includeAudio: true,
+    };
+    const result = { previewId: 'id', previewPath: 'C:\\Temp\\preview.mp4' };
+    invoke.mockResolvedValueOnce(result).mockResolvedValueOnce(undefined).mockResolvedValueOnce(true);
+    await expect(desktopApi.createStabilizationPreview(request)).resolves.toBe(result);
+    await expect(desktopApi.cancelStabilizationPreview()).resolves.toBeUndefined();
+    await expect(desktopApi.disposeStabilizationPreview('id')).resolves.toBe(true);
+    expect(invoke.mock.calls).toEqual([
+      [IPC_CHANNELS.videoStabilizationCreate, request],
+      [IPC_CHANNELS.videoStabilizationCancel],
+      [IPC_CHANNELS.videoStabilizationDispose, 'id'],
+    ]);
+    const listener = vi.fn();
+    const cleanup = desktopApi.onStabilizationPreviewProgress(listener);
+    const registered = on.mock.calls.at(-1)?.[1];
+    registered({}, { stage: 'detecting', percent: 25, processedFrames: 25, totalFrames: 100 });
+    expect(listener).toHaveBeenCalledOnce();
+    cleanup();
+    expect(removeListener).toHaveBeenCalledWith(IPC_CHANNELS.videoStabilizationProgress, registered);
+  });
+
+  it('exposes only scoped final-correction operations and progress', async () => {
+    const selected = { sourcePath: 'C:\\video.mp4', capabilities: { basic: true, strong: false } };
+    const request = {
+      sourcePath: 'C:\\video.mp4', outputPath: 'C:\\video-corrected.mp4', method: 'basic' as const,
+    };
+    const result = { ...request, frameCount: 300 };
+    invoke.mockResolvedValueOnce(selected)
+      .mockResolvedValueOnce(request.outputPath)
+      .mockResolvedValueOnce(result)
+      .mockResolvedValueOnce(undefined);
+    await expect(desktopApi.selectFinalCorrectionVideo()).resolves.toBe(selected);
+    await expect(desktopApi.selectFinalCorrectionOutput(request.sourcePath)).resolves.toBe(request.outputPath);
+    await expect(desktopApi.startVideoFinalCorrection(request)).resolves.toBe(result);
+    await expect(desktopApi.cancelVideoFinalCorrection()).resolves.toBeUndefined();
+    expect(invoke.mock.calls).toEqual([
+      [IPC_CHANNELS.videoFinalCorrectionSelect],
+      [IPC_CHANNELS.videoFinalCorrectionSelectOutput, request.sourcePath],
+      [IPC_CHANNELS.videoFinalCorrectionStart, request],
+      [IPC_CHANNELS.videoFinalCorrectionCancel],
+    ]);
+    const listener = vi.fn();
+    const cleanup = desktopApi.onVideoFinalCorrectionProgress(listener);
+    const registered = on.mock.calls.at(-1)?.[1];
+    registered({}, { stage: 'detecting', percent: 25, processedFrames: 90, totalFrames: 360 });
+    expect(listener).toHaveBeenCalledOnce();
+    cleanup();
+    expect(removeListener).toHaveBeenCalledWith(
+      IPC_CHANNELS.videoFinalCorrectionProgress,
+      registered,
+    );
   });
 
   it('exposes the scoped contact-sheet workflow and progress subscription', async () => {

@@ -23,6 +23,11 @@ const desktopApi = {
   analyzeDiagnosticVideo: vi.fn(),
   cancelVideoDiagnostics: vi.fn(),
   onVideoDiagnosticsProgress: vi.fn(),
+  selectFinalCorrectionVideo: vi.fn(),
+  selectFinalCorrectionOutput: vi.fn(),
+  startVideoFinalCorrection: vi.fn(),
+  cancelVideoFinalCorrection: vi.fn(),
+  onVideoFinalCorrectionProgress: vi.fn(),
   exportMp4: vi.fn(),
   onExportProgress: vi.fn(),
   openMediaDialog: vi.fn(),
@@ -112,6 +117,11 @@ beforeEach(() => {
   desktopApi.analyzeDiagnosticVideo.mockResolvedValue({ candidates: [], uncertainties: [], notices: [] });
   desktopApi.cancelVideoDiagnostics.mockResolvedValue(undefined);
   desktopApi.onVideoDiagnosticsProgress.mockReturnValue(vi.fn());
+  desktopApi.selectFinalCorrectionVideo.mockResolvedValue(null);
+  desktopApi.selectFinalCorrectionOutput.mockResolvedValue(null);
+  desktopApi.startVideoFinalCorrection.mockRejectedValue(new Error('not configured'));
+  desktopApi.cancelVideoFinalCorrection.mockResolvedValue(undefined);
+  desktopApi.onVideoFinalCorrectionProgress.mockReturnValue(vi.fn());
   desktopApi.openMediaDialog.mockResolvedValue([]);
   desktopApi.openNarrationDialog.mockResolvedValue(null);
   desktopApi.checkProjectSources.mockResolvedValue({
@@ -140,6 +150,39 @@ afterEach(() => {
 });
 
 describe('App', () => {
+  it('opens independent final correction and locks other media work only while running', async () => {
+    const user = userEvent.setup();
+    const selected = {
+      sourcePath: 'C:\\video.mp4', fileName: 'video.mp4',
+      metadata: { durationMs: 10_000, width: 1080, height: 1920, fps: 30, hasVideo: true, hasAudio: true },
+      capabilities: { basic: true, strong: false },
+    };
+    desktopApi.selectFinalCorrectionVideo.mockResolvedValue(selected);
+    desktopApi.selectFinalCorrectionOutput.mockResolvedValue('C:\\video-corrected.mp4');
+    let finish: ((value: unknown) => void) | undefined;
+    desktopApi.startVideoFinalCorrection.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    render(<App />);
+    await screen.findByText('Combark Shorts Studio');
+
+    const correctionButton = screen.getByRole('button', { name: '영상 최종 보정' });
+    const exportButton = screen.getByRole('button', { name: 'MP4 내보내기' });
+    const diagnosticsButton = screen.getByRole('button', { name: '영상 최종 보정 진단' });
+    await user.click(correctionButton);
+    expect(screen.getByRole('dialog', { name: '영상 최종 보정' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '완성 MP4 선택' }));
+    await user.click(screen.getByRole('button', { name: '출력 경로 선택' }));
+    await user.click(screen.getByRole('button', { name: '보정 시작' }));
+    expect(exportButton).toBeDisabled();
+    expect(diagnosticsButton).toBeDisabled();
+    expect(screen.getByRole('button', { name: '닫기' })).toBeDisabled();
+    finish?.({
+      sourcePath: selected.sourcePath, outputPath: 'C:\\video-corrected.mp4', method: 'basic',
+      width: 1080, height: 1920, fps: 30, frameCount: 300, durationMs: 10_000,
+      audioStreamCount: 1,
+    });
+    await waitFor(() => expect(exportButton).toBeEnabled());
+  });
+
   it('opens independent video diagnostics and locks export and contact-sheet work only while analyzing', async () => {
     const user = userEvent.setup();
     desktopApi.selectDiagnosticVideo.mockResolvedValue({

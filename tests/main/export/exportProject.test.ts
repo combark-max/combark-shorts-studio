@@ -345,6 +345,31 @@ describe('exportProject pipeline', () => {
     expect(remove).toHaveBeenCalledWith('C:\\Temp\\combark-failure');
   });
 
+  it('forwards cancellation to FFmpeg and cleans without publishing output', async () => {
+    const controller = new AbortController();
+    const remove = vi.fn().mockResolvedValue(undefined);
+    const copy = vi.fn();
+    const runFfmpeg = vi.fn(async (_path: string, _args: string[], signal?: AbortSignal) => {
+      expect(signal).toBe(controller.signal);
+      controller.abort();
+      const error = new Error('canceled');
+      error.name = 'AbortError';
+      throw error;
+    });
+    await expect(exportProject(createExportProject(), 'C:\\exports\\out.mp4', {
+      ffmpegPath: 'C:\\tools\\ffmpeg.exe',
+      fontPath: 'C:\\Windows\\Fonts\\malgun.ttf',
+      makeTempDirectory: vi.fn().mockResolvedValue('C:\\Temp\\combark-abort'),
+      pathExists: vi.fn().mockResolvedValue(true),
+      writeTextFile: vi.fn().mockResolvedValue(undefined),
+      runFfmpeg,
+      copyFile: copy,
+      removeDirectory: remove,
+    }, controller.signal)).rejects.toMatchObject({ name: 'AbortError' });
+    expect(copy).not.toHaveBeenCalled();
+    expect(remove).toHaveBeenCalledWith('C:\\Temp\\combark-abort');
+  });
+
   it('does not report complete when temporary-directory cleanup fails', async () => {
     const progress: unknown[] = [];
 

@@ -1508,6 +1508,122 @@ button:hover {
   width: 100%;
 }
 
+.video-stabilization-panel {
+  background: #11161d;
+  border: 1px solid #364351;
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 14px;
+}
+
+.video-final-correction-dialog {
+  width: min(960px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+}
+
+.video-final-correction-inputs {
+  display: grid;
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.video-final-correction-inputs p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.video-final-correction-dialog progress {
+  width: 100%;
+}
+
+.video-final-correction-dialog video {
+  display: block;
+  width: 100%;
+  max-height: 52vh;
+  background: #000;
+}
+
+.video-stabilization-panel header,
+.video-stabilization-panel header p,
+.video-stabilization-panel h3 {
+  margin: 0;
+}
+
+.video-stabilization-settings {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.video-stabilization-settings fieldset,
+.video-stabilization-settings label {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.video-stabilization-settings fieldset {
+  border: 1px solid #364351;
+  margin: 0;
+}
+
+.video-stabilization-confirmation {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.video-stabilization-actions,
+.video-stabilization-ab-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.video-stabilization-comparison video {
+  background: #050608;
+  max-height: 48vh;
+  width: 100%;
+}
+
+.video-stabilization-manifest {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  margin: 12px 0;
+}
+
+.video-stabilization-manifest div {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.video-stabilization-manifest dt {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.video-stabilization-manifest dd {
+  margin: 3px 0 0;
+}
+
+.video-stabilization-warning,
+.video-stabilization-error,
+.video-stabilization-assessment.status-warning,
+.video-stabilization-assessment.status-unverifiable {
+  color: #ffd18a;
+}
+
+.video-stabilization-assessment.status-safe,
+.video-stabilization-assessment.status-protected-scene-cut {
+  color: #9fe1ba;
+}
+
 @media (max-width: 840px) {
   .video-diagnostics-content {
     grid-template-columns: 1fr;

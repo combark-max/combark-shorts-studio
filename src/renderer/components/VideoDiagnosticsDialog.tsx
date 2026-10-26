@@ -1,9 +1,10 @@
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import type { DiagnosticCandidate, DiagnosticType } from '../../shared/videoDiagnostics';
 import { sortDiagnosticCandidates } from '../../shared/videoDiagnostics';
 import { createMediaUrl } from '../../shared/mediaProtocol';
 import { useVideoDiagnostics } from '../video-diagnostics/useVideoDiagnostics';
+import { VideoStabilizationPanel } from './VideoStabilizationPanel';
 
 export interface VideoDiagnosticsDialogProps {
   exportInProgress: boolean;
@@ -57,6 +58,9 @@ export function VideoDiagnosticsDialog({
   onClose,
 }: VideoDiagnosticsDialogProps) {
   const workflow = useVideoDiagnostics(onBusyChange);
+  const [stabilizationCandidate, setStabilizationCandidate] =
+    useState<DiagnosticCandidate | null>(null);
+  const [stabilizationBusy, setStabilizationBusy] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
   const metadata = workflow.selected?.metadata;
@@ -64,6 +68,15 @@ export function VideoDiagnosticsDialog({
     ? sortDiagnosticCandidates(workflow.result.candidates)
     : [];
   const blockedByOtherWork = exportInProgress || contactSheetBusy;
+
+  useEffect(() => {
+    setStabilizationCandidate(null);
+  }, [workflow.selected?.sourcePath, workflow.result]);
+
+  const handleStabilizationBusy = (busy: boolean): void => {
+    setStabilizationBusy(busy);
+    onBusyChange(busy);
+  };
 
   const seekTo = (candidate: DiagnosticCandidate): void => {
     const video = videoRef.current;
@@ -85,12 +98,12 @@ export function VideoDiagnosticsDialog({
           <h2 id="video-diagnostics-heading">영상 최종 보정 진단</h2>
           <p>원본은 변경하지 않고 문제 구간 후보만 분석합니다.</p>
         </div>
-        <button type="button" disabled={workflow.analyzing} onClick={onClose}>닫기</button>
+        <button type="button" disabled={workflow.analyzing || stabilizationBusy} onClick={onClose}>닫기</button>
       </header>
 
       <div className="video-diagnostics-toolbar">
-        <button type="button" disabled={workflow.analyzing} onClick={() => void workflow.selectVideo()}>MP4 선택</button>
-        <button type="button" disabled={!workflow.selected || workflow.selected.probeStatus === 'failed' || workflow.analyzing || blockedByOtherWork} onClick={() => void workflow.analyze()}>진단 시작</button>
+        <button type="button" disabled={workflow.analyzing || stabilizationBusy} onClick={() => void workflow.selectVideo()}>MP4 선택</button>
+        <button type="button" disabled={!workflow.selected || workflow.selected.probeStatus === 'failed' || workflow.analyzing || stabilizationBusy || blockedByOtherWork} onClick={() => void workflow.analyze()}>진단 시작</button>
         {workflow.analyzing ? <button type="button" onClick={() => void workflow.cancel()}>진단 취소</button> : null}
       </div>
       {blockedByOtherWork ? <p className="video-diagnostics-notice">내보내기 또는 연속이미지 영상 생성 중에는 진단을 시작할 수 없습니다.</p> : null}
@@ -124,8 +137,12 @@ export function VideoDiagnosticsDialog({
                 className={`video-diagnostics-result severity-${candidate.severity}`}
                 key={`${candidate.type}-${candidate.peakMs}-${index}`}
                 type="button"
+                aria-pressed={stabilizationCandidate === candidate}
                 aria-label={`${TYPE_LABELS[candidate.type]} ${formatTime(candidate.peakMs)}`}
-                onClick={() => seekTo(candidate)}
+                onClick={() => {
+                  seekTo(candidate);
+                  setStabilizationCandidate(candidate);
+                }}
               >
                 <span>{formatTime(candidate.startMs)}{candidate.endMs > candidate.startMs ? `–${formatTime(candidate.endMs)}` : ''}</span>
                 <strong>{TYPE_LABELS[candidate.type]}</strong>
@@ -133,6 +150,12 @@ export function VideoDiagnosticsDialog({
                 <small>{candidate.scoreLabel}</small>
               </button>)}
             </div>
+            {stabilizationCandidate && workflow.selected ? <VideoStabilizationPanel
+              selected={workflow.selected}
+              candidate={stabilizationCandidate}
+              blocked={blockedByOtherWork || workflow.analyzing}
+              onBusyChange={handleStabilizationBusy}
+            /> : null}
           </> : null}
         </div>
       </div> : <p className="video-diagnostics-empty">진단할 완성 MP4 파일을 선택하세요.</p>}

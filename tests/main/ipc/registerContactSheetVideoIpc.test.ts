@@ -42,6 +42,7 @@ vi.mock('../../../src/main/export/exportProject', () => ({
 }));
 
 import { registerContactSheetVideoIpc } from '../../../src/main/ipc/registerContactSheetVideoIpc';
+import { MediaJobCoordinator } from '../../../src/main/media-jobs/mediaJobCoordinator';
 import { IPC_CHANNELS } from '../../../src/shared/ipc';
 
 function sender() {
@@ -287,6 +288,18 @@ describe('registerContactSheetVideoIpc', () => {
     )).rejects.toThrow('진행 중');
     finish?.();
     await first;
+  });
+
+  it('rejects creation while another media job owns the coordinator', async () => {
+    const coordinator = new MediaJobCoordinator();
+    const lease = coordinator.tryAcquire('export', {});
+    registerContactSheetVideoIpc(coordinator);
+    await expect(mocks.handlers.get(IPC_CHANNELS.contactSheetVideoCreate)?.(
+      { sender: sender() },
+      { sheets: [{ id: 'one', sourcePath: 'C:\\images\\one.png', fileName: 'one.png' }], fps: 8 },
+    )).rejects.toThrow('미디어 작업');
+    expect(mocks.showSaveDialog).not.toHaveBeenCalled();
+    lease.release();
   });
 });
 

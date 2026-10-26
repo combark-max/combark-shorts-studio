@@ -20,6 +20,7 @@ import { IPC_CHANNELS } from '../../shared/ipc';
 import { analyzeContactSheet } from '../contact-sheet/analyzeContactSheet';
 import { createContactSheetVideo, getContactSheetDetails } from '../contact-sheet/createContactSheetVideo';
 import { getRuntimeFfmpegPath } from '../export/exportProject';
+import { MediaJobCoordinator } from '../media-jobs/mediaJobCoordinator';
 
 const contactSheetFilter = {
   name: 'Contact sheet 이미지',
@@ -105,7 +106,9 @@ function errorMessage(error: unknown): string {
     : '4×4 contact sheet를 분석하지 못했습니다.';
 }
 
-export function registerContactSheetVideoIpc(): void {
+export function registerContactSheetVideoIpc(
+  coordinator = new MediaJobCoordinator(),
+): void {
   let activeJob: {
     sender: Electron.WebContents;
     controller: AbortController;
@@ -185,6 +188,11 @@ export function registerContactSheetVideoIpc(): void {
 
       const controller = new AbortController();
       const handleDestroyed = (): void => controller.abort();
+      const lease = coordinator.tryAcquire(
+        'contact-sheet-video',
+        event.sender,
+        () => controller.abort(),
+      );
       activeJob = { sender: event.sender, controller };
       event.sender.once('destroyed', handleDestroyed);
       try {
@@ -226,6 +234,7 @@ export function registerContactSheetVideoIpc(): void {
       } finally {
         event.sender.removeListener('destroyed', handleDestroyed);
         activeJob = null;
+        lease.release();
       }
     },
   );

@@ -8,6 +8,7 @@ import {
   getMalgunGothicPath,
   getRuntimeFfmpegPath,
 } from '../export/exportProject';
+import { MediaJobCoordinator } from '../media-jobs/mediaJobCoordinator';
 
 function ensureMp4Extension(filePath: string): string {
   return filePath.toLocaleLowerCase('en-US').endsWith('.mp4')
@@ -15,7 +16,9 @@ function ensureMp4Extension(filePath: string): string {
     : `${filePath}.mp4`;
 }
 
-export function registerExportIpc(): void {
+export function registerExportIpc(
+  coordinator = new MediaJobCoordinator(),
+): void {
   let exportInProgress = false;
 
   ipcMain.removeHandler(IPC_CHANNELS.exportMp4);
@@ -26,7 +29,12 @@ export function registerExportIpc(): void {
         throw new Error('MP4 내보내기가 이미 진행 중입니다.');
       }
 
+      const controller = new AbortController();
+      const sender = event.sender as Electron.WebContents | undefined;
+      const handleDestroyed = (): void => controller.abort();
+      const lease = coordinator.tryAcquire('export', sender ?? event, () => controller.abort());
       exportInProgress = true;
+      sender?.once?.('destroyed', handleDestroyed);
       try {
         const result = await dialog.showSaveDialog({
           defaultPath: `${project.name}.mp4`,
@@ -41,13 +49,15 @@ export function registerExportIpc(): void {
           ffmpegPath: getRuntimeFfmpegPath(app.isPackaged, process.resourcesPath),
           fontPath: getMalgunGothicPath(),
           onProgress: (progress: ExportProgress) => {
-            if (!event.sender.isDestroyed()) {
-              event.sender.send(IPC_CHANNELS.exportProgress, progress);
+            if (!sender?.isDestroyed()) {
+              sender?.send(IPC_CHANNELS.exportProgress, progress);
             }
           },
-        });
+        }, controller.signal);
         return { status: 'success', filePath };
       } finally {
+        sender?.removeListener?.('destroyed', handleDestroyed);
+        lease.release();
         exportInProgress = false;
       }
     },

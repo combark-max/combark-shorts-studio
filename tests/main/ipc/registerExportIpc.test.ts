@@ -22,6 +22,7 @@ vi.mock('../../../src/main/export/exportProject', () => ({
 }));
 
 import { registerExportIpc } from '../../../src/main/ipc/registerExportIpc';
+import { MediaJobCoordinator } from '../../../src/main/media-jobs/mediaJobCoordinator';
 import { IPC_CHANNELS } from '../../../src/shared/ipc';
 import { createNewProject } from '../../../src/shared/project/createProject';
 
@@ -53,7 +54,7 @@ describe('registerExportIpc', () => {
     expect(exportProject).toHaveBeenCalledWith(project, 'C:\\exports\\완성본.mp4', expect.objectContaining({
       ffmpegPath: 'C:\\tools\\ffmpeg.exe',
       fontPath: 'C:\\Windows\\Fonts\\malgun.ttf',
-    }));
+    }), expect.any(AbortSignal));
     expect(send.mock.calls).toEqual([
       [IPC_CHANNELS.exportProgress, { stage: 'preparing' }],
       [IPC_CHANNELS.exportProgress, { stage: 'complete' }],
@@ -88,5 +89,42 @@ describe('registerExportIpc', () => {
     expect(showSaveDialog).toHaveBeenCalledTimes(1);
     finish?.();
     await first;
+  });
+
+  it('rejects export while another media job owns the global coordinator', async () => {
+    const coordinator = new MediaJobCoordinator();
+    const lease = coordinator.tryAcquire('stabilization-preview', {});
+    registerExportIpc(coordinator);
+    await expect(handlers.get(IPC_CHANNELS.exportMp4)?.(
+      { sender: {} }, createNewProject('blocked'),
+    )).rejects.toThrow('미디어 작업');
+    expect(showSaveDialog).not.toHaveBeenCalled();
+    lease.release();
+  });
+
+  it('aborts internal export work when its renderer is destroyed', async () => {
+    const listeners = new Map<string, () => void>();
+    const sender = {
+      isDestroyed: vi.fn(() => false),
+      send: vi.fn(),
+      once: vi.fn((name: string, listener: () => void) => listeners.set(name, listener)),
+      removeListener: vi.fn((name: string) => listeners.delete(name)),
+    };
+    showSaveDialog.mockResolvedValue({ canceled: false, filePath: 'C:\\exports\\out.mp4' });
+    let signal: AbortSignal | undefined;
+    let finish: (() => void) | undefined;
+    exportProject.mockImplementation(async (_project, _path, _dependencies, value) => {
+      signal = value;
+      await new Promise<void>((resolve) => { finish = resolve; });
+      if (value.aborted) { const error = new Error('canceled'); error.name = 'AbortError'; throw error; }
+    });
+    const pending = handlers.get(IPC_CHANNELS.exportMp4)?.(
+      { sender }, createNewProject('abort'),
+    );
+    await vi.waitFor(() => expect(signal).toBeDefined());
+    listeners.get('destroyed')?.();
+    expect(signal?.aborted).toBe(true);
+    finish?.();
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
   });
 });

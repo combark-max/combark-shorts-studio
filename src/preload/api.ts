@@ -15,6 +15,17 @@ import type {
   VideoDiagnosticResult,
 } from '../shared/videoDiagnostics';
 import type {
+  StabilizationPreviewProgress,
+  StabilizationPreviewRequest,
+  StabilizationPreviewResult,
+} from '../shared/videoStabilization';
+import type {
+  SelectedFinalCorrectionVideo,
+  VideoFinalCorrectionProgress,
+  VideoFinalCorrectionRequest,
+  VideoFinalCorrectionResult,
+} from '../shared/videoFinalCorrection';
+import type {
   MediaAsset,
   NarrationAsset,
   OpenRecentProjectResult,
@@ -80,6 +91,48 @@ export const desktopApi = {
     ipcRenderer.on(IPC_CHANNELS.videoDiagnosticsProgress, handler);
     return () => {
       ipcRenderer.removeListener(IPC_CHANNELS.videoDiagnosticsProgress, handler);
+    };
+  },
+  createStabilizationPreview: (
+    request: StabilizationPreviewRequest,
+  ): Promise<StabilizationPreviewResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.videoStabilizationCreate, request),
+  cancelStabilizationPreview: (): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.videoStabilizationCancel),
+  disposeStabilizationPreview: (previewId: string): Promise<boolean> =>
+    ipcRenderer.invoke(IPC_CHANNELS.videoStabilizationDispose, previewId),
+  onStabilizationPreviewProgress: (
+    listener: (progress: StabilizationPreviewProgress) => void,
+  ): (() => void) => {
+    const handler = (
+      _event: IpcRendererEvent,
+      progress: StabilizationPreviewProgress,
+    ): void => listener(progress);
+    ipcRenderer.on(IPC_CHANNELS.videoStabilizationProgress, handler);
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.videoStabilizationProgress, handler);
+    };
+  },
+  selectFinalCorrectionVideo: (): Promise<SelectedFinalCorrectionVideo | null> =>
+    ipcRenderer.invoke(IPC_CHANNELS.videoFinalCorrectionSelect),
+  selectFinalCorrectionOutput: (sourcePath: string): Promise<string | null> =>
+    ipcRenderer.invoke(IPC_CHANNELS.videoFinalCorrectionSelectOutput, sourcePath),
+  startVideoFinalCorrection: (
+    request: VideoFinalCorrectionRequest,
+  ): Promise<VideoFinalCorrectionResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.videoFinalCorrectionStart, request),
+  cancelVideoFinalCorrection: (): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.videoFinalCorrectionCancel),
+  onVideoFinalCorrectionProgress: (
+    listener: (progress: VideoFinalCorrectionProgress) => void,
+  ): (() => void) => {
+    const handler = (
+      _event: IpcRendererEvent,
+      progress: VideoFinalCorrectionProgress,
+    ): void => listener(progress);
+    ipcRenderer.on(IPC_CHANNELS.videoFinalCorrectionProgress, handler);
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.videoFinalCorrectionProgress, handler);
     };
   },
   exportMp4: (project: ProjectDocument): Promise<ExportMp4Result> =>

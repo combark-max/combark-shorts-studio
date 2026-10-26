@@ -9,6 +9,8 @@ export interface AppHeaderProps {
   contactSheetVideoDisabled: boolean;
   onVideoDiagnostics(): void;
   videoDiagnosticsDisabled: boolean;
+  onVideoFinalCorrection(): void;
+  videoFinalCorrectionDisabled: boolean;
   onExport(): void;
   exportInProgress: boolean;
   exportDisabled: boolean;
@@ -25,6 +27,8 @@ export function AppHeader({
   contactSheetVideoDisabled,
   onVideoDiagnostics,
   videoDiagnosticsDisabled,
+  onVideoFinalCorrection,
+  videoFinalCorrectionDisabled,
   onExport,
   exportInProgress,
   exportDisabled,
@@ -72,6 +76,13 @@ export function AppHeader({
             disabled={videoDiagnosticsDisabled}
           >
             영상 최종 보정 진단
+          </button>
+          <button
+            type="button"
+            onClick={onVideoFinalCorrection}
+            disabled={videoFinalCorrectionDisabled}
+          >
+            영상 최종 보정
           </button>
         </div>
         <div

@@ -26,7 +26,11 @@ vi.mock('../../../src/main/export/exportProject', () => ({
   getRuntimeFfmpegPath: mocks.getRuntimeFfmpegPath,
 }));
 
-import { registerVideoDiagnosticsIpc } from '../../../src/main/ipc/registerVideoDiagnosticsIpc';
+import {
+  DiagnosticSessionStore,
+  registerVideoDiagnosticsIpc,
+} from '../../../src/main/ipc/registerVideoDiagnosticsIpc';
+import { MediaJobCoordinator } from '../../../src/main/media-jobs/mediaJobCoordinator';
 import { IPC_CHANNELS } from '../../../src/shared/ipc';
 
 function sender() {
@@ -49,7 +53,11 @@ describe('registerVideoDiagnosticsIpc', () => {
   beforeEach(() => {
     mocks.handlers.clear();
     vi.clearAllMocks();
-    registerVideoDiagnosticsIpc();
+    registerVideoDiagnosticsIpc(
+      new MediaJobCoordinator(),
+      new DiagnosticSessionStore(),
+      vi.fn().mockResolvedValue({ size: 123, mtimeMs: 456 }),
+    );
   });
 
   it('selects one MP4 and returns probed metadata owned by the sender', async () => {
@@ -155,5 +163,81 @@ describe('registerVideoDiagnosticsIpc', () => {
     expect(signal?.aborted).toBe(true);
     finish?.();
     await expect(first).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
+  it('uses the global coordinator for selection probing and analysis', async () => {
+    const coordinator = new MediaJobCoordinator();
+    const lease = coordinator.tryAcquire('export', {});
+    registerVideoDiagnosticsIpc(coordinator);
+    mocks.showOpenDialog.mockResolvedValue({ canceled: false, filePaths: ['C:\\video.mp4'] });
+    await expect(mocks.handlers.get(IPC_CHANNELS.videoDiagnosticsSelect)?.(
+      { sender: sender() },
+    )).rejects.toThrow('미디어 작업');
+    expect(mocks.probeDiagnosticVideo).not.toHaveBeenCalled();
+    lease.release();
+  });
+
+  it('retains only a successful result with its source fingerprint and invalidates on selection', async () => {
+    const sessions = new DiagnosticSessionStore();
+    const fingerprintSource = vi.fn().mockResolvedValue({ size: 123, mtimeMs: 456 });
+    registerVideoDiagnosticsIpc(new MediaJobCoordinator(), sessions, fingerprintSource);
+    const owner = sender();
+    mocks.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: ['C:\\one.mp4'] });
+    mocks.probeDiagnosticVideo.mockResolvedValue(metadata);
+    mocks.analyzeDiagnosticVideo.mockResolvedValue({
+      candidates: [{ type: 'motion-jitter', startMs: 1_000, endMs: 1_100, peakMs: 1_050, severity: 'medium', scoreMultiple: 2, scoreLabel: 'x', confidence: 'high' }],
+      uncertainties: [], notices: [],
+    });
+    await mocks.handlers.get(IPC_CHANNELS.videoDiagnosticsSelect)?.({ sender: owner });
+    await mocks.handlers.get(IPC_CHANNELS.videoDiagnosticsAnalyze)?.({ sender: owner }, 'C:\\one.mp4');
+    expect(sessions.get(owner)).toMatchObject({
+      selected: { sourcePath: 'C:\\one.mp4' },
+      fingerprint: { size: 123, mtimeMs: 456 },
+    });
+
+    mocks.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: ['C:\\two.mp4'] });
+    await mocks.handlers.get(IPC_CHANNELS.videoDiagnosticsSelect)?.({ sender: owner });
+    expect(sessions.get(owner)).toBeNull();
+  });
+
+  it('invalidates stale sessions at analysis start and rejects a source changed during analysis', async () => {
+    const sessions = new DiagnosticSessionStore();
+    const fingerprintSource = vi.fn()
+      .mockResolvedValueOnce({ size: 123, mtimeMs: 1 })
+      .mockResolvedValueOnce({ size: 124, mtimeMs: 2 });
+    registerVideoDiagnosticsIpc(new MediaJobCoordinator(), sessions, fingerprintSource);
+    const owner = sender();
+    mocks.showOpenDialog.mockResolvedValue({ canceled: false, filePaths: ['C:\\one.mp4'] });
+    mocks.probeDiagnosticVideo.mockResolvedValue(metadata);
+    mocks.analyzeDiagnosticVideo.mockResolvedValue({ candidates: [], uncertainties: [], notices: [] });
+    sessions.retain(owner, {
+      sourcePath: 'C:\\old.mp4', fileName: 'old.mp4', metadata, probeStatus: 'ready',
+    }, { candidates: [], uncertainties: [], notices: [] }, { size: 1, mtimeMs: 1 });
+
+    await mocks.handlers.get(IPC_CHANNELS.videoDiagnosticsSelect)?.({ sender: owner });
+    await expect(mocks.handlers.get(IPC_CHANNELS.videoDiagnosticsAnalyze)?.(
+      { sender: owner }, 'C:\\one.mp4',
+    )).rejects.toThrow('변경');
+    expect(sessions.get(owner)).toBeNull();
+    expect(fingerprintSource).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not preserve a previous session when re-analysis fails', async () => {
+    const sessions = new DiagnosticSessionStore();
+    const fingerprintSource = vi.fn().mockResolvedValue({ size: 123, mtimeMs: 1 });
+    registerVideoDiagnosticsIpc(new MediaJobCoordinator(), sessions, fingerprintSource);
+    const owner = sender();
+    mocks.showOpenDialog.mockResolvedValue({ canceled: false, filePaths: ['C:\\one.mp4'] });
+    mocks.probeDiagnosticVideo.mockResolvedValue(metadata);
+    await mocks.handlers.get(IPC_CHANNELS.videoDiagnosticsSelect)?.({ sender: owner });
+    sessions.retain(owner, {
+      sourcePath: 'C:\\one.mp4', fileName: 'one.mp4', metadata, probeStatus: 'ready',
+    }, { candidates: [], uncertainties: [], notices: [] }, { size: 123, mtimeMs: 1 });
+    mocks.analyzeDiagnosticVideo.mockRejectedValue(new Error('analysis failed'));
+
+    await expect(mocks.handlers.get(IPC_CHANNELS.videoDiagnosticsAnalyze)?.(
+      { sender: owner }, 'C:\\one.mp4',
+    )).rejects.toThrow('analysis failed');
+    expect(sessions.get(owner)).toBeNull();
   });
 });

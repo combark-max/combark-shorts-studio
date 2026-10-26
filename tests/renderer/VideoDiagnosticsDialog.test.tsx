@@ -29,6 +29,10 @@ const api = {
   analyzeDiagnosticVideo: vi.fn(),
   cancelVideoDiagnostics: vi.fn(),
   onVideoDiagnosticsProgress: vi.fn(),
+  createStabilizationPreview: vi.fn(),
+  cancelStabilizationPreview: vi.fn(),
+  disposeStabilizationPreview: vi.fn(),
+  onStabilizationPreviewProgress: vi.fn(),
 };
 
 beforeEach(() => {
@@ -37,6 +41,9 @@ beforeEach(() => {
   api.analyzeDiagnosticVideo.mockResolvedValue(result);
   api.cancelVideoDiagnostics.mockResolvedValue(undefined);
   api.onVideoDiagnosticsProgress.mockReturnValue(vi.fn());
+  api.cancelStabilizationPreview.mockResolvedValue(undefined);
+  api.disposeStabilizationPreview.mockResolvedValue(true);
+  api.onStabilizationPreviewProgress.mockReturnValue(vi.fn());
   Object.defineProperty(window, 'combarkDesktop', { configurable: true, value: api });
 });
 afterEach(cleanup);
@@ -110,6 +117,23 @@ describe('VideoDiagnosticsDialog', () => {
     expect(pause).toHaveBeenCalled();
     expect(video.currentTime).toBe(1.5);
     pause.mockRestore();
+  });
+
+  it('keeps stabilization unselected until an eligible diagnostic row is chosen', async () => {
+    const user = userEvent.setup();
+    api.analyzeDiagnosticVideo.mockResolvedValue({
+      ...result,
+      candidates: [{
+        type: 'motion-jitter', startMs: 2_900, endMs: 3_100, peakMs: 3_000,
+        severity: 'medium', scoreMultiple: 2, scoreLabel: 'fixture', confidence: 'high',
+      }],
+    });
+    renderDialog();
+    await user.click(screen.getByRole('button', { name: 'MP4 선택' }));
+    await user.click(screen.getByRole('button', { name: '진단 시작' }));
+    expect(screen.queryByRole('heading', { name: '선택 구간 흔들림 시험 보정' })).not.toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: /반복 흔들림 후보/ }));
+    expect(screen.getByRole('heading', { name: '선택 구간 흔들림 시험 보정' })).toBeInTheDocument();
   });
 
   it('blocks close during analysis and treats a requested cancellation as retryable', async () => {

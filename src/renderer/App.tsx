@@ -9,6 +9,7 @@ import { RecoveryPrompt } from './components/RecoveryPrompt';
 import { RecentProjects } from './components/RecentProjects';
 import { TimelineShell } from './components/TimelineShell';
 import { VideoDiagnosticsDialog } from './components/VideoDiagnosticsDialog';
+import { VideoFinalCorrectionDialog } from './components/VideoFinalCorrectionDialog';
 import { getSelectedSceneIndexAfterMove } from './project/timelineInteraction';
 import {
   EMPTY_TIMELINE_PLAYBACK_SNAPSHOT,
@@ -48,6 +49,8 @@ export function App() {
   const [contactSheetVideoBusy, setContactSheetVideoBusy] = useState(false);
   const [videoDiagnosticsOpen, setVideoDiagnosticsOpen] = useState(false);
   const [videoDiagnosticsBusy, setVideoDiagnosticsBusy] = useState(false);
+  const [videoFinalCorrectionOpen, setVideoFinalCorrectionOpen] = useState(false);
+  const [videoFinalCorrectionBusy, setVideoFinalCorrectionBusy] = useState(false);
   const [selectedSceneIndex, setSelectedSceneIndex] = useState<number | null>(
     null,
   );
@@ -261,24 +264,32 @@ export function App() {
         autoShortsDisabled={exportStatus === 'exporting'}
         onContactSheetVideo={() => setContactSheetVideoOpen(true)}
         contactSheetVideoDisabled={
-          exportStatus === 'exporting' || contactSheetVideoBusy || videoDiagnosticsBusy
+          exportStatus === 'exporting' || contactSheetVideoBusy || videoDiagnosticsBusy ||
+          videoFinalCorrectionBusy
         }
         onVideoDiagnostics={() => setVideoDiagnosticsOpen(true)}
         videoDiagnosticsDisabled={
-          exportStatus === 'exporting' || contactSheetVideoBusy || videoDiagnosticsBusy
+          exportStatus === 'exporting' || contactSheetVideoBusy || videoDiagnosticsBusy ||
+          videoFinalCorrectionBusy
+        }
+        onVideoFinalCorrection={() => setVideoFinalCorrectionOpen(true)}
+        videoFinalCorrectionDisabled={
+          exportStatus === 'exporting' || contactSheetVideoBusy || videoDiagnosticsBusy ||
+          videoFinalCorrectionBusy
         }
         onExport={() => {
           void exportMp4();
         }}
         exportInProgress={exportStatus === 'exporting'}
         exportDisabled={
-          exportStatus === 'exporting' || contactSheetVideoBusy || videoDiagnosticsBusy
+          exportStatus === 'exporting' || contactSheetVideoBusy || videoDiagnosticsBusy ||
+          videoFinalCorrectionBusy
         }
       />
       {contactSheetVideoOpen ? (
         <ContactSheetVideoDialog
           generalExportInProgress={
-            exportStatus === 'exporting' || videoDiagnosticsBusy
+            exportStatus === 'exporting' || videoDiagnosticsBusy || videoFinalCorrectionBusy
           }
           onClose={() => setContactSheetVideoOpen(false)}
           onBusyChange={setContactSheetVideoBusy}
@@ -287,9 +298,18 @@ export function App() {
       {videoDiagnosticsOpen ? (
         <VideoDiagnosticsDialog
           exportInProgress={exportStatus === 'exporting'}
-          contactSheetBusy={contactSheetVideoBusy}
+          contactSheetBusy={contactSheetVideoBusy || videoFinalCorrectionBusy}
           onBusyChange={setVideoDiagnosticsBusy}
           onClose={() => setVideoDiagnosticsOpen(false)}
+        />
+      ) : null}
+      {videoFinalCorrectionOpen ? (
+        <VideoFinalCorrectionDialog
+          blocked={
+            exportStatus === 'exporting' || contactSheetVideoBusy || videoDiagnosticsBusy
+          }
+          onBusyChange={setVideoFinalCorrectionBusy}
+          onClose={() => setVideoFinalCorrectionOpen(false)}
         />
       ) : null}
       {autoShortsProject ? (

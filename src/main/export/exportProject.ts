@@ -23,7 +23,7 @@ export interface ExportProjectDependencies {
   makeTempDirectory?: () => Promise<string>;
   pathExists?: (path: string) => Promise<boolean>;
   writeTextFile?: (path: string, content: string) => Promise<void>;
-  runFfmpeg?: (ffmpegPath: string, args: string[]) => Promise<void>;
+  runFfmpeg?: (ffmpegPath: string, args: string[], signal?: AbortSignal) => Promise<void>;
   copyFile?: (source: string, destination: string) => Promise<void>;
   removeDirectory?: (path: string) => Promise<void>;
   onProgress?: (progress: ExportProgress) => void;
@@ -188,21 +188,55 @@ async function defaultPathExists(path: string): Promise<boolean> {
   }
 }
 
-export function runFfmpeg(ffmpegPath: string, args: string[]): Promise<void> {
+function abortError(): Error {
+  const error = new Error('MP4 내보내기가 취소되었습니다.');
+  error.name = 'AbortError';
+  return error;
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw abortError();
+}
+
+export function runFfmpeg(
+  ffmpegPath: string,
+  args: string[],
+  signal?: AbortSignal,
+): Promise<void> {
+  if (signal?.aborted) return Promise.reject(abortError());
   return new Promise((resolve, reject) => {
     const child = spawn(ffmpegPath, args, {
       windowsHide: true,
       stdio: ['ignore', 'ignore', 'pipe'],
     });
     let stderr = '';
+    let settled = false;
+    let canceled = false;
 
     child.stderr.setEncoding('utf8');
     child.stderr.on('data', (chunk: string) => {
       stderr = `${stderr}${chunk}`.slice(-16_384);
     });
-    child.on('error', reject);
+    const onAbort = (): void => {
+      if (settled || canceled) return;
+      canceled = true;
+      child.kill();
+    };
+    const cleanup = (): void => signal?.removeEventListener('abort', onAbort);
+    signal?.addEventListener('abort', onAbort, { once: true });
+    child.on('error', (error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(canceled ? abortError() : error);
+    });
     child.on('close', (code) => {
-      if (code === 0) {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (canceled) {
+        reject(abortError());
+      } else if (code === 0) {
         resolve();
       } else {
         reject(new Error(`FFmpeg 실행에 실패했습니다 (${code ?? 'unknown'}). ${stderr.trim()}`));
@@ -219,7 +253,9 @@ export async function exportProject(
   projectValue: unknown,
   outputPath: string,
   dependencies: ExportProjectDependencies,
+  signal?: AbortSignal,
 ): Promise<void> {
+  throwIfAborted(signal);
   const project = validateProjectDocument(projectValue);
   if (project.scenes.length === 0) {
     throw new Error('내보낼 장면이 없습니다.');
@@ -286,6 +322,7 @@ export async function exportProject(
         );
       }
 
+      throwIfAborted(signal);
       await execute(dependencies.ffmpegPath, buildSceneArgs({
         kind: asset.kind,
         sourcePath: asset.sourcePath,
@@ -293,7 +330,7 @@ export async function exportProject(
         playbackDurationMs: scene.playbackDurationMs,
         filter: buildVideoFilter(subtitlePath, fontsDirectory),
         outputPath: scenePath,
-      }));
+      }), signal);
       sceneFiles.push(scenePath);
     }
 
@@ -307,15 +344,17 @@ export async function exportProject(
     await execute(dependencies.ffmpegPath, [
       '-y', '-f', 'concat', '-safe', '0', '-i', concatListPath,
       '-map', '0:v:0', '-c:v', 'copy', combinedVideoPath,
-    ]);
+    ], signal);
 
     const finalPath = join(tempDirectory, 'final.mp4');
     reportProgress({ stage: 'muxing-audio' });
     await execute(
       dependencies.ffmpegPath,
       buildFinalMuxArgs(combinedVideoPath, project.narration?.sourcePath ?? null, finalPath),
+      signal,
     );
     reportProgress({ stage: 'writing-output' });
+    throwIfAborted(signal);
     await copyOutput(finalPath, outputPath);
   } finally {
     await removeDirectory(tempDirectory);

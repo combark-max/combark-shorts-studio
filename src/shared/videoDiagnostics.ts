@@ -87,6 +87,17 @@ export interface VideoDiagnosticProgress {
   percent: number | null;
 }
 
+export function diagnosticCandidateKey(
+  candidate: Pick<DiagnosticCandidate, 'type' | 'startMs' | 'endMs' | 'peakMs'>,
+): string {
+  return [
+    candidate.type,
+    Math.round(candidate.startMs),
+    Math.round(candidate.endMs),
+    Math.round(candidate.peakMs),
+  ].join(':');
+}
+
 const TYPE_PRIORITY: Record<DiagnosticType, number> = {
   'scene-change': 0,
   'motion-jump': 1,

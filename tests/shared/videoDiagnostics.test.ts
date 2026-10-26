@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   dedupeSceneCandidates,
+  diagnosticCandidateKey,
   mergeDiagnosticEvents,
   severityForScore,
   sortDiagnosticCandidates,
@@ -28,6 +29,27 @@ describe('video diagnostic severity', () => {
     [4, 'high'],
   ] as const)('maps %s to %s', (score, severity) => {
     expect(severityForScore(score)).toBe(severity);
+  });
+});
+
+describe('diagnostic candidate identity', () => {
+  const candidate = {
+    type: 'motion-jitter' as const,
+    startMs: 1_000.4,
+    endMs: 1_500.4,
+    peakMs: 1_250.4,
+  };
+
+  it('uses only type and normalized integer time bounds', () => {
+    expect(diagnosticCandidateKey(candidate)).toBe(
+      diagnosticCandidateKey({ ...candidate, startMs: 1_000.49 }),
+    );
+  });
+
+  it('does not collide when an identity field changes', () => {
+    const key = diagnosticCandidateKey(candidate);
+    expect(diagnosticCandidateKey({ ...candidate, type: 'motion-jump' })).not.toBe(key);
+    expect(diagnosticCandidateKey({ ...candidate, peakMs: 1_251 })).not.toBe(key);
   });
 });
 
